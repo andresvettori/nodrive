@@ -27,6 +27,7 @@ for (int i = 0; i < args.Length; i++)
 }
 
 Console.WriteLine($"cfapi-minimal root={root} aot={!System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported} pid={Environment.ProcessId}");
+ProcessStats.PrintGcConfiguration();
 
 if (cleanup)
 {

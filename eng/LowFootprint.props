@@ -1,0 +1,29 @@
+<Project>
+  <!--
+    Low-footprint runtime configuration shared by the always-on engine and the P0 spikes.
+    Native AOT ignores runtimeconfig.template.json (ILCompiler warns and drops it), so every knob is
+    expressed as a RuntimeHostConfigurationOption item, which both JIT and AOT builds honour.
+    Values: see memory_bank/research/dotnet-memory.md and memory_bank/techContext.md section 5.
+  -->
+  <PropertyGroup>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>false</TieredPGO>
+    <UseWindowsThreadPool>true</UseWindowsThreadPool>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <EventSourceSupport>false</EventSourceSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <Http3Support>false</Http3Support>
+    <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 0-9; Microsoft: "start with a value between 5 and 7". -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="6" />
+    <!-- 1 MiB regions for very small heaps (runtimeconfig form since .NET 10). -->
+    <RuntimeHostConfigurationOption Include="System.GC.RegionSize" Value="1048576" />
+    <!-- Release freed segments/regions back to the OS (default false, stated explicitly). -->
+    <RuntimeHostConfigurationOption Include="System.GC.RetainVM" Value="false" />
+  </ItemGroup>
+</Project>

@@ -28,6 +28,7 @@ for (int i = 0; i < args.Length; i++)
 
 Console.WriteLine($"aot-baseline variant={variant} aot={IsAot()} gcServer={System.Runtime.GCSettings.IsServerGC} pid={Environment.ProcessId}");
 Console.WriteLine(ProcessStats.Sample("start"));
+ProcessStats.PrintGcConfiguration();
 
 var quit = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; TrayWindow.RequestQuit(); };

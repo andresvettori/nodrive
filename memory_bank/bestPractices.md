@@ -8,6 +8,10 @@ feature waits.
 
 ---
 
+## 0. Runtime configuration
+
+- Never use `runtimeconfig.template.json` for the engine or AOT spikes: Native AOT drops it with a warning (CI 2026-11-13). Put every runtime knob in `eng/LowFootprint.props` as `RuntimeHostConfigurationOption` items; confirm with `GC.GetConfigurationVariables()` at start-up in debug builds.
+
 ## 1. cfapi callback rules
 
 1. **Never block inside a callback.** Validate, copy the needed fields, enqueue to a bounded

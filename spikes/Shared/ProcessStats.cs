@@ -7,6 +7,16 @@ internal static class ProcessStats
 {
     private static readonly Stopwatch s_since = Stopwatch.StartNew();
 
+    /// <summary>Prints the GC settings the runtime actually applied (proves RuntimeHostConfigurationOption reached the AOT binary).</summary>
+    public static void PrintGcConfiguration()
+    {
+        Console.WriteLine($"gc: server={System.Runtime.GCSettings.IsServerGC} latency={System.Runtime.GCSettings.LatencyMode}");
+        foreach (var kv in GC.GetConfigurationVariables().OrderBy(k => k.Key, StringComparer.Ordinal))
+        {
+            Console.WriteLine($"gc: {kv.Key}={kv.Value}");
+        }
+    }
+
     public static string Sample(string tag = "")
     {
         using var p = Process.GetCurrentProcess();

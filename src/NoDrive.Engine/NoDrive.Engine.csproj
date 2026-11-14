@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../../eng/LowFootprint.props" />
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net11.0-windows10.0.26100.0</TargetFramework>
@@ -13,13 +14,6 @@
     <OptimizationPreference>Size</OptimizationPreference>
     <StackTraceSupport>true</StackTraceSupport>
     <DebuggerSupport>true</DebuggerSupport>
-    <UseSystemResourceKeys>true</UseSystemResourceKeys>
-    <EventSourceSupport>false</EventSourceSupport>
-    <MetricsSupport>false</MetricsSupport>
-    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
-    <Http3Support>false</Http3Support>
-    <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
-    <UseSystemResourceKeys>true</UseSystemResourceKeys>
 
     <!-- Interop hygiene required for AOT-safe CsWin32 output. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -28,12 +22,6 @@
     <!-- Some structs (e.g. NOTIFYICONDATAW) are architecture-specific; when building AnyCPU on a dev box pick x64.
          A RID-specific publish (win-x64 / win-arm64) sets PlatformTarget itself. -->
     <CsWin32PlatformTarget Condition="'$(RuntimeIdentifier)' == ''">x64</CsWin32PlatformTarget>
-
-    <!-- Low-footprint GC: workstation, non-concurrent. Remaining knobs are in runtimeconfig.template.json. -->
-    <ServerGarbageCollection>false</ServerGarbageCollection>
-    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
-    <TieredPGO>false</TieredPGO>
-    <UseWindowsThreadPool>true</UseWindowsThreadPool>
   </PropertyGroup>
 
   <ItemGroup>

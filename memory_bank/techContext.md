@@ -37,6 +37,8 @@ Decision records behind this table: [ADR-0001](decisions/ADR-0001.md) cfapi over
 
 ### Toolchain facts verified while scaffolding (2026-11-13, macOS, .NET SDK 11.0.100)
 
+- **Native AOT ignores `runtimeconfig.template.json`** (CI run #5, ILCompiler 11.0.0: "The published project has a runtimeconfig.template.json that is not supported by PublishAot. Move the configuration to the project file using RuntimeHostConfigurationOption"). All GC/runtime knobs therefore live as `<RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="6" />` items in `eng/LowFootprint.props`, imported by the engine and the AOT spikes. Verify in a published AOT binary with `GC.GetConfigurationVariables()` (prints the effective GC settings) before trusting any memory measurement.
+
 - The solution file is `NoDrive.slnx` (XML solution format), hand-authored. `dotnet sln add` in SDK 11.0.100 refused to add a second project into the same solution folder ("folder src already contains a project named NoDrive.Core.csproj"); editing the `.slnx` by hand is the workaround.
 - `dotnet test` on SDK 10+ needs the Microsoft.Testing.Platform opt-in. In SDK 11 it lives in `global.json` (`"test": { "runner": "Microsoft.Testing.Platform" }`), not in `dotnet.config`; the test project sets `UseMicrosoftTestingPlatformRunner=true` (in `tests/Directory.Build.props`). xunit.v3 4.0.3 runs natively on MTP; `Microsoft.NET.Test.Sdk` is not referenced. Verified: `dotnet test NoDrive.slnx` runs 2/2 tests green.
 - CsWin32 0.3.371 with `allowMarshaling=false` fails on `Shell_NotifyIcon` for an AnyCPU build because `NOTIFYICONDATAW` is architecture-specific. The engine csproj sets `<CsWin32PlatformTarget>x64</CsWin32PlatformTarget>` when no RuntimeIdentifier is given; a `-r win-x64` / `-r win-arm64` publish sets PlatformTarget itself.
@@ -53,7 +55,7 @@ Decision records behind this table: [ADR-0001](decisions/ADR-0001.md) cfapi over
 - `CLAUDE.md`: memory-bank reading/updating rules plus build commands (read all `memory_bank/` files at the start of every task; update `activeContext.md` and `progress.md` after each session; review every file on "update memory bank").
 - `memory_bank/`: this documentation (core files, `research/`, `decisions/` with the ADRs; no separate docs folder).
 - `NoDrive.slnx`
-- `src/NoDrive.Engine/`: WinExe, `net11.0-windows10.0.26100.0`, `PublishAot`, CsWin32 `NativeMethods.txt` (Cf*, `Shell_NotifyIconW`, window/message-loop functions), runtimeconfig GC settings (sections 4-5).
+- `src/NoDrive.Engine/`: WinExe, `net11.0-windows10.0.26100.0`, `PublishAot`, CsWin32 `NativeMethods.txt` (Cf*, `Shell_NotifyIconW`, window/message-loop functions), GC settings via `RuntimeHostConfigurationOption` in `eng/LowFootprint.props` (sections 4-5).
 - `src/NoDrive.Graph/`: auth (PKCE), DTOs + `JsonSerializerContext`, delta, download, upload session, quickXorHash.
 - `src/NoDrive.Core/`: reconciler, index, state machine, abstractions `IRemoteDrive` / `IPlaceholderStore` (testable on macOS).
 - `tests/NoDrive.Core.Tests/`: unit + property tests against the fake Graph server.
