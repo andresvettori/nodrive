@@ -45,6 +45,8 @@ internal static class SyncRootRegistrar
                     InSyncPolicy = StorageProviderInSyncPolicy.FileLastWriteTime | StorageProviderInSyncPolicy.DirectoryLastWriteTime,
                     HardlinkPolicy = StorageProviderHardlinkPolicy.None,
                     ShowSiblingsAsGroup = false,
+                    // Without this the shell hides "Always keep on this device" / "Free up space" (OneDrive's registry Flags = ours + 0x400).
+                    AllowPinning = true,
                     Context = CryptographicBuffer.ConvertStringToBinary(SyncRootId, BinaryStringEncoding.Utf8),
                 };
                 StorageProviderSyncRootManager.Register(info);

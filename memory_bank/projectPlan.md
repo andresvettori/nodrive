@@ -67,6 +67,8 @@ Targets to compare against: idle Private Bytes under 30 MB with a 500k-item inde
 
 ### 2.4 Kill / go criteria
 
+Status 2026-11-14: the **behaviour** half is mostly answered on the user's PC (hydration, acks, fast failure, cleanup, flat memory: all pass). The kill criterion "no nav-pane node / Status column" is **partly triggered**: the unpackaged `Register` gives correct cloud plumbing but **no Status column content, no 'Always keep / Free up space' verbs and a generic brown-box icon** (research/cfapi.md, 'Why the verbs...'). Resolution paths: tray-menu fallbacks for pin/free-up (already planned in E7), a `CustomStateHandler` COM server, or package identity. Nav-pane node visibility still to be confirmed by the user.
+
 Status 2026-11-13: the toolchain half is answered. CI AOT-published `cfapi-minimal` (WinRT projection + cfapi callbacks) on .NET 11 win-x64 with zero IL2xxx/IL3xxx warnings (run #5). Remaining: runtime behaviour of registration, placeholders and hydration on the user's build (step 3), and the memory numbers (step 2).
 
 
