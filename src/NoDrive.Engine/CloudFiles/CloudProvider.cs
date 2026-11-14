@@ -33,7 +33,9 @@ internal static class CloudProvider
     private static CF_CONNECTION_KEY s_connection;
     private static readonly Channel<DataRequest> s_dataQueue = Channel.CreateBounded<DataRequest>(new BoundedChannelOptions(256) { FullMode = BoundedChannelFullMode.Wait });
     private static readonly Channel<PopulateRequest> s_populateQueue = Channel.CreateBounded<PopulateRequest>(new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.Wait });
-    private static readonly ConcurrentDictionary<long, CancellationTokenSource> s_inFlight = new();
+    // Keyed by RequestKey (unique per request). TransferKey is shared by all requests on one open file, so it must never own a cancellation handle.
+    private sealed record InFlight(long TransferKey, long Offset, long Length, CancellationTokenSource Cts);
+    private static readonly ConcurrentDictionary<long, InFlight> s_inFlight = new();
     private static readonly ConcurrentBag<double> s_callbackMicros = [];
     private static readonly CancellationTokenSource s_stop = new();
 
@@ -84,8 +86,12 @@ internal static class CloudProvider
         var req = new DataRequest(info->ConnectionKey.Value, info->TransferKey, info->RequestKey, Identity(info), info->FileSize,
             parameters->FetchData.RequiredFileOffset, parameters->FetchData.RequiredLength, parameters->FetchData.OptionalFileOffset, parameters->FetchData.OptionalLength,
             info->ProcessInfo is null ? null : info->ProcessInfo->ImagePath.ToString());
-        s_inFlight[req.TransferKey] = CancellationTokenSource.CreateLinkedTokenSource(s_stop.Token);
-        if (req.ItemId.Length == 0 || !s_dataQueue.Writer.TryWrite(req)) { CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
+        try
+        {
+            s_inFlight[req.RequestKey] = new InFlight(req.TransferKey, req.Offset, req.Length, CancellationTokenSource.CreateLinkedTokenSource(s_stop.Token));
+            if (req.ItemId.Length == 0 || !s_dataQueue.Writer.TryWrite(req)) { CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
+        }
+        catch (Exception ex) { Log.Error($"FETCH_DATA callback: {ex.Message}"); }
         Record(t0);
     }
 
@@ -93,7 +99,16 @@ internal static class CloudProvider
     private static unsafe void OnCancelFetchData(CF_CALLBACK_INFO* info, CF_CALLBACK_PARAMETERS* parameters)
     {
         long t0 = Stopwatch.GetTimestamp();
-        if (s_inFlight.TryGetValue(info->TransferKey, out var cts)) { cts.Cancel(); }
+        try
+        {
+            long from = parameters->Cancel.Anonymous.FetchData.FileOffset, to = from + parameters->Cancel.Anonymous.FetchData.Length;
+            foreach (var e in s_inFlight.Values)
+            {
+                if (e.TransferKey != info->TransferKey || e.Offset + e.Length <= from || e.Offset >= to) { continue; }   // only the cancelled range
+                try { e.Cts.Cancel(); } catch (ObjectDisposedException) { /* already finished */ }
+            }
+        }
+        catch (Exception ex) { Log.Error($"CANCEL callback: {ex.Message}"); }
         Record(t0);
     }
 
@@ -157,7 +172,7 @@ internal static class CloudProvider
     {
         await foreach (var req in s_dataQueue.Reader.ReadAllAsync(s_stop.Token).ConfigureAwait(false))
         {
-            var cts = s_inFlight.GetValueOrDefault(req.TransferKey) ?? new CancellationTokenSource();
+            var cts = s_inFlight.GetValueOrDefault(req.RequestKey)?.Cts ?? new CancellationTokenSource();
             var sw = Stopwatch.StartNew();
             s_svc.Callers.Record(req.Process, req.Length, req.FileSize);
             try
@@ -186,7 +201,7 @@ internal static class CloudProvider
             }
             finally
             {
-                if (s_inFlight.TryRemove(req.TransferKey, out var c)) { c.Dispose(); }
+                if (s_inFlight.TryRemove(req.RequestKey, out var c)) { c.Cts.Dispose(); }
             }
         }
     }
