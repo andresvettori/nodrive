@@ -8,6 +8,18 @@ Related: `memory_bank/systemPatterns.md` (how we apply this), `memory_bank/bestP
 
 ---
 
+## Explorer manual test on the user's PC (2026-11-14, user drove Explorer, provider log read over SSH)
+
+User report: Explorer always responsive, nothing hung; renames and deletes instant; all files opened and displayed correctly and quickly. NOT working: (1) no "Always keep on this device" / "Free up space" anywhere, for files or folders (even under "Show more options"); (2) no Status column content (three "Status" columns offered, all blank); online-only files show a small brown box icon, hydrated files and folders show no icon.
+
+Findings from the provider log during that session (54 hydrate requests):
+- **Cloud-aware callers get real progressive ranges.** `Photos.exe` requested small ranges (e.g. `required=[69632+61440] optional=[131072+5121595]`, sizes 4-64 KiB), one callback per range. `explorer.exe` (thumbnail/preview) requested a whole small file. **`Microsoft.Media.Player.exe` requested `required=[0+1492094132]` (the entire 1.4 GB mp4) at open and the hydration took 97.9 s**, i.e. media playback of a never-hydrated large video waits for the full download (or at least holds the whole range as "required"). This mirrors the earlier PowerShell/Win32 result and the known memory-mapped-open pitfall; it is not specific to scripts.
+- **Per-request cost in the spike was about 1.5 s** for 4-64 KiB ranges because the spike creates a new `HttpClient` (new TLS connection) per hydration. Engine design: one shared pooled client per host and use the `optional` range to read ahead.
+- **Races are survivable:** deleting/renaming a file mid-hydration produced `CfExecute(TRANSFER_DATA)` errors 0x80070178 ("The file is not a cloud file") and 0x8007018E ("cloud operation was canceled by user"); the provider failed those requests cleanly (status 0xC000CF11) and kept running.
+- Callbacks seen: `NOTIFY_RENAME`, `NOTIFY_DELETE` including `CF_CALLBACK_DELETE_FLAG_IS_UNDELETE` (Explorer's delete-then-undo path) and repeated deletes of the same item (idempotent handling confirmed necessary).
+
+Why the Status column and verbs may be missing (hypothesis under test): **Windows Search is Disabled on this PC** (`WSearch` StartType Disabled, SearchIndexer not running; index query fails with 0x80040E14). Cloud-file state shown in Explorer flows through the property system / indexer, and Microsoft's CloudMirror sample states property queries return wrong values when the sync root is not indexed. Registry comparison: our key (written by `StorageProviderSyncRootManager.Register`) has `NamespaceCLSID`, `DisplayNameResource`, `IconResource`, `Flags=34` and `UserSyncRoots`; OneDrive's key has `Flags=1058` plus `Handler`, `CustomStateHandler`, `ThumbnailProvider`, `UriHandler`, `ShareHandler`, `CopyHook`, `SearchHandlerFactory`, `StorageProviderStatusUISourceFactory`, `ProtectionMode`, `Cid`, `AUMID`. The built-in verbs and Status column are not documented to depend on those handlers, but the handler list is the second hypothesis (richer shell integration needs registered handlers/package identity).
+
 ## Hydration, acks, provider-down and cleanup, measured over SSH (2026-11-14, same PC, JIT build of `cfapi-minimal`, OneDrive.exe running)
 
 Driven from the Mac over SSH (reads/renames/deletes issued from a non-interactive session; the provider ran in the interactive session 1):
