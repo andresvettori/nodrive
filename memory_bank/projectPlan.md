@@ -58,7 +58,7 @@ Fill one row per variant; all on the same PC, same OS build, Defender on, AC pow
 | tray + HttpClient 1 GB | AOT | 4.4 MB (http-ready) | n/a | 14.1 MB (start) | 8 | 203 | **9.0 MB** (1 GB streamed in 82 s, 12.5 MB/s) | **6.4 MB** right after the two-step Aggressive GC, flat afterwards (gcCommitted 3.8 -> 1.2 MB) | 2026-11-14, `aot-baseline --variant http --item <id> --limit-mb 1024`, 1 MiB pooled buffer, user's PC |
 | tray + HttpClient 1 GB | AOT, UseWindowsThreadPool=false | | | | | | | | |
 | tray + HttpClient 1 GB | JIT fx-dep | | | | | | | | |
-| tray + cfapi connected, 200 placeholders | AOT | 10.8 MB | 10.6 MB (3 min) | 47.5 MB | 11-19 | 578 | | | 2026-11-14, `cfapi-minimal`, WinRT registration, no hydration exercised yet. WS is mostly shared WinRT/combase pages; threads = CldApi pool + 3 workers + HttpClient. |
+| tray + cfapi connected, 200 placeholders (pin hydration of 1.68 GB) | AOT | 12.7 MB (baseline) / 10.8 MB (first run) | 15.2 MB (60 s after burst) | 16.2 MB | 12-19 | 522-608 | **15.2 MB** (+2.6 MB) while `CfHydratePlaceholder` pulled 1.68 GB in 120.7 s (13.9 MB/s) | **15.2 MB** at +60 s (+2.5 MB vs baseline; working set fell 30.6 -> 16.2 MB) | 2026-11-14, Native AOT `cfapi-minimal` from CI branch ci-binaries, no post-burst GC call in this spike |
 | tray + cfapi + 500k-item index idle | AOT | | | | | | | | must be within budget of previous row |
 | OneDrive.exe (same account, idle) | n/a | 209.4 MB | n/a | 142.1 MB | 31 | 1,061 | not measured (user reports about 4 GB under many-file load) | | 2026-11-14 snapshot, idle with Explorer open; explorer.exe was 151 MB private, SearchHost 38 MB |
 | rclone mount (same remote, idle) | n/a | | | | | | | | reference |
