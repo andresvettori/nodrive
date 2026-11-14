@@ -6,7 +6,56 @@ Legend: **[ready]** code is in the repo and compiles; **[to write]** still to be
 
 All commands assume a non-elevated PowerShell 7 or Windows PowerShell session at the repo root.
 
-## 0. Prepare the PC (once)
+## Fast path: run the spikes without installing any SDK or build tools
+
+Every green CI run (https://github.com/andresvettori/nodrive/actions, workflow "windows") publishes the
+`spikes-win-x64` artifact: Native AOT builds of `aot-baseline.exe` and `cfapi-minimal.exe`, the
+framework-dependent `graph-smoke`, the helper scripts and a copy of this runbook. Nothing else is needed
+on the PC for steps 2 and 3 except Windows itself (and .NET 11 only if you want `graph-smoke`).
+
+```powershell
+# F.1 Download: open the latest green run, scroll to "Artifacts", click spikes-win-x64 (GitHub needs you signed in; the repo is private).
+#     The browser saves spikes-win-x64.zip to Downloads. Then:
+New-Item -ItemType Directory -Force $env:USERPROFILE\nodrive-spikes | Out-Null
+Expand-Archive -Force "$env:USERPROFILE\Downloads\spikes-win-x64.zip" "$env:USERPROFILE\nodrive-spikes"
+Set-Location $env:USERPROFILE\nodrive-spikes
+Get-ChildItem -Recurse -File | Unblock-File          # removes Mark-of-the-Web so SmartScreen does not block the unsigned exes
+Get-ChildItem -Recurse -Filter *.exe | Select-Object FullName, @{n='MB';e={[math]::Round($_.Length/1MB,2)}}
+
+#     Alternative with the GitHub CLI (one-time: winget install --id GitHub.cli -e ; gh auth login):
+#     gh run download --repo andresvettori/nodrive --name spikes-win-x64 --dir $env:USERPROFILE\nodrive-spikes
+
+# F.2 What is OneDrive doing on this PC? (read-only)
+.\onedrive-state.ps1
+
+# F.3 Step 2 quick version: idle memory of the AOT tray process, sampled for 10 minutes
+Start-Process .\aot-baseline\aot-baseline.exe -ArgumentList '--variant tray'
+.\measure.ps1 -ProcessName aot-baseline -Minutes 10 -Out results\aot-tray.csv
+Stop-Process -Name aot-baseline                         # or right-click the tray icon > Quit
+
+#     Burst: 1 GB from your own drive (signs in through the browser the first time; token saved under %LOCALAPPDATA%\NoDrive\spike)
+Start-Process .\aot-baseline\aot-baseline.exe -ArgumentList '--variant http --item F61C08DC8B03ABFF!952229 --limit-mb 1024'
+.\measure.ps1 -ProcessName aot-baseline -Minutes 12 -IntervalSeconds 5 -Out results\aot-http-burst.csv
+Stop-Process -Name aot-baseline
+
+# F.4 Step 3 quick version: the Cloud Files provider (keep this window open; it logs every callback)
+.\cfapi-minimal\cfapi-minimal.exe --top 200
+#     In Explorer: look for the "NoDrive Spike" node, open %USERPROFILE%\NoDriveSpike, double-click a small file, rename one, delete one.
+#     Second window:
+explorer.exe "$env:USERPROFILE\NoDriveSpike"
+.\measure.ps1 -ProcessName cfapi-minimal -Minutes 10 -Out results\cfapi-idle.csv
+Get-WinEvent -LogName Microsoft-Windows-CloudFiles/Operational -MaxEvents 30 | Format-Table TimeCreated, Id, Message -Wrap
+#     Quit from the tray icon (prints callback latency p50/p99/max), then remove the registration:
+.\cfapi-minimal\cfapi-minimal.exe --cleanup
+Remove-Item "$env:USERPROFILE\NoDriveSpike" -Recurse -Force
+
+# F.5 If SmartScreen still shows "Windows protected your PC": click "More info" > "Run anyway" (the binaries are unsigned).
+#     If Defender quarantines an exe, restore it and add an exclusion for %USERPROFILE%\nodrive-spikes; note it in results\.
+```
+
+Send the console output of both exes, the CSVs and screenshots of Explorer back; the full procedure with all checks is in sections 2 and 3 below.
+
+## 0. Prepare the PC (once, needed to build locally)
 
 ```powershell
 # 0.1 Windows build and Cloud Files driver (need 24H2 = build 26100 with the Aug 2025 CU or later, cldflt.sys 10.0.26100.4946+)

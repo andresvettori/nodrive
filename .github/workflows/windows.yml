@@ -35,6 +35,12 @@ jobs:
       - name: Publish spike graph-smoke (framework-dependent, any OS)
         run: dotnet publish spikes/graph-smoke -c Release -o artifacts/spikes/graph-smoke
 
+      - name: Add helper scripts to the spikes artifact
+        shell: pwsh
+        run: |
+          Copy-Item spikes/measure.ps1, spikes/onedrive-state.ps1, spikes/README.md artifacts/spikes/
+          Copy-Item memory_bank/p0-runbook.md artifacts/spikes/P0-RUNBOOK.md
+
       - name: Report sizes and AOT warnings
         shell: pwsh
         run: |

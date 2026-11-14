@@ -77,6 +77,23 @@ trimmed JIT with `-p:PublishAot=false -p:PublishTrimmed=true`.
 The GitHub Actions workflow `.github/workflows/windows.yml` runs build, tests and the win-x64 AOT
 publish on `windows-latest` and uploads the binary as an artifact.
 
+## Try the P0 spikes without installing anything **[now]**
+
+Each green run of the `windows` workflow publishes a `spikes-win-x64` artifact with Native AOT builds of the
+P0 spikes plus the helper scripts. Download it from the Actions tab (sign-in required, private repo), then:
+
+```powershell
+Expand-Archive -Force "$env:USERPROFILE\Downloads\spikes-win-x64.zip" "$env:USERPROFILE\nodrive-spikes"
+Set-Location $env:USERPROFILE\nodrive-spikes
+Get-ChildItem -Recurse -File | Unblock-File
+.\onedrive-state.ps1                                    # what OneDrive is doing on this PC
+.\aot-baseline\aot-baseline.exe --variant tray          # idle-memory baseline; Quit from the tray icon
+.\cfapi-minimal\cfapi-minimal.exe --top 200             # sync root + placeholders + hydration; --cleanup to unregister
+```
+
+The full procedure, measurements and cleanup are in
+[memory_bank/p0-runbook.md](memory_bank/p0-runbook.md), section "Fast path".
+
 ## Configure **[planned]**
 
 NoDrive is configured once, at first run, and keeps its state under `%LOCALAPPDATA%\NoDrive\`.
