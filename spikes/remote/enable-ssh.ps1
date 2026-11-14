@@ -11,6 +11,16 @@ param(
     [switch] $Disable
 )
 $ErrorActionPreference = 'Stop'
+
+# The DISM cmdlets (Get/Add-WindowsCapability) fail in PowerShell 7 with "Class not registered":
+# re-run this script in Windows PowerShell 5.1 when started from pwsh.
+if ($PSVersionTable.PSEdition -eq 'Core') {
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+    if ($Disable) { $argList += '-Disable' }
+    if ($PSBoundParameters.ContainsKey('PublicKey')) { $argList += @('-PublicKey', $PublicKey) }
+    & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" @argList
+    exit $LASTEXITCODE
+}
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw "Run this script from an elevated (Administrator) PowerShell."
 }
@@ -31,7 +41,8 @@ Set-Service sshd -StartupType Automatic
 
 # 2. PowerShell as the default shell (pwsh 7 if present, else Windows PowerShell)
 $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
-$shell = if ($pwsh) { $pwsh.Source } else { "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" }
+# sshd cannot launch Microsoft Store (WindowsApps) executables, so only use pwsh from a normal install.
+$shell = if ($pwsh -and $pwsh.Source -notlike '*\WindowsApps\*') { $pwsh.Source } else { "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" }
 New-Item -Path 'HKLM:\SOFTWARE\OpenSSH' -Force | Out-Null
 New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -Value $shell -PropertyType String -Force | Out-Null
 
