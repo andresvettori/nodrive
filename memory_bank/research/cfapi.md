@@ -20,6 +20,18 @@ Findings from the provider log during that session (54 hydrate requests):
 
 Why the Status column and verbs may be missing (hypothesis under test): **Windows Search is Disabled on this PC** (`WSearch` StartType Disabled, SearchIndexer not running; index query fails with 0x80040E14). Cloud-file state shown in Explorer flows through the property system / indexer, and Microsoft's CloudMirror sample states property queries return wrong values when the sync root is not indexed. Registry comparison: our key (written by `StorageProviderSyncRootManager.Register`) has `NamespaceCLSID`, `DisplayNameResource`, `IconResource`, `Flags=34` and `UserSyncRoots`; OneDrive's key has `Flags=1058` plus `Handler`, `CustomStateHandler`, `ThumbnailProvider`, `UriHandler`, `ShareHandler`, `CopyHook`, `SearchHandlerFactory`, `StorageProviderStatusUISourceFactory`, `ProtectionMode`, `Cid`, `AUMID`. The built-in verbs and Status column are not documented to depend on those handlers, but the handler list is the second hypothesis (richer shell integration needs registered handlers/package identity).
 
+## FETCH_PLACEHOLDERS answered from the SQLite index (user's PC, 2026-11-14, JIT build, 500,000-item index)
+
+`cfapi-minimal --index <db>`: sync root registered with population policy **FULL** (WinRT `StorageProviderPopulationPolicy` has only `Full` and `AlwaysFull`, no `Partial`; `Partial` exists only for `CfRegisterSyncRoot`), no placeholders pre-created. The `FETCH_PLACEHOLDERS` callback copies (connection key, transfer key, request key, folder item id from `FileIdentity`; empty identity = sync root) into a bounded channel and returns; two workers stream `SELECT ... WHERE parent_id=? ORDER BY name` and call `CfExecute(TRANSFER_PLACEHOLDERS)` in batches of 1,000, marking the directory populated (`DISABLE_ON_DEMAND_POPULATION`) on the last batch.
+
+| Folder | Children | Provider time | Notes |
+|---|---|---|---|
+| sync root | 32 | 39 ms | callback enqueued in 5.3 ms |
+| small folder | 17 | 6 ms | |
+| **big folder (index id 7)** | **31,030** | **6,512 ms**, 32 batches | seen by the shell as 31,030 entries (31,014 files, 16 folders) in 7.65 s cold (about 210 us per placeholder in CfExecute), 1.2 s on a second listing; callback returned in 0.1 ms; provider private memory 17.9 -> 20.4 MB |
+
+Placeholders carry attributes `0x401620`/`0x401410`, the logical size from the index and FileIdentity = Graph id. About a tenth of the 60 s deadline is used for the largest folder; a folder of 300k children would need progress/chunk handling (to design in P1).
+
 ## SyncRootManager `Flags` experiments on the user's PC (2026-11-14, SSH session is fully elevated so Claude can write our own key)
 
 Hand-edited `Flags` on the spike's own key, user checking Explorer (reopened window / restarted Explorer):

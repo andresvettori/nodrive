@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
+using NoDrive.Spikes.Scale;
 using NoDrive.Spikes.Shared;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -21,6 +22,20 @@ namespace NoDrive.Spikes.CfApiMinimal;
 internal static class CloudProvider
 {
     private sealed record HydrationRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, string Path, long FileSize, long Offset, long Length, long OptOffset, long OptLength, uint Flags, byte Priority, string? Process);
+
+    private sealed record PopulateRequest(long ConnectionKey, long TransferKey, long RequestKey, string? FolderId, string Path, long EnqueuedTicks);
+
+    private static readonly Channel<PopulateRequest> s_populateQueue = Channel.CreateBounded<PopulateRequest>(new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.Wait });
+    private static ItemStore? s_index;
+    private static readonly object s_indexLock = new();
+    private const string IndexRootId = "F61C08DC8B03ABFF!101";
+
+    /// <summary>Gives the provider the SQLite index that FETCH_PLACEHOLDERS is answered from (population policy PARTIAL).</summary>
+    public static void UseIndex(ItemStore index, int populateWorkers = 2)
+    {
+        s_index = index;
+        for (int i = 0; i < populateWorkers; i++) { _ = Task.Run(PopulateWorkerAsync); }
+    }
 
     private static readonly Channel<HydrationRequest> s_queue = Channel.CreateBounded<HydrationRequest>(new BoundedChannelOptions(256) { FullMode = BoundedChannelFullMode.Wait });
     private static readonly ConcurrentDictionary<long, CancellationTokenSource> s_inFlight = new();
@@ -40,12 +55,13 @@ internal static class CloudProvider
         s_graph = graph;
         s_maxConcurrent = maxConcurrentHydrations;
 
-        var table = stackalloc CF_CALLBACK_REGISTRATION[5];
+        var table = stackalloc CF_CALLBACK_REGISTRATION[6];
         table[0] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_FETCH_DATA, Callback = &OnFetchData };
         table[1] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_CANCEL_FETCH_DATA, Callback = &OnCancelFetchData };
         table[2] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_NOTIFY_DELETE, Callback = &OnNotifyDelete };
         table[3] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_NOTIFY_RENAME, Callback = &OnNotifyRename };
-        table[4] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_NONE, Callback = null };
+        table[4] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_FETCH_PLACEHOLDERS, Callback = &OnFetchPlaceholders };
+        table[5] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_NONE, Callback = null };
 
         fixed (char* p = rootPath)
         {
@@ -105,6 +121,20 @@ internal static class CloudProvider
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static unsafe void OnFetchPlaceholders(CF_CALLBACK_INFO* info, CF_CALLBACK_PARAMETERS* parameters)
+    {
+        long t0 = Stopwatch.GetTimestamp();
+        // The sync root itself has no FileIdentity; every other folder carries the Graph item id we stored when creating its placeholder.
+        string? folderId = info->FileIdentityLength == 0 ? IndexRootId : IdentityToString(info->FileIdentity, info->FileIdentityLength);
+        var req = new PopulateRequest(info->ConnectionKey.Value, info->TransferKey, info->RequestKey, folderId, info->NormalizedPath.ToString(), t0);
+        if (!s_populateQueue.Writer.TryWrite(req))
+        {
+            CompletePopulate(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED);
+        }
+        RecordLatency(t0);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static unsafe void OnCancelFetchData(CF_CALLBACK_INFO* info, CF_CALLBACK_PARAMETERS* parameters)
     {
         long t0 = Stopwatch.GetTimestamp();
@@ -159,6 +189,54 @@ internal static class CloudProvider
 
     private static unsafe string IdentityToString(void* identity, uint length)
         => identity is null || length == 0 ? "" : Encoding.UTF8.GetString((byte*)identity, (int)length);
+
+    // ---------------- FETCH_PLACEHOLDERS worker: answers from the index, never from the network ----------------
+
+    private static async Task PopulateWorkerAsync()
+    {
+        await foreach (var req in s_populateQueue.Reader.ReadAllAsync())
+        {
+            var sw = Stopwatch.StartNew();
+            double queueMs = Stopwatch.GetElapsedTime(req.EnqueuedTicks).TotalMilliseconds;
+            try
+            {
+                long total; long sent; int batches;
+                lock (s_indexLock)
+                {
+                    total = s_index!.CountChildren(req.FolderId!);
+                    sent = PlaceholderWriter.Transfer(req.ConnectionKey, req.TransferKey, req.RequestKey, s_index.EnumerateChildren(req.FolderId!), total, 1000, out batches);
+                }
+                using var p = Process.GetCurrentProcess();
+                Console.WriteLine($"[populate] folder={req.FolderId} children={total} sent={sent} batches={batches} queued={queueMs:F1} ms total={sw.Elapsed.TotalMilliseconds:F0} ms private={p.PrivateMemorySize64 / 1048576.0:F1} MB");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[populate] FAILED folder={req.FolderId}: {ex.GetType().Name} {ex.Message}");
+                CompletePopulate(req, NTSTATUS.STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE);
+            }
+        }
+    }
+
+    /// <summary>Fails a FETCH_PLACEHOLDERS request with a status so Explorer shows an error instead of waiting for the 60 s deadline.</summary>
+    private static unsafe void CompletePopulate(PopulateRequest req, NTSTATUS status)
+    {
+        var op = new CF_OPERATION_INFO
+        {
+            StructSize = (uint)sizeof(CF_OPERATION_INFO),
+            Type = CF_OPERATION_TYPE.CF_OPERATION_TYPE_TRANSFER_PLACEHOLDERS,
+            ConnectionKey = new CF_CONNECTION_KEY(req.ConnectionKey),
+            TransferKey = req.TransferKey,
+            RequestKey = req.RequestKey,
+        };
+        var prm = new CF_OPERATION_PARAMETERS { ParamSize = (uint)sizeof(CF_OPERATION_PARAMETERS) };
+        prm.TransferPlaceholders.Flags = CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAGS.CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAG_NONE;
+        prm.TransferPlaceholders.CompletionStatus = status;
+        prm.TransferPlaceholders.PlaceholderTotalCount = 0;
+        prm.TransferPlaceholders.PlaceholderArray = null;
+        prm.TransferPlaceholders.PlaceholderCount = 0;
+        HRESULT hr = PInvoke.CfExecute(&op, &prm);
+        Console.WriteLine($"[populate] completed folder={req.FolderId} with status 0x{status.Value:X8} -> 0x{hr.Value:X8}");
+    }
 
     // ---------------- worker ----------------
 

@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true   # two quick pushes used to race on the ci-binaries force-push
+
 permissions:
   contents: write   # lets the job publish binaries to the ci-binaries branch
 
@@ -92,7 +96,9 @@ jobs:
           git add -A
           git commit -q -m "binaries for $env:GITHUB_SHA"
           git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          git push -q -f origin ci-binaries
+          $pushed = $false
+          foreach ($attempt in 1..4) { git push -q -f origin ci-binaries; if ($LASTEXITCODE -eq 0) { $pushed = $true; break }; Start-Sleep -Seconds (5 * $attempt) }
+          if (-not $pushed) { throw 'could not push ci-binaries after 4 attempts' }
 
       - uses: actions/upload-artifact@v7
         if: always()

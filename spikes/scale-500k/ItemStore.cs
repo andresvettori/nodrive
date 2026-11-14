@@ -140,6 +140,28 @@ internal sealed class ItemStore : IDisposable
         return (rows, first, sw.Elapsed.TotalMilliseconds);
     }
 
+    /// <summary>Number of direct children of a folder (indexed, O(log n)).</summary>
+    public long CountChildren(string parentId)
+    {
+        using var c = _db.CreateCommand();
+        c.CommandText = "SELECT COUNT(*) FROM items WHERE parent_id=$p";
+        c.Parameters.AddWithValue("$p", parentId);
+        return (long)c.ExecuteScalar()!;
+    }
+
+    /// <summary>Streams a folder's children ordered by name without materialising them (the FETCH_PLACEHOLDERS source).</summary>
+    public IEnumerable<(string Id, string Name, long Size, string? MTime, bool IsFolder)> EnumerateChildren(string parentId)
+    {
+        using var c = _db.CreateCommand();
+        c.CommandText = "SELECT id,name,size,mtime,is_folder FROM items WHERE parent_id=$p ORDER BY name";
+        c.Parameters.AddWithValue("$p", parentId);
+        using var r = c.ExecuteReader();
+        while (r.Read())
+        {
+            yield return (r.GetString(0), r.GetString(1), r.GetInt64(2), r.IsDBNull(3) ? null : r.GetString(3), r.GetInt64(4) != 0);
+        }
+    }
+
     public string? BiggestFolder(out long children)
     {
         using var c = _db.CreateCommand();

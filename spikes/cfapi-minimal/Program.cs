@@ -6,6 +6,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using NoDrive.Graph;
+using NoDrive.Spikes.Scale;
 using NoDrive.Spikes.CfApiMinimal;
 using NoDrive.Spikes.Shared;
 
@@ -13,6 +14,7 @@ string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.U
 int top = 200;
 int workers = 3;
 bool cleanup = false, forceWin32 = false, interactive = false, probeFlags = false;
+string? indexPath = null;
 for (int i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -22,6 +24,7 @@ for (int i = 0; i < args.Length; i++)
         case "--workers": workers = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
         case "--cleanup": cleanup = true; break;
         case "--probe-flags": probeFlags = true; break;
+        case "--index": indexPath = args[++i]; break;
         case "--win32-register": forceWin32 = true; break;
         case "--interactive": interactive = true; break;
     }
@@ -62,6 +65,39 @@ if (!ours && Directory.Exists(root) && Directory.EnumerateFileSystemEntries(root
 {
     Console.WriteLine($"STOP: {root} exists and is not empty. Use an empty folder for the spike.");
     return 3;
+}
+
+// ---- Index mode (P0 step 6, cfapi half): PARTIAL population, FETCH_PLACEHOLDERS answered from the SQLite index. No Graph, no placeholders pre-created. ----
+if (indexPath is not null)
+{
+    ItemStore.InitProvider();
+    var store = new ItemStore(indexPath);
+    Console.WriteLine($"index mode: {indexPath} with {store.Count()} items; population policy FULL (on demand, via FETCH_PLACEHOLDERS)");
+    bool ours2 = SyncRootRegistrar.IsRegisteredByUs();
+    if (!ours2)
+    {
+        Directory.CreateDirectory(root);
+        string how2 = await SyncRootRegistrar.RegisterAsync(root, forceWin32, partialPopulation: true);
+        Console.WriteLine($"registered via {how2}");
+        Console.WriteLine($"shell flags -> {SyncRootRegistrar.ShellIntegrationFlags}: {(SyncRootRegistrar.TryApplyShellFlags(out string why2) ? "applied" : "NOT applied (" + why2 + ")")}");
+    }
+    else { Console.WriteLine("existing registration kept (run --cleanup first if it was registered with another population policy)"); }
+    using var noGraph = GraphLite.NewClient();
+    CloudProvider.Connect(root, noGraph, 2);
+    CloudProvider.UseIndex(store);
+    SyncRootRegistrar.PrintEffectivePolicies(root);
+    PinWatcher.Start(root);
+    Console.WriteLine(ProcessStats.Sample("ready"));
+    Console.WriteLine("Open the folders in Explorer; every FETCH_PLACEHOLDERS is logged as [populate]. Hydration of these synthetic items is expected to fail (their ids do not exist in OneDrive).");
+    TrayWindow.Create("NoDriveCfApiIndex", "NoDrive cfapi-minimal (index)", withIcon: true, onQuit: CloudProvider.Disconnect);
+    ProcessStats.StartSampler(TimeSpan.FromSeconds(30));
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; TrayWindow.RequestQuit(); };
+    TrayWindow.RunMessageLoop();
+    PinWatcher.Stop();
+    CloudProvider.Disconnect();
+    TrayWindow.Destroy();
+    store.Dispose();
+    return 0;
 }
 
 // 1. Sign in and fetch one delta page.

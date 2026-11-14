@@ -23,7 +23,8 @@ internal static class SyncRootRegistrar
 
     public static string SyncRootId => $"NoDriveSpike!{WindowsIdentity.GetCurrent().User!.Value}!Personal";
 
-    public static async Task<string> RegisterAsync(string rootPath, bool forceWin32)
+    /// <param name="partialPopulation">true = populate on demand (WinRT StorageProviderPopulationPolicy.Full: FETCH_PLACEHOLDERS answers a whole folder when it is first opened; the WinRT enum has no 'Partial').</param>
+    public static async Task<string> RegisterAsync(string rootPath, bool forceWin32, bool partialPopulation = false)
     {
         Directory.CreateDirectory(rootPath);
         if (!forceWin32)
@@ -41,7 +42,7 @@ internal static class SyncRootRegistrar
                     ProviderId = ProviderId,
                     HydrationPolicy = StorageProviderHydrationPolicy.Progressive,
                     HydrationPolicyModifier = StorageProviderHydrationPolicyModifier.AutoDehydrationAllowed,
-                    PopulationPolicy = StorageProviderPopulationPolicy.AlwaysFull,
+                    PopulationPolicy = partialPopulation ? StorageProviderPopulationPolicy.Full : StorageProviderPopulationPolicy.AlwaysFull,
                     InSyncPolicy = StorageProviderInSyncPolicy.FileLastWriteTime | StorageProviderInSyncPolicy.DirectoryLastWriteTime,
                     HardlinkPolicy = StorageProviderHardlinkPolicy.None,
                     ShowSiblingsAsGroup = false,
