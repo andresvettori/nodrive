@@ -10,7 +10,7 @@ namespace NoDrive.Engine.Infrastructure;
 /// </summary>
 internal sealed class CallerStats
 {
-    private sealed class Stat { public long Requests; public long Bytes; public long WholeFile; public long Largest; }
+    private sealed class Stat { public long Requests; public long Bytes; public long Fetched; public long WholeFile; public long Largest; }
     private readonly ConcurrentDictionary<string, Stat> _stats = new(StringComparer.OrdinalIgnoreCase);
 
     public void Record(string? imagePath, long requestedBytes, long fileSize)
@@ -24,13 +24,20 @@ internal sealed class CallerStats
         do { cur = Interlocked.Read(ref s.Largest); } while (requestedBytes > cur && Interlocked.CompareExchange(ref s.Largest, requestedBytes, cur) != cur);
     }
 
+    /// <summary>Bytes actually downloaded for this caller (required plus read-ahead).</summary>
+    public void RecordFetched(string? imagePath, long fetchedBytes)
+    {
+        string name = string.IsNullOrEmpty(imagePath) ? "(unknown)" : Path.GetFileName(imagePath);
+        Interlocked.Add(ref _stats.GetOrAdd(name, _ => new Stat()).Fetched, fetchedBytes);
+    }
+
     public string Summary()
     {
         if (_stats.IsEmpty) { return "no download requests yet"; }
         var sb = new StringBuilder();
         foreach (var kv in _stats.OrderByDescending(k => k.Value.Bytes))
         {
-            sb.Append(CultureInfo.InvariantCulture, $"{kv.Key}: {kv.Value.Requests} requests, {kv.Value.Bytes / 1048576.0:F1} MiB requested, {kv.Value.WholeFile} whole-file, largest {kv.Value.Largest / 1048576.0:F1} MiB; ");
+            sb.Append(CultureInfo.InvariantCulture, $"{kv.Key}: {kv.Value.Requests} requests, {kv.Value.Bytes / 1048576.0:F1} MiB requested, {kv.Value.Fetched / 1048576.0:F1} MiB fetched, {kv.Value.WholeFile} whole-file, largest {kv.Value.Largest / 1048576.0:F1} MiB; ");
         }
         return sb.ToString().TrimEnd(' ', ';');
     }

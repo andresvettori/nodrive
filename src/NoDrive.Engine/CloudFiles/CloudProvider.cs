@@ -164,6 +164,7 @@ internal static class CloudProvider
             {
                 // Read-ahead (P1 finding): a player reading 40 KB at a time pays a network round trip per read; fetch a growing window beyond the required range.
                 long fetch = s_svc.ReadAhead.Plan(req.ItemId, req.Offset, req.Length, req.OptionalOffset, req.OptionalLength, req.FileSize);
+                s_svc.Callers.RecordFetched(req.Process, fetch);
                 try
                 {
                     await s_svc.Hydrator.StreamAsync(req.ItemId, req.Offset, fetch, req.Length,

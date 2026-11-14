@@ -4,6 +4,10 @@ Updated at the end of every session. Read this file after `projectbrief.md` and 
 
 - User insight (2026-11-14): knowing which apps behave well with online-only files improves UX a lot; recorded in `research/app-compatibility.md` and plan item E3d (Media Player is the modern Windows 11 app and still requests whole files; others still to be measured).
 
+## Pending (2026-11-14, token-saving mode)
+
+Engine build with read-ahead + Explorer-style pin detection (open-callback hints, in-use retries) is deployed on the PC (`nodrive-dev\engine`, log `engine6.log`). Waiting for the user's tests: video playback via Photos on an undownloaded video (see `--status`/report line for requested vs fetched bytes), keep/free on files. Next candidates: parallel segment download (single connection measured ~14 MB/s vs 300 Mbit/s line; add `--bench`), E4b apply remote changes to populated folders, E6 delete/rename propagation, E5 upload, E1b adoption.
+
 ## P1 milestone 1 delivered (2026-11-14): read-only mount of the real OneDrive
 
 `src/NoDrive.Core` (item index, delta ingestor with resume/410 resync, population planner, hydration policy), `src/NoDrive.Graph` (GraphDrive, ThrottleGate, PKCE authenticator), `src/NoDrive.Engine` (DPAPI token store, registrar with the Flags rule, provider with bounded queues, hydrator with the P0 failure policy, populator, prefetcher, pin watcher, sync service, tray). 34 unit tests (Mac and Windows). Run on the user's PC against the real drive: sign-in via PKCE, first sync of about 91k items in 250 s at 23 MB private, folders appear in Explorer (root listing 6 ms), Camera (4,469 children) prefetched in 0.9 s.
