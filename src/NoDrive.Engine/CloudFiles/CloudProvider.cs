@@ -168,7 +168,7 @@ internal static class CloudProvider
                 try
                 {
                     await s_svc.Hydrator.StreamAsync(req.ItemId, req.Offset, fetch, req.Length,
-                        (chunk, offset) => TransferData(req, chunk, offset),
+                        (chunk, offset) => { if (offset >= req.Offset + req.Length && s_dataQueue.Reader.Count > 0) { throw new ReadAheadStopped(); } TransferData(req, chunk, offset); },
                         done => PInvoke.CfReportProviderProgress(new CF_CONNECTION_KEY(req.ConnectionKey), req.TransferKey, req.Length, Math.Min(done, req.Length)),
                         cts.Token).ConfigureAwait(false);
                 }
@@ -208,6 +208,7 @@ internal static class CloudProvider
             if (hr.Failed)
             {
                 if (offset >= req.Offset + req.Length) { throw new ReadAheadStopped(); }               // beyond the required range: not an error
+                if (hr.Value == unchecked((int)0x8007018E)) { throw new OperationCanceledException(); }  // the caller cancelled (seek): normal
                 throw new IOException($"CfExecute(TRANSFER_DATA) at {offset}+{chunk.Length} failed 0x{hr.Value:X8}");
             }
         }

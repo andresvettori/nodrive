@@ -4,7 +4,10 @@ namespace NoDrive.Core.Hydration;
 public sealed record ReadAheadOptions
 {
     /// <summary>Window on the first access to a file or after a seek.</summary>
-    public long InitialBytes { get; init; } = 4L * 1024 * 1024;
+    public long InitialBytes { get; init; } = 256L * 1024;
+
+    /// <summary>First window after a sequential continuation (a second sequential read proves a streaming reader, not a thumbnail).</summary>
+    public long SequentialStartBytes { get; init; } = 1024L * 1024;
 
     /// <summary>The window doubles on every sequential continuation up to this cap.</summary>
     public long MaxBytes { get; init; } = 32L * 1024 * 1024;
@@ -39,7 +42,7 @@ public sealed class ReadAheadPlanner(ReadAheadOptions? options = null)
         {
             _files.TryGetValue(itemId, out var st);
             bool sequential = st is not null && Math.Abs(requiredOffset - st.NextExpected) <= _o.Alignment;
-            long window = sequential ? Math.Min(_o.MaxBytes, Math.Max(_o.InitialBytes, st!.Window * 2)) : _o.InitialBytes;
+            long window = sequential ? Math.Min(_o.MaxBytes, Math.Max(_o.SequentialStartBytes, st!.Window * 2)) : _o.InitialBytes;
 
             // Only read ahead when Windows offers the continuation (optional range right after the required one) and the request is not already huge.
             bool offered = optionalLength > 0 && optionalOffset <= requiredEnd + _o.Alignment;

@@ -9,11 +9,11 @@ public class ReadAheadPlannerTests
     private const long File = 500 * MiB;
 
     [Fact]
-    public void A_first_small_read_is_extended_to_the_initial_window()
+    public void A_first_small_read_is_only_modestly_extended_so_thumbnail_style_reads_stay_cheap()
     {
         var p = new ReadAheadPlanner();
         long fetch = p.Plan("v", 0, 64 * 1024, 64 * 1024, File - 64 * 1024, File);      // Photos-style: 64 KiB required, the rest optional
-        Assert.Equal(4 * MiB, fetch);
+        Assert.Equal(256 * 1024, fetch);
     }
 
     [Fact]
@@ -28,7 +28,7 @@ public class ReadAheadPlannerTests
             fetched.Add(f);
             offset += f;                                                                 // the next request starts where the fetch ended
         }
-        Assert.Equal([4 * MiB, 8 * MiB, 16 * MiB, 32 * MiB, 32 * MiB, 32 * MiB], fetched);
+        Assert.Equal([256 * 1024, 1 * MiB, 2 * MiB, 4 * MiB, 8 * MiB, 16 * MiB], fetched);
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class ReadAheadPlannerTests
         long o = 0;
         for (int i = 0; i < 4; i++) { o += p.Plan("v", o, 4096, o + 4096, File - o, File); }
         long afterSeek = p.Plan("v", 300 * MiB, 4096, 300 * MiB + 4096, File - 300 * MiB, File);
-        Assert.Equal(4 * MiB, afterSeek);
+        Assert.Equal(256 * 1024, afterSeek);
     }
 
     [Fact]
@@ -73,6 +73,6 @@ public class ReadAheadPlannerTests
         var p = new ReadAheadPlanner(new ReadAheadOptions { TrackedFiles = 8 });
         for (int i = 0; i < 100; i++) { p.Plan("file" + i, 0, 4096, 4096, File, File); }
         // No exception and no unbounded growth; a forgotten file simply restarts at the initial window.
-        Assert.Equal(4 * MiB, p.Plan("file0", 0, 4096, 4096, File, File));
+        Assert.Equal(256 * 1024, p.Plan("file0", 0, 4096, 4096, File, File));
     }
 }

@@ -62,3 +62,6 @@ WM_RBUTTONUP
 WM_LBUTTONUP
 WM_CONTEXTMENU
 WM_COMMAND
+
+// Refresh Explorer icons after pin/unpin
+SHChangeNotify

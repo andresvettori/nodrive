@@ -83,7 +83,7 @@ internal static class PinWatcher
                 var sw = Stopwatch.StartNew();
                 HRESULT hr = Apply(path, hydrate);
                 string what = hydrate ? "keep on device" : "free up space";
-                if (hr.Succeeded) { Attempts.TryRemove(path, out _); Log.Info($"{what}: {Path.GetFileName(path)} done in {sw.ElapsedMilliseconds} ms"); }
+                if (hr.Succeeded) { Attempts.TryRemove(path, out _); NotifyShell(path); Log.Info($"{what}: {Path.GetFileName(path)} done in {sw.ElapsedMilliseconds} ms"); }
                 else if (hr.Value == InUseHr)
                 {
                     int n = Attempts.AddOrUpdate(path, 1, (_, c) => c + 1);
@@ -96,6 +96,12 @@ internal static class PinWatcher
             catch (Exception ex) { Log.Warn($"pin action failed for {path}: {ex.Message}"); }
             finally { Gate.Release(); InFlight.TryRemove(path, out _); }
         });
+    }
+
+    /// <summary>Tells Explorer the item changed so the icon refreshes without F5.</summary>
+    private static unsafe void NotifyShell(string path)
+    {
+        fixed (char* p = path) { PInvoke.SHChangeNotify(Windows.Win32.UI.Shell.SHCNE_ID.SHCNE_UPDATEITEM, Windows.Win32.UI.Shell.SHCNF_FLAGS.SHCNF_PATHW | Windows.Win32.UI.Shell.SHCNF_FLAGS.SHCNF_FLUSHNOWAIT, p, null); }
     }
 
     private static unsafe HRESULT Apply(string path, bool hydrate)

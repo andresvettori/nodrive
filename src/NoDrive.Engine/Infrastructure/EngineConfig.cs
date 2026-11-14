@@ -10,7 +10,7 @@ internal sealed class EngineConfig
 {
     [JsonPropertyName("clientId")] public string ClientId { get; set; } = GraphEndpoints.DefaultClientId;
     [JsonPropertyName("syncRoot")] public string? SyncRoot { get; set; }
-    [JsonPropertyName("hydrationWorkers")] public int HydrationWorkers { get; set; } = 3;
+    [JsonPropertyName("hydrationWorkers")] public int HydrationWorkers { get; set; } = 4;
     [JsonPropertyName("populationBudget")] public long PopulationBudget { get; set; } = 150_000;
     [JsonPropertyName("pollActiveSeconds")] public int PollActiveSeconds { get; set; } = 60;
     [JsonPropertyName("pollIdleMaxSeconds")] public int PollIdleMaxSeconds { get; set; } = 900;
