@@ -20,6 +20,21 @@ Findings from the provider log during that session (54 hydrate requests):
 
 Why the Status column and verbs may be missing (hypothesis under test): **Windows Search is Disabled on this PC** (`WSearch` StartType Disabled, SearchIndexer not running; index query fails with 0x80040E14). Cloud-file state shown in Explorer flows through the property system / indexer, and Microsoft's CloudMirror sample states property queries return wrong values when the sync root is not indexed. Registry comparison: our key (written by `StorageProviderSyncRootManager.Register`) has `NamespaceCLSID`, `DisplayNameResource`, `IconResource`, `Flags=34` and `UserSyncRoots`; OneDrive's key has `Flags=1058` plus `Handler`, `CustomStateHandler`, `ThumbnailProvider`, `UriHandler`, `ShareHandler`, `CopyHook`, `SearchHandlerFactory`, `StorageProviderStatusUISourceFactory`, `ProtectionMode`, `Cid`, `AUMID`. The built-in verbs and Status column are not documented to depend on those handlers, but the handler list is the second hypothesis (richer shell integration needs registered handlers/package identity).
 
+## SyncRootManager `Flags` experiments on the user's PC (2026-11-14, SSH session is fully elevated so Claude can write our own key)
+
+Hand-edited `Flags` on the spike's own key, user checking Explorer (reopened window / restarted Explorer):
+
+| Flags | Bits | Status column | Overlay icon | "Always keep on this device" / "Free up space" |
+|---|---|---|---|---|
+| 34 (what `Register` writes) | 0x20 + 0x02 | blank | generic brown box on online-only files | **absent** |
+| 2 | 0x02 | **shows** (files and folders) | gone | absent |
+| 1026 | 0x400 + 0x02 | as for 2 | as for 2 | absent |
+| 1058 (= OneDrive's value) | 0x400 + 0x20 + 0x02 | to confirm | to confirm | **PRESENT** |
+
+Conclusions: the **context-menu verbs need both 0x20 and 0x400**; with 0x20 set and no custom-state handler registered, Explorer expects a handler we lack and shows a blank Status and the brown box; with 0x20 cleared the plain built-in Status works but there are no verbs. The research inference "0x20 enables the verbs" was incomplete (0x20 alone is not enough), and "0x20 hides the menu" was wrong.
+
+Probe of the WinRT API (`cfapi-minimal --probe-flags`, throwaway roots): `Register` writes Flags=34 for baseline, `AllowPinning`, `ProtectionMode` (also writes a `ProtectionMode` registry value), `RecycleBinUri` (writes `RecycleBinUrl`), and item property definitions; **`ShowSiblingsAsGroup=true` adds 0x200 (Flags=546)**. **No `StorageProviderSyncRootInfo` property produces 0x400**, so getting verbs from an unpackaged app means writing `Flags` in HKLM ourselves (administrator rights: an installer step, and must survive re-registration) or finding the registration route that sets it (package identity / `windows.cloudFiles` manifest extension is the likely one).
+
 ## Why the verbs / Status column / icons are missing for an unpackaged provider (2026-11-14, user's PC + research)
 
 Measured:

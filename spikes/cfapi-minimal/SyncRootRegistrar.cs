@@ -101,6 +101,74 @@ internal static class SyncRootRegistrar
         }
     }
 
+    /// <summary>
+    /// Diagnostic: registers throwaway sync roots with different StorageProviderSyncRootInfo property combinations and prints the
+    /// SyncRootManager registry values Windows wrote (notably Flags), to learn which API property yields which shell integration bits.
+    /// </summary>
+    public static async Task ProbeFlagsAsync(string baseDir)
+    {
+        string sid = WindowsIdentity.GetCurrent().User!.Value;
+        var variants = new (string Name, Action<StorageProviderSyncRootInfo> Tweak)[]
+        {
+            ("baseline (AllowPinning)", i => { }),
+            ("ProtectionMode=Personal", i => i.ProtectionMode = StorageProviderProtectionMode.Personal),
+            ("ProtectionMode=Unknown", i => i.ProtectionMode = StorageProviderProtectionMode.Unknown),
+            ("ShowSiblingsAsGroup=true", i => i.ShowSiblingsAsGroup = true),
+            ("RecycleBinUri", i => i.RecycleBinUri = new Uri("https://onedrive.live.com/?v=RecycleBin")),
+            ("ItemPropertyDefinition", i => i.StorageProviderItemPropertyDefinitions.Add(new StorageProviderItemPropertyDefinition { DisplayNameResource = "NoDrive state", Id = 1 })),
+            ("Personal+RecycleBin+Siblings+Property", i =>
+            {
+                i.ProtectionMode = StorageProviderProtectionMode.Personal;
+                i.RecycleBinUri = new Uri("https://onedrive.live.com/?v=RecycleBin");
+                i.ShowSiblingsAsGroup = true;
+                i.StorageProviderItemPropertyDefinitions.Add(new StorageProviderItemPropertyDefinition { DisplayNameResource = "NoDrive state", Id = 1 });
+            }),
+        };
+        int n = 0;
+        foreach (var (name, tweak) in variants)
+        {
+            n++;
+            string dir = Path.Combine(baseDir, $"v{n}");
+            Directory.CreateDirectory(dir);
+            string id = $"NoDriveProbe!{sid}!v{n}";
+            try
+            {
+                var folder = await StorageFolder.GetFolderFromPathAsync(dir);
+                var info = new StorageProviderSyncRootInfo
+                {
+                    Id = id,
+                    Path = folder,
+                    DisplayNameResource = $"NoDrive probe {n}",
+                    IconResource = $"{Environment.ProcessPath},0",
+                    Version = ProviderVersion,
+                    ProviderId = ProviderId,
+                    HydrationPolicy = StorageProviderHydrationPolicy.Progressive,
+                    HydrationPolicyModifier = StorageProviderHydrationPolicyModifier.AutoDehydrationAllowed,
+                    PopulationPolicy = StorageProviderPopulationPolicy.AlwaysFull,
+                    InSyncPolicy = StorageProviderInSyncPolicy.FileLastWriteTime | StorageProviderInSyncPolicy.DirectoryLastWriteTime,
+                    HardlinkPolicy = StorageProviderHardlinkPolicy.None,
+                    AllowPinning = true,
+                    Context = CryptographicBuffer.ConvertStringToBinary(id, BinaryStringEncoding.Utf8),
+                };
+                tweak(info);
+                StorageProviderSyncRootManager.Register(info);
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager\" + id);
+                var values = key is null ? "(key not found)" : string.Join("; ", key.GetValueNames().Where(v => v is not ("DisplayNameResource" or "IconResource")).Select(v => $"{v}={key.GetValue(v)}"));
+                Console.WriteLine($"probe {n,-2} {name,-40} -> {values}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"probe {n,-2} {name,-40} -> FAILED {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                try { StorageProviderSyncRootManager.Unregister(id); } catch { }
+                try { Directory.Delete(dir, true); } catch { }
+            }
+        }
+        try { Directory.Delete(baseDir, true); } catch { }
+    }
+
     public static unsafe void Unregister(string rootPath)
     {
         try
