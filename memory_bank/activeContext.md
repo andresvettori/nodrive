@@ -131,3 +131,6 @@ Non-blocking: CfUpdatePlaceholder heap corruption status (step 4), winsqlite3 AO
 - CI run #5 green with zero AOT warnings for both spikes (cfapi-minimal 6.06 MB): WinRT projection + callbacks compile under Native AOT on .NET 11. Download artifacts from run #6+ (GC fix).
 - First PC run done 2026-11-14 (see session log): tray idle 4.3 MB, cfapi registration + 200 placeholders OK under AOT; hydration not yet exercised.
 - Next: on the notebook `git clone git@github.com:andresvettori/nodrive.git` (or HTTPS), run `.\spikes\onedrive-state.ps1`, then runbook steps 2 and 3; expect to iterate on the cfapi spike with real callback behaviour.
+
+## 2026-11-14 decision
+Video playback problem deferred by the user; moving on with E4b (remote changes into populated folders), then E6 delete/rename, E5 upload. See progress.md "Known issue".

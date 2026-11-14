@@ -117,3 +117,9 @@ Nothing is implemented, so there are no product bugs yet. The items below are pl
 | 2026-11-13 | Responsiveness and correctness are hard requirements above features; 9 design rules, 6 acceptance tests | User's OneDrive.exe experience: 4 GB RAM, Explorer hangs, dialogs stuck at "0 files remaining" | plan section "Non-negotiable" |
 | 2026-11-13 | Windows 11 only, 24H2 + Aug 2025 CU minimum | cldflt.sys changed in the Aug 2025 patch; Windows 10 22H2 under ESU shares the API baseline but is untested (effort, not support, is the reason) | plan |
 | 2026-11-13 | Remote deletes to recycle bin only; mass-delete threshold pauses sync | Data-loss guard; permanentDelete exists on personal but is never the default | plan |
+
+## Known issue: large-video playback in Photos (deferred 2026-11-14)
+Undownloaded ~3.5 GB mp4 in Photos plays choppy; seeking (e.g. minute 5) fails with "can't play the file"; pause once hung the player.
+Tried: read-ahead (1 to 32 MiB), RequestKey-keyed cancellation, two request lanes (explorer/search/AV in background lane, no read-ahead). Not fixed.
+Evidence: single connection about 14 MB/s; explorer thumbnails fetched 12x requested bytes; no Photos.exe entries in caller stats.
+Next ideas when revisited: per-request timing log for Photos, parallel segment download (`--bench`), verify every request completes on cancel/ReadAheadStopped paths. Workaround: "Always keep on this device" for videos.
