@@ -1,6 +1,6 @@
 # Progress
 
-**P0 COMPLETE 2026-11-14: verdict GO, see `p0-results.md`.**
+**P0 COMPLETE 2026-11-14: verdict GO, see `p0-results.md`. P1 milestone 1 (read-only mount of the real OneDrive) delivered the same day: see activeContext.**
 
 **Status (2026-11-13):** planning complete, memory bank created and reviewed, repo scaffolded and building (0 warnings) with 2/2 smoke tests green on macOS; P0 spike not started; no engine code runs yet; nothing committed to git.
 

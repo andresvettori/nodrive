@@ -4,6 +4,14 @@ Updated at the end of every session. Read this file after `projectbrief.md` and 
 
 - User insight (2026-11-14): knowing which apps behave well with online-only files improves UX a lot; recorded in `research/app-compatibility.md` and plan item E3d (Media Player is the modern Windows 11 app and still requests whole files; others still to be measured).
 
+## P1 milestone 1 delivered (2026-11-14): read-only mount of the real OneDrive
+
+`src/NoDrive.Core` (item index, delta ingestor with resume/410 resync, population planner, hydration policy), `src/NoDrive.Graph` (GraphDrive, ThrottleGate, PKCE authenticator), `src/NoDrive.Engine` (DPAPI token store, registrar with the Flags rule, provider with bounded queues, hydrator with the P0 failure policy, populator, prefetcher, pin watcher, sync service, tray). 34 unit tests (Mac and Windows). Run on the user's PC against the real drive: sign-in via PKCE, first sync of about 91k items in 250 s at 23 MB private, folders appear in Explorer (root listing 6 ms), Camera (4,469 children) prefetched in 0.9 s.
+
+Known gaps in M1 (all planned): read-only (delete/rename are refused; no upload), remote changes after the first sync update the index but are not pushed into folders already populated on disk (E4b), no OneDrive.exe adoption (E1b), AOT engine build not yet re-verified after the sign-in fixes, tray has no pause. Sign-in is a recoverable state: tray "Sign in..." (a slow user earlier left the first AOT build stuck on a dead listener: fixed, tested).
+
+Dev loop on the PC: `NODRIVE_SCRATCH=<dir> spikes/remote/mac-sync-src.sh` (stop the engine first, the build overwrites its files), then `start-in-session.ps1 -Exe ...\nodrive-dev\engine\NoDrive.Engine.exe`.
+
 ## Current focus (updated 2026-11-14): P0 finished, verdict GO
 
 Read `p0-results.md` first. Next: start P1 in the order recommended there (E1 registration with Flags 1058, then the delta/index pipeline, population, hydration with watchdog). The PC is clean (no sync roots, tasks or processes); `index500k.db` and the AOT binaries stay under `C:\Users\<PC_USER>\nodrive-dev` and `nodrive-aot` for later runs.
