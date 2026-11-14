@@ -46,6 +46,10 @@ Decision records behind this table: [ADR-0001](decisions/ADR-0001.md) cfapi over
 - Central package management (`Directory.Packages.props`) pins: Microsoft.Windows.CsWin32 0.3.371, Microsoft.Data.Sqlite.Core 11.0.0, SQLitePCLRaw.provider.winsqlite3 3.0.5, xunit.v3 4.0.3, xunit.runner.visualstudio 4.0.1 (latest stable on NuGet 2026-11-13).
 - `TreatWarningsAsErrors` + `AnalysisLevel latest-recommended` are on for every project; CA1707 (underscores) is suppressed for test projects only.
 
+### CI binaries branch
+
+- Every push to `main` makes the `windows` workflow force-push the built Native AOT binaries (engine, spikes, publish logs, `BUILD.txt` with the commit sha) to the orphan branch `ci-binaries` (job permission `contents: write`). Fetch with `git fetch origin ci-binaries` and `git show origin/ci-binaries:<path>`; used to ship AOT builds to the Windows test PC without a browser download or C++ build tools.
+
 ### Repository
 
 - Remote: private GitHub repo `https://github.com/andresvettori/nodrive` (SSH `git@github.com:andresvettori/nodrive.git`), branch `main`, first push 2026-11-13. CI: `.github/workflows/windows.yml` on windows-latest.

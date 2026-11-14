@@ -132,10 +132,10 @@ Each epic lists acceptance criteria. "Harness" = the P0 responsiveness harness; 
 - A recursive attribute watcher (bounded to 2 concurrent operations) reacts to `PINNED` on an online-only file with `CfHydratePlaceholder` and to `UNPINNED` on a hydrated in-sync file with `CfDehydratePlaceholder`; never dehydrate a file that is not in sync; ignore directories; de-duplicate in-flight paths; startup sweep for pins set while the engine was not running (a pin applied before the watcher existed is not re-signalled).
 - Acceptance: pin of 1,000 files completes with bounded memory and Explorer responsive; unpin of a pinned folder dehydrates only in-sync files.
 
-### E7a. Elevated setup and Explorer verbs (ADR-0009)
-- `--setup` (UAC): `Register` the sync root, write `Flags=1058` under our SyncRootManager key; engine start-up never calls `Register`, only `CfConnectSyncRoot`.
-- Start-up read-only check of `Flags`; tray notice and elevated repair action if it differs; sync continues regardless.
-- Uninstall: elevated `Unregister` after hydrate-or-warn.
+### E7a. Setup and Explorer verbs (ADR-0009; no elevation needed, measured)
+- `--setup` (unelevated, first launch): `Register` the sync root, write `Flags=1058` under our SyncRootManager key (Users have SetValue there); engine start-up never calls `Register`, only `CfConnectSyncRoot`.
+- Start-up check of `Flags`; if it differs the engine rewrites it itself (no UAC) and logs it; sync continues regardless.
+- Uninstall: `Unregister` after hydrate-or-warn (verify it works unelevated; the P0 cleanup ran in an elevated SSH token).
 - Acceptance: on a clean Windows 11 build the verbs appear after setup; killing and restarting the engine keeps them; a test fails if the engine binary can reach `Register`; re-test on each supported Windows build. Status column/icon handling decided separately (ADR-0009 point 5).
 
 ### E7. Tray and lifecycle
