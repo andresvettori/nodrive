@@ -11,7 +11,7 @@ namespace NoDrive.Core.Index;
 /// </summary>
 public sealed class ItemIndex : IDisposable
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private static readonly string[] UpsertParameters = ["$id", "$p", "$n", "$s", "$m", "$f", "$e", "$c", "$q", "$g"];
     private readonly string _path;
     private readonly SqliteConnection _writer;
@@ -57,6 +57,7 @@ public sealed class ItemIndex : IDisposable
                   gen INTEGER NOT NULL DEFAULT 0
                 ) WITHOUT ROWID;
                 CREATE INDEX IF NOT EXISTS ix_items_parent_name ON items(parent_id, name);
+                CREATE TABLE IF NOT EXISTS uploads(path TEXT PRIMARY KEY NOT NULL, depth INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL) WITHOUT ROWID;
                 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY NOT NULL, v TEXT) WITHOUT ROWID;
                 """);
             Exec(_writer, $"PRAGMA user_version={SchemaVersion}");
@@ -223,6 +224,79 @@ public sealed class ItemIndex : IDisposable
         cmd.CommandText = "SELECT COUNT(*) FROM items WHERE parent_id=$p";
         cmd.Parameters.AddWithValue("$p", parentId);
         return (long)cmd.ExecuteScalar()!;
+    }
+
+    /// <summary>Case-insensitive child lookup (OneDrive names are case-insensitive).</summary>
+    public IndexedItem? FindChild(string parentId, string name)
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = SelectColumns + " WHERE parent_id=$p AND name=$n COLLATE NOCASE LIMIT 1";
+        cmd.Parameters.AddWithValue("$p", parentId);
+        cmd.Parameters.AddWithValue("$n", name);
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? Read(r) : null;
+    }
+
+    // ---------------- upload journal (journal before mutate; survives crashes) ----------------
+
+    /// <summary>Queues local paths for upload (idempotent: an already queued path keeps its schedule). One transaction for the whole batch.</summary>
+    public void EnqueueUploads(IEnumerable<string> paths, long dueTicks)
+    {
+        lock (_writeLock)
+        {
+            using var tx = _writer.BeginTransaction();
+            using var cmd = _writer.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "INSERT OR IGNORE INTO uploads(path,depth,attempts,due) VALUES($p,$d,0,$t)";
+            var p = cmd.Parameters.Add(new SqliteParameter { ParameterName = "$p" });
+            var d = cmd.Parameters.Add(new SqliteParameter { ParameterName = "$d" });
+            cmd.Parameters.AddWithValue("$t", dueTicks);
+            foreach (var path in paths)
+            {
+                p.Value = path;
+                d.Value = path.Count(ch => ch == '\\');
+                cmd.ExecuteNonQuery();
+            }
+            tx.Commit();
+        }
+    }
+
+    /// <summary>Queued uploads that are due, shallowest first (parents before children).</summary>
+    public IReadOnlyList<(string Path, int Attempts)> DueUploads(long nowTicks, int max)
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT path,attempts FROM uploads WHERE due<=$n ORDER BY depth,due LIMIT $m";
+        cmd.Parameters.AddWithValue("$n", nowTicks);
+        cmd.Parameters.AddWithValue("$m", max);
+        var list = new List<(string, int)>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) { list.Add((r.GetString(0), r.GetInt32(1))); }
+        return list;
+    }
+
+    public void RescheduleUpload(string path, int attempts, long dueTicks) => ExecWrite("UPDATE uploads SET attempts=$a,due=$t WHERE path=$p", ("$a", attempts), ("$t", dueTicks), ("$p", path));
+
+    public void RemoveUpload(string path) => ExecWrite("DELETE FROM uploads WHERE path=$p", ("$p", path));
+
+    public long CountUploads()
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM uploads";
+        return Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private void ExecWrite(string sql, params (string Name, object Value)[] args)
+    {
+        lock (_writeLock)
+        {
+            using var cmd = _writer.CreateCommand();
+            cmd.CommandText = sql;
+            foreach (var (n, v) in args) { cmd.Parameters.AddWithValue(n, v); }
+            cmd.ExecuteNonQuery();
+        }
     }
 
     /// <summary>Streams a folder's children ordered by name; nothing is materialised (this feeds FETCH_PLACEHOLDERS).</summary>

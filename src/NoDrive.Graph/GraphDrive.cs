@@ -87,12 +87,112 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
         return dto?.DownloadUrl is { Length: > 0 } u ? new Uri(u) : throw new InvalidOperationException($"Item {itemId} has no download URL (folder or unavailable).");
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, CancellationToken ct)
+    /// <summary>Uploads up to this size with one PUT; larger files use a resumable upload session in 5 MiB chunks (a multiple of 320 KiB).</summary>
+    public const long SimpleUploadLimit = 4 * 1024 * 1024;
+    private const int ChunkSize = 5 * 1024 * 1024;
+
+    private static RemoteItem ToRemote(DriveItemDto dto) => new(dto.Id, dto.Parent?.Id, dto.Name ?? "", dto.Size, dto.LastModified ?? DateTimeOffset.UnixEpoch, dto.Folder is not null, dto.ETag, dto.CTag, dto.File?.Hashes?.QuickXorHash);
+
+    private string ChildUrl(string parentId, string name, string suffix) => $"{_options.BaseUrl}/me/drive/items/{Uri.EscapeDataString(parentId)}:/{Uri.EscapeDataString(name)}:{suffix}";
+
+    /// <summary>
+    /// Uploads a NEW file. conflictBehavior=fail: an existing name is never replaced; the caller gets an HttpRequestException with
+    /// StatusCode Conflict and picks another name. Throws if the file changes size while reading. Never overwrites, never deletes.
+    /// </summary>
+    public async Task<RemoteItem> UploadNewFileAsync(string parentId, string name, string localPath, CancellationToken ct)
+    {
+        long size = new FileInfo(localPath).Length;
+        if (size <= SimpleUploadLimit)
+        {
+            using var resp = await SendAsync(() =>
+            {
+                var req = new HttpRequestMessage(HttpMethod.Put, ChildUrl(parentId, name, "/content?@microsoft.graph.conflictBehavior=fail"));
+                req.Content = new StreamContent(new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan));
+                req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                return req;
+            }, ct).ConfigureAwait(false);
+            return await ReadItemAsync(resp, ct).ConfigureAwait(false);
+        }
+
+        string uploadUrl;
+        using (var resp = await SendAsync(() =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, ChildUrl(parentId, name, "/createUploadSession"));
+            req.Content = new StringContent("{\"item\":{\"@microsoft.graph.conflictBehavior\":\"fail\"}}", System.Text.Encoding.UTF8, "application/json");
+            return req;
+        }, ct).ConfigureAwait(false))
+        {
+            var s = await resp.Content.ReadFromJsonAsync(GraphJsonContext.Default.UploadSessionDto, ct).ConfigureAwait(false);
+            uploadUrl = s?.UploadUrl ?? throw new InvalidOperationException("No upload URL returned.");
+        }
+
+        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(ChunkSize);
+        try
+        {
+            await using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
+            if (fs.Length != size) { throw new IOException("The file changed while uploading."); }
+            long sent = 0;
+            while (sent < size)
+            {
+                int n = await fs.ReadAtLeastAsync(buffer.AsMemory(0, (int)Math.Min(ChunkSize, size - sent)), (int)Math.Min(ChunkSize, size - sent), throwOnEndOfStream: true, ct).ConfigureAwait(false);
+                for (int attempt = 1; ; attempt++)
+                {
+                    // Fragment PUTs carry no Authorization header (the URL is pre-authenticated).
+                    using var req = new HttpRequestMessage(HttpMethod.Put, uploadUrl) { Content = new ReadOnlyMemoryContent(buffer.AsMemory(0, n)) };
+                    req.Content.Headers.ContentRange = new ContentRangeHeaderValue(sent, sent + n - 1, size);
+                    req.Content.Headers.ContentLength = n;
+                    try
+                    {
+                        using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                        if (resp.StatusCode == HttpStatusCode.Conflict) { throw new HttpRequestException("Graph 409 Conflict (upload session)", null, HttpStatusCode.Conflict); }
+                        if ((int)resp.StatusCode >= 500 || resp.StatusCode == HttpStatusCode.TooManyRequests)
+                        {
+                            if (attempt >= _options.MaxAttempts) { throw new HttpRequestException($"Graph {(int)resp.StatusCode} during upload", null, resp.StatusCode); }
+                            await Task.Delay(resp.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(Math.Min(30, 3 * attempt)), ct).ConfigureAwait(false);
+                            continue;
+                        }
+                        resp.EnsureSuccessStatusCode();
+                        sent += n;
+                        if (sent >= size) { return await ReadItemAsync(resp, ct).ConfigureAwait(false); }
+                        break;
+                    }
+                    catch (HttpRequestException ex) when (ex.StatusCode is null && attempt < _options.MaxAttempts)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, 3 * attempt)), ct).ConfigureAwait(false);       // dropped connection: resend the same chunk
+                    }
+                }
+            }
+            throw new InvalidOperationException("Upload ended without a final response.");
+        }
+        finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
+    }
+
+    /// <summary>Creates a folder; an existing name fails with Conflict (never merged or renamed by the server).</summary>
+    public async Task<RemoteItem> CreateFolderAsync(string parentId, string name, CancellationToken ct)
+    {
+        using var resp = await SendAsync(() =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/me/drive/items/{Uri.EscapeDataString(parentId)}/children");
+            req.Content = new StringContent($"{{\"name\":\"{System.Text.Json.JsonEncodedText.Encode(name)}\",\"folder\":{{}},\"@microsoft.graph.conflictBehavior\":\"fail\"}}", System.Text.Encoding.UTF8, "application/json");
+            return req;
+        }, ct).ConfigureAwait(false);
+        return await ReadItemAsync(resp, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<RemoteItem> ReadItemAsync(HttpResponseMessage resp, CancellationToken ct)
+    {
+        var dto = await resp.Content.ReadFromJsonAsync(GraphJsonContext.Default.DriveItemDto, ct).ConfigureAwait(false);
+        return dto is null ? throw new InvalidOperationException("Empty item response.") : ToRemote(dto);
+    }
+
+    private Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, CancellationToken ct) => SendAsync(() => new HttpRequestMessage(method, url), ct);
+
+    private async Task<HttpResponseMessage> SendAsync(Func<HttpRequestMessage> makeRequest, CancellationToken ct)
     {
         for (int attempt = 1; ; attempt++)
         {
             await _gate.WaitAsync(ct).ConfigureAwait(false);
-            using var req = new HttpRequestMessage(method, url);
+            using var req = makeRequest();
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await accessToken(ct).ConfigureAwait(false));
             var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             try

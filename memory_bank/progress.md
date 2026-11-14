@@ -37,7 +37,7 @@ Checkboxes mirror `projectPlan.md`. Tick here when the plan row is updated.
 - [ ] E2 Lazy enumeration from the index only, batched and paginated; unsupported items excluded and listed
 - [ ] E3 Progressive hydration: bounded workers, Range with 200 fallback, pooled chunked TRANSFER_DATA, progress every 15 s, watchdog failure path, RECOVER and cancel handling
 - [ ] E4 Delta ingestion and index: streamed `$select` delta, resumable, deletes-first, duplicates, 410 resync, adaptive polling, global Retry-After gate, User-Agent, minimal CfUpdatePlaceholder with oplocks
-- [ ] E5 New-file upload: watcher + debounce, simple PUT / upload session with 320 KiB chunks, explicit conflictBehavior, quickXorHash verification, convert to placeholder, journaled and resumable
+- [x] E5 upload of new files and folders (needs PC verification)
 - [ ] E6 Rename/delete propagation: immediate acks, idempotent double deletes, recycle-bin-only, mass-delete threshold, dehydrated move-out denied with a failing ack (hydrated items allowed), never dehydrate NotInSync
 - [ ] E7 Tray and lifecycle: tray menu with pause and free-up-space/keep-offline fallbacks, HKCU Run, single instance, restart-on-failure, graceful disconnect, refuse to run beside OneDrive.exe
 - [ ] E8 Recovery and uninstall: journal replay, USN cursor reconcile, RECOVER re-drive, hydrate-or-warn before Unregister
