@@ -23,7 +23,7 @@ internal sealed record ProviderServices(ItemIndex Index, Hydrator Hydrator, Popu
 /// </summary>
 internal static class CloudProvider
 {
-    private sealed record DataRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, long FileSize, long Offset, long Length, long OptionalOffset, long OptionalLength, string? Process);
+    private sealed record DataRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, long FileSize, long Offset, long Length, long OptionalOffset, long OptionalLength, string? Process, bool Background, long EnqueuedTicks);
 
     /// <summary>Thrown when Windows refuses data BEYOND the required range (it may already have it): read-ahead stops quietly, the request itself succeeded.</summary>
     private sealed class ReadAheadStopped : Exception { }
@@ -31,7 +31,10 @@ internal static class CloudProvider
 
     private static ProviderServices s_svc = null!;
     private static CF_CONNECTION_KEY s_connection;
+    // Two lanes: interactive apps are served first; Explorer thumbnails, search and antivirus reads (Background) never delay a player.
     private static readonly Channel<DataRequest> s_dataQueue = Channel.CreateBounded<DataRequest>(new BoundedChannelOptions(256) { FullMode = BoundedChannelFullMode.Wait });
+    private static readonly Channel<DataRequest> s_backgroundQueue = Channel.CreateBounded<DataRequest>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropOldest });
+    private static readonly HashSet<string> BackgroundCallers = new(StringComparer.OrdinalIgnoreCase) { "explorer.exe", "SearchProtocolHost.exe", "SearchFilterHost.exe", "SearchIndexer.exe", "MsMpEng.exe", "dllhost.exe", "prevhost.exe" };
     private static readonly Channel<PopulateRequest> s_populateQueue = Channel.CreateBounded<PopulateRequest>(new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.Wait });
     // Keyed by RequestKey (unique per request). TransferKey is shared by all requests on one open file, so it must never own a cancellation handle.
     private sealed record InFlight(long TransferKey, long Offset, long Length, CancellationTokenSource Cts);
@@ -40,7 +43,7 @@ internal static class CloudProvider
     private static readonly CancellationTokenSource s_stop = new();
 
     public static IReadOnlyCollection<double> CallbackMicros => s_callbackMicros;
-    public static int Pending => s_dataQueue.Reader.Count + s_populateQueue.Reader.Count;
+    public static int Pending => s_dataQueue.Reader.Count + s_backgroundQueue.Reader.Count + s_populateQueue.Reader.Count;
 
     public static unsafe void Start(string rootPath, ProviderServices services)
     {
@@ -62,7 +65,7 @@ internal static class CloudProvider
             Marshal.ThrowExceptionForHR(hr.Value);
             s_connection = key;
         }
-        for (int i = 0; i < services.HydrationWorkers; i++) { _ = Task.Run(DataWorkerAsync); }
+        for (int i = 0; i < services.HydrationWorkers; i++) { bool backgroundOnly = i == 0; _ = Task.Run(() => DataWorkerAsync(backgroundOnly)); }   // worker 0 only serves the background lane; the others take interactive work first
         for (int i = 0; i < 2; i++) { _ = Task.Run(PopulateWorkerAsync); }
         Log.Info($"connected to the sync root (key 0x{s_connection.Value:X}), {services.HydrationWorkers} hydration workers");
     }
@@ -85,11 +88,12 @@ internal static class CloudProvider
         long t0 = Stopwatch.GetTimestamp();
         var req = new DataRequest(info->ConnectionKey.Value, info->TransferKey, info->RequestKey, Identity(info), info->FileSize,
             parameters->FetchData.RequiredFileOffset, parameters->FetchData.RequiredLength, parameters->FetchData.OptionalFileOffset, parameters->FetchData.OptionalLength,
-            info->ProcessInfo is null ? null : info->ProcessInfo->ImagePath.ToString());
+            info->ProcessInfo is null ? null : info->ProcessInfo->ImagePath.ToString(), false, t0);
+        req = req with { Background = req.Process is not null && BackgroundCallers.Contains(Path.GetFileName(req.Process)) };
         try
         {
             s_inFlight[req.RequestKey] = new InFlight(req.TransferKey, req.Offset, req.Length, CancellationTokenSource.CreateLinkedTokenSource(s_stop.Token));
-            if (req.ItemId.Length == 0 || !s_dataQueue.Writer.TryWrite(req)) { CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
+            if (req.ItemId.Length == 0 || !(req.Background ? s_backgroundQueue : s_dataQueue).Writer.TryWrite(req)) { CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
         }
         catch (Exception ex) { Log.Error($"FETCH_DATA callback: {ex.Message}"); }
         Record(t0);
@@ -168,22 +172,42 @@ internal static class CloudProvider
 
     // ---------------- hydration worker ----------------
 
-    private static async Task DataWorkerAsync()
+    private static async Task<DataRequest> NextAsync(bool backgroundOnly)
     {
-        await foreach (var req in s_dataQueue.Reader.ReadAllAsync(s_stop.Token).ConfigureAwait(false))
+        while (true)
         {
+            s_stop.Token.ThrowIfCancellationRequested();
+            DataRequest? r;
+            if (!backgroundOnly && s_dataQueue.Reader.TryRead(out r)) { return r; }
+            if (s_backgroundQueue.Reader.TryRead(out r)) { return r; }
+            var waits = backgroundOnly
+                ? new[] { s_backgroundQueue.Reader.WaitToReadAsync(s_stop.Token).AsTask() }
+                : new[] { s_dataQueue.Reader.WaitToReadAsync(s_stop.Token).AsTask(), s_backgroundQueue.Reader.WaitToReadAsync(s_stop.Token).AsTask() };
+            await Task.WhenAny(waits).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task DataWorkerAsync(bool backgroundOnly)
+    {
+        while (!s_stop.IsCancellationRequested)
+        {
+            DataRequest req;
+            try { req = await NextAsync(backgroundOnly).ConfigureAwait(false); }
+            catch (OperationCanceledException) { return; }
+            double queuedMs = Stopwatch.GetElapsedTime(req.EnqueuedTicks).TotalMilliseconds;
+            if (queuedMs > 1000) { Log.Info($"request for {Path.GetFileName(req.Process ?? "?")} waited {queuedMs:F0} ms in the {(req.Background ? "background" : "interactive")} queue"); }
             var cts = s_inFlight.GetValueOrDefault(req.RequestKey)?.Cts ?? new CancellationTokenSource();
             var sw = Stopwatch.StartNew();
             s_svc.Callers.Record(req.Process, req.Length, req.FileSize);
             try
             {
                 // Read-ahead (P1 finding): a player reading 40 KB at a time pays a network round trip per read; fetch a growing window beyond the required range.
-                long fetch = s_svc.ReadAhead.Plan(req.ItemId, req.Offset, req.Length, req.OptionalOffset, req.OptionalLength, req.FileSize);
+                long fetch = req.Background ? req.Length : s_svc.ReadAhead.Plan(req.ItemId, req.Offset, req.Length, req.OptionalOffset, req.OptionalLength, req.FileSize);   // thumbnails/search/AV: exactly what they asked, never ahead
                 s_svc.Callers.RecordFetched(req.Process, fetch);
                 try
                 {
                     await s_svc.Hydrator.StreamAsync(req.ItemId, req.Offset, fetch, req.Length,
-                        (chunk, offset) => { if (offset >= req.Offset + req.Length && s_dataQueue.Reader.Count > 0) { throw new ReadAheadStopped(); } TransferData(req, chunk, offset); },
+                        (chunk, offset) => { if (offset >= req.Offset + req.Length && (s_dataQueue.Reader.Count > 0 || s_backgroundQueue.Reader.Count > 8)) { throw new ReadAheadStopped(); } TransferData(req, chunk, offset); },
                         done => PInvoke.CfReportProviderProgress(new CF_CONNECTION_KEY(req.ConnectionKey), req.TransferKey, req.Length, Math.Min(done, req.Length)),
                         cts.Token).ConfigureAwait(false);
                 }
