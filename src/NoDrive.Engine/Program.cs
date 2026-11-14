@@ -41,12 +41,13 @@ internal static class Program
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
+                // Never leave a zombie: the tray stays so the user can see the state and quit, and the log explains why.
                 Log.Error($"engine stopped: {ex}");
-                TrayWindow.RequestQuit();
+                service.MarkFailed(ex.Message);
             }
         });
 
-        TrayWindow.Create("NoDrive", onQuit: () => cts.Cancel(), onOpenFolder: () => OpenFolder(paths.SyncRoot), statusText: () => service.Status);
+        TrayWindow.Create("NoDrive", onQuit: () => cts.Cancel(), onOpenFolder: () => OpenFolder(paths.SyncRoot), statusText: () => service.Status, onSignIn: service.RequestSignIn, needsSignIn: () => service.NeedsSignIn);
         _ = Task.Run(async () =>
         {
             while (!cts.IsCancellationRequested)

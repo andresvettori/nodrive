@@ -20,7 +20,7 @@ public sealed class SignInRequiredException(string message) : Exception(message)
 /// OAuth 2.0 authorization code + PKCE for a public client against the `consumers` authority (ADR-0003): system browser,
 /// loopback redirect, refresh-token grant with rotation persisted before the new access token is used.
 /// </summary>
-public sealed class PkceAuthenticator(HttpClient http, ITokenStore store, Action<Uri> openBrowser, string clientId = GraphEndpoints.DefaultClientId, string authority = GraphEndpoints.Authority, TimeProvider? clock = null) : IDisposable
+public sealed class PkceAuthenticator(HttpClient http, ITokenStore store, Action<Uri> openBrowser, string clientId = GraphEndpoints.DefaultClientId, string authority = GraphEndpoints.Authority, TimeProvider? clock = null, Action<string>? log = null, TimeSpan? interactiveTimeout = null) : IDisposable
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -82,15 +82,25 @@ public sealed class PkceAuthenticator(HttpClient http, ITokenStore store, Action
         string redirect = $"http://localhost:{port}";
         listener.Prefixes.Add(redirect + "/");
         listener.Start();
+        log?.Invoke($"sign-in: listening for the browser redirect on {redirect}/");
 
         var authorize = new Uri($"{authority}/authorize?client_id={Uri.EscapeDataString(clientId)}&response_type=code&redirect_uri={Uri.EscapeDataString(redirect)}" +
             $"&response_mode=query&scope={Uri.EscapeDataString(Scope)}&code_challenge={challenge}&code_challenge_method=S256&state={state}&prompt=select_account");
+        log?.Invoke("sign-in: opening the browser (pick your personal Microsoft account and approve Files.ReadWrite)");
         openBrowser(authorize);
 
+        // Waiting for the user is a normal state: a slow user must not leave the engine half-dead, so a timeout is reported as "sign-in required".
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromMinutes(5));
-        var ctx = await listener.GetContextAsync().WaitAsync(timeout.Token).ConfigureAwait(false);
+        timeout.CancelAfter(interactiveTimeout ?? TimeSpan.FromMinutes(10));
+        HttpListenerContext ctx;
+        try { ctx = await listener.GetContextAsync().WaitAsync(timeout.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            log?.Invoke("sign-in: timed out waiting for the browser");
+            throw new SignInRequiredException("Sign-in timed out; choose 'Sign in...' from the NoDrive tray menu to try again.");
+        }
         var q = ctx.Request.QueryString;
+        log?.Invoke($"sign-in: redirect received: {ctx.Request.Url!.AbsolutePath}, parameters [{string.Join(",", q.AllKeys.Where(k => k is not null))}]");
         bool ok = q["error"] is null && q["state"] == state && q["code"] is not null;
         byte[] page = Encoding.UTF8.GetBytes(ok
             ? "<!doctype html><meta charset=utf-8><body style='font-family:sans-serif'><h2>NoDrive: signed in. You can close this window.</h2></body>"
@@ -108,6 +118,7 @@ public sealed class PkceAuthenticator(HttpClient http, ITokenStore store, Action
             ["code_verifier"] = verifier, ["scope"] = Scope,
         }, ct).ConfigureAwait(false);
         if (r.AccessToken is null) { throw new SignInRequiredException($"Token exchange failed: {r.Error} {r.ErrorDescription}"); }
+        log?.Invoke("sign-in: token exchange succeeded");
         return await AcceptAsync(r, ct).ConfigureAwait(false);
     }
 

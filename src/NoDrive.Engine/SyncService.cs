@@ -24,6 +24,17 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
     private PkceAuthenticator? _auth;
     private volatile bool _indexReady;
     private volatile string _status = "Starting";
+    private readonly SemaphoreSlim _signInRequested = new(0);
+    private volatile bool _needsSignIn;
+
+    /// <summary>True while the engine is waiting for the user to sign in (first run, timeout, or revoked/expired token).</summary>
+    public bool NeedsSignIn => _needsSignIn;
+
+    /// <summary>Tray action: (re)start the interactive sign-in. Safe to call any time.</summary>
+    public void RequestSignIn() => _signInRequested.Release();
+
+    /// <summary>Shows a fatal error in the tray instead of leaving a silent, apparently-alive process.</summary>
+    public void MarkFailed(string reason) => _status = "Stopped: " + reason;
 
     public string Status => _status;
     public CallerStats Callers => _callers;
@@ -34,11 +45,11 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         SQLitePCL.raw.SetProvider(new SQLitePCL.SQLite3Provider_winsqlite3());              // the system SQLite (System32\winsqlite3.dll)
         _index = new ItemIndex(paths.IndexPath);
         _http = new HttpClient();
-        _auth = new PkceAuthenticator(_http, new DpapiTokenStore(paths.TokenPath), OpenBrowser, config.ClientId);
-        var graph = new GraphDrive(_http, tokenCt => _auth.GetAccessTokenAsync(tokenCt, allowInteractive: true), new ThrottleGate(), new GraphOptions());
+        _auth = new PkceAuthenticator(_http, new DpapiTokenStore(paths.TokenPath), OpenBrowser, config.ClientId, log: Log.Info);
+        // Background work NEVER opens a browser: it fails fast with SignInRequiredException and the status flips. Only first launch and the tray action sign in.
+        var graph = new GraphDrive(_http, tokenCt => _auth.GetAccessTokenAsync(tokenCt, allowInteractive: false), new ThrottleGate(), new GraphOptions());
 
-        _status = "Signing in";
-        await _auth.GetAccessTokenAsync(ct, allowInteractive: true).ConfigureAwait(false);
+        await EnsureSignedInAsync(autoPrompt: true, ct).ConfigureAwait(false);
 
         string rootId = _index.GetMeta("root.id") ?? await graph.GetRootIdAsync(ct).ConfigureAwait(false);
         _index.SetMeta("root.id", rootId);
@@ -88,7 +99,12 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
-            catch (SignInRequiredException ex) { _status = "Sign-in required"; Log.Error(ex.Message); idleSeconds = config.PollIdleMaxSeconds; }
+            catch (SignInRequiredException ex)
+            {
+                Log.Warn(ex.Message);
+                await EnsureSignedInAsync(autoPrompt: false, ct).ConfigureAwait(false);     // token revoked/expired mid-run: wait for the user, then continue
+                idleSeconds = config.PollActiveSeconds;
+            }
             catch (Exception ex)
             {
                 _status = "Offline, will retry";
@@ -98,6 +114,50 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
             try { await Task.Delay(TimeSpan.FromSeconds(idleSeconds), ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
         }
+    }
+
+
+    /// <summary>
+    /// Returns once a valid token exists. Silent refresh first; if the user must act, open the browser once automatically on a first
+    /// launch (autoPrompt), otherwise wait for the tray's "Sign in..." action. A timed-out or failed attempt leaves the engine running
+    /// and waiting, never stuck or stopped.
+    /// </summary>
+    private async Task EnsureSignedInAsync(bool autoPrompt, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                _status = "Signing in";
+                await _auth!.GetAccessTokenAsync(ct, allowInteractive: false).ConfigureAwait(false);
+                if (_needsSignIn) { Log.Info("signed in"); }
+                _needsSignIn = false;
+                return;
+            }
+            catch (SignInRequiredException) { /* user action needed: fall through */ }
+
+            if (autoPrompt)
+            {
+                autoPrompt = false;                                                        // only once per run
+                Log.Info("first sign-in: opening the browser");
+                try
+                {
+                    _status = "Signing in (finish in the browser)";
+                    await _auth!.GetAccessTokenAsync(ct, allowInteractive: true).ConfigureAwait(false);
+                    _needsSignIn = false;
+                    Log.Info("signed in");
+                    return;
+                }
+                catch (SignInRequiredException ex) { Log.Warn(ex.Message); }
+            }
+
+            _needsSignIn = true;
+            _status = "Sign-in required: use the tray menu > Sign in...";
+            Log.Warn("waiting for the user to sign in (tray menu > Sign in...)");
+            await _signInRequested.WaitAsync(ct).ConfigureAwait(false);
+            autoPrompt = true;                                                             // the user asked: run the interactive flow now
+        }
+        ct.ThrowIfCancellationRequested();
     }
 
     public string Report()

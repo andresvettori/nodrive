@@ -172,4 +172,15 @@ public class GraphTests
         Assert.Equal("AT2", token);
         Assert.Equal("rt2", store.Token);
     }
+
+    [Fact]
+    public async Task A_sign_in_the_user_never_completes_times_out_as_SignInRequired_and_can_be_retried()
+    {
+        var store = new MemoryStore();
+        using var auth = new PkceAuthenticator(new HttpClient(new FakeHandler(_ => Json("{}"))), store, _ => { /* the user never answers */ }, interactiveTimeout: TimeSpan.FromMilliseconds(300));
+        var first = await Assert.ThrowsAsync<SignInRequiredException>(async () => await auth.GetAccessTokenAsync(CancellationToken.None, allowInteractive: true));
+        Assert.Contains("timed out", first.Message, StringComparison.OrdinalIgnoreCase);
+        // The authenticator is still usable: a second attempt behaves the same instead of being stuck behind a dead state.
+        await Assert.ThrowsAsync<SignInRequiredException>(async () => await auth.GetAccessTokenAsync(CancellationToken.None, allowInteractive: true));
+    }
 }
