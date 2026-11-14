@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net11.0</TargetFramework>
     <RootNamespace>NoDrive.Graph</RootNamespace>
-    <Description>Hand-written Microsoft Graph client for OneDrive personal: PKCE auth, delta, download, upload sessions, quickXorHash.</Description>
+    <Description>Hand-written Microsoft Graph client for OneDrive personal: PKCE auth, delta, download URLs. HttpClient + System.Text.Json source generation (AOT safe).</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../NoDrive.Core/NoDrive.Core.csproj" />
