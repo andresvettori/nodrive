@@ -162,6 +162,14 @@ internal sealed class ItemStore : IDisposable
         }
     }
 
+    public string? GetName(string id)
+    {
+        using var c = _db.CreateCommand();
+        c.CommandText = "SELECT name FROM items WHERE id=$id";
+        c.Parameters.AddWithValue("$id", id);
+        return c.ExecuteScalar() as string;
+    }
+
     public string? BiggestFolder(out long children)
     {
         using var c = _db.CreateCommand();

@@ -87,6 +87,8 @@ if (indexPath is not null)
     CloudProvider.UseIndex(store);
     SyncRootRegistrar.PrintEffectivePolicies(root);
     PinWatcher.Start(root);
+    string? prefetchIds = Environment.GetEnvironmentVariable("NODRIVE_PREFETCH");   // comma-separated folder ids to populate in the background
+    if (!string.IsNullOrWhiteSpace(prefetchIds)) { Prefetcher.Start(store, root, "F61C08DC8B03ABFF!101", prefetchIds.Split(',', StringSplitOptions.RemoveEmptyEntries), 20); }
     Console.WriteLine(ProcessStats.Sample("ready"));
     Console.WriteLine("Open the folders in Explorer; every FETCH_PLACEHOLDERS is logged as [populate]. Hydration of these synthetic items is expected to fail (their ids do not exist in OneDrive).");
     TrayWindow.Create("NoDriveCfApiIndex", "NoDrive cfapi-minimal (index)", withIcon: true, onQuit: CloudProvider.Disconnect);

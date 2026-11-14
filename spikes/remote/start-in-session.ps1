@@ -14,6 +14,7 @@ param(
     [string] $Arguments = '',
     [string] $Log = "$env:USERPROFILE\nodrive-spikes\results\session.log",
     [string] $TaskName = 'NoDriveSpike',
+    [string] $EnvVars = '',   # e.g. 'NODRIVE_BATCH=250 NODRIVE_PAR=4' (set for the launched process only)
     [switch] $Stop
 )
 $ErrorActionPreference = 'Stop'
@@ -29,7 +30,8 @@ New-Item -ItemType Directory -Force (Split-Path $Log) | Out-Null
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
 # cmd.exe does the redirection so the exe's own console output lands in the log.
-$cmdArgs = "/c `"`"$Exe`" $Arguments > `"$Log`" 2>&1`""
+$envPrefix = ($EnvVars -split '\s+' | Where-Object { $_ } | ForEach-Object { "set $_&& " }) -join ''
+$cmdArgs = "/c `"$envPrefix`"$Exe`" $Arguments > `"$Log`" 2>&1`""
 $action    = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\cmd.exe" -Argument $cmdArgs -WorkingDirectory (Split-Path $Exe)
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 12) -MultipleInstances IgnoreNew

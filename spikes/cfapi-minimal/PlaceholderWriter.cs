@@ -17,24 +17,72 @@ internal static unsafe class PlaceholderWriter
     /// </summary>
     public static unsafe long Transfer(long connectionKey, long transferKey, long requestKey, IEnumerable<(string Id, string Name, long Size, string? MTime, bool IsFolder)> children, long total, int batchSize, out int batches)
     {
-        batches = 0;
+        // Experiment knobs: NODRIVE_BATCH (rows per CfExecute) and NODRIVE_PAR (concurrent CfExecute calls for one folder).
+        if (int.TryParse(Environment.GetEnvironmentVariable("NODRIVE_BATCH"), out int envBatch) && envBatch > 0) { batchSize = envBatch; }
+        int parallel = int.TryParse(Environment.GetEnvironmentVariable("NODRIVE_PAR"), out int envPar) && envPar > 0 ? envPar : 1;
+
         long sent = 0;
+        int count = 0;
         var batch = new List<RemoteItem>(batchSize);
+        var inFlight = new List<Task>();
+        using var gate = new SemaphoreSlim(parallel);
+        Exception? failure = null;
+
+        void Dispatch(List<RemoteItem> items)
+        {
+            gate.Wait();
+            if (failure is not null) { gate.Release(); return; }
+            count++;
+            if (parallel == 1)
+            {
+                try { TransferBatch(connectionKey, transferKey, requestKey, items, total, last: false); }
+                catch (Exception ex) { failure = ex; }
+                finally { gate.Release(); }
+                return;
+            }
+            inFlight.Add(Task.Run(() =>
+            {
+                try { TransferBatch(connectionKey, transferKey, requestKey, items, total, last: false); }
+                catch (Exception ex) { failure = ex; }
+                finally { gate.Release(); }
+            }));
+        }
+
+        // The batch carrying the completion flag must be the LAST one issued (Windows rejects an extra empty call after the total is reached),
+        // so one batch is always held back and sent alone after every concurrent batch has landed.
+        List<RemoteItem>? held = null;
         foreach (var c in children)
         {
             var when = c.MTime is null ? DateTimeOffset.UnixEpoch : DateTimeOffset.Parse(c.MTime, System.Globalization.CultureInfo.InvariantCulture);
             batch.Add(new RemoteItem(c.Id, c.Name, null, c.IsFolder, c.Size, when, when));
             if (batch.Count == batchSize)
             {
-                TransferBatch(connectionKey, transferKey, requestKey, batch, total, last: sent + batch.Count == total);
-                sent += batch.Count; batches++; batch.Clear();
+                if (held is not null) { sent += held.Count; Dispatch(held); }
+                held = batch;
+                batch = new List<RemoteItem>(batchSize);
+                if (failure is not null) { break; }
             }
         }
-        if (batch.Count > 0 || total == 0)
+        if (failure is null)
         {
-            TransferBatch(connectionKey, transferKey, requestKey, batch, total, last: true);
-            sent += batch.Count; batches++;
+            if (batch.Count > 0)
+            {
+                if (held is not null) { sent += held.Count; Dispatch(held); }
+                held = batch;
+            }
+            Task.WaitAll(inFlight.ToArray());
+            if (failure is not null) { throw failure; }
+            held ??= new List<RemoteItem>();            // empty folder: a single empty batch completes it
+            sent += held.Count;
+            count++;
+            TransferBatch(connectionKey, transferKey, requestKey, held, total, last: true);
         }
+        else
+        {
+            Task.WaitAll(inFlight.ToArray());
+            throw failure;
+        }
+        batches = count;
         return sent;
     }
 
@@ -105,7 +153,7 @@ internal static unsafe class PlaceholderWriter
     }
 
     /// <summary>Creates placeholders for <paramref name="children"/> directly under <paramref name="directory"/>. Returns the count created.</summary>
-    public static int CreateChildren(string directory, IReadOnlyList<RemoteItem> children)
+    public static int CreateChildren(string directory, IReadOnlyList<RemoteItem> children, bool lazyFolders = false)
     {
         if (children.Count == 0) { return 0; }
 
@@ -143,7 +191,7 @@ internal static unsafe class PlaceholderWriter
                     FileIdentity = (void*)id,
                     FileIdentityLength = (uint)idBytes.Length,
                     // Population policy is ALWAYS_FULL in this spike, so directories are created fully populated by us.
-                    Flags = item.IsFolder
+                    Flags = item.IsFolder && !lazyFolders
                         ? CF_PLACEHOLDER_CREATE_FLAGS.CF_PLACEHOLDER_CREATE_FLAG_MARK_IN_SYNC | CF_PLACEHOLDER_CREATE_FLAGS.CF_PLACEHOLDER_CREATE_FLAG_DISABLE_ON_DEMAND_POPULATION
                         : CF_PLACEHOLDER_CREATE_FLAGS.CF_PLACEHOLDER_CREATE_FLAG_MARK_IN_SYNC,
                 };

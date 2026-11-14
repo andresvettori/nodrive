@@ -32,6 +32,16 @@ Why the Status column and verbs may be missing (hypothesis under test): **Window
 
 Placeholders carry attributes `0x401620`/`0x401410`, the logical size from the index and FileIdentity = Graph id. About a tenth of the 60 s deadline is used for the largest folder; a folder of 300k children would need progress/chunk handling (to design in P1).
 
+## On-demand population freezes the Explorer window; background population does not (user's PC, 2026-11-14)
+
+**User observation (Explorer, cold first open of the 31,030-child folder): the window shows the busy cursor and does not respond for 7-10 s, then the folder appears; no "Not responding", no progress bar; reopening is instant.** This violates the "never block Explorer" requirement, so it was investigated:
+
+- Windows holds the directory enumeration until FETCH_PLACEHOLDERS completes (population policy FULL). Our callback returns in 0.1 ms and the index read takes about 150 ms; **the rest is Windows creating the placeholders: about 160 us each, effectively serialised.**
+- Benchmark (`spikes/remote/populate-matrix.ps1`, cold open of the 31,030-child folder, fresh registration each time): batch/parallel `1000,1` 5136 ms provider / 6288 ms shell; `250,1` 5307/6432; `4000,1` 5007/6145; `1000,4` 4869/6006; `500,8` 4771/5887. **Batch size and parallelism do not matter** (best case 7% faster); the cost cannot be tuned away on-demand.
+- A request carrying an empty trailing batch is rejected (`0x8007017C`, "cloud operation is invalid"); the `DISABLE_ON_DEMAND_POPULATION` flag must travel with the last real batch (with concurrent batches: hold one back and send it last).
+- **Fix that works: populate before the user asks.** `Prefetcher` (spike) creates the children with `CfCreatePlaceholders` (batches of 1,000, 20 ms pause between batches, `BelowNormal` thread) and then marks the directory populated with `CfOpenFileWithOplock` + `CfUpdatePlaceholder(DISABLE_ON_DEMAND_POPULATION | MARK_IN_SYNC)` (works on build 26300.9974). Results: 31,030 placeholders in 6.4 s in the background; **foreground listings during it were not slowed** (14 probes, median 1.9 ms, max 6.9 ms); afterwards the cold open of the big folder took **1,143 ms** with **0** FETCH_PLACEHOLDERS calls (the residual is the shell enumerating 31k entries); provider private memory 20.8 MB.
+- Design consequence (E3c): hybrid population. Folders are populated in the background in priority order (the folder the user is in and its children first, then breadth-first within a budget, big folders on idle) so most opens find them ready; the on-demand FETCH_PLACEHOLDERS path stays as the safety net for folders not yet prefetched and its worst case grows linearly (about 5 s per 30k children), which is why the prefetch order must put large, likely-visited folders early. Remaining question: the user must confirm in Explorer that a prefetched big folder opens without the busy-cursor freeze.
+
 ## SyncRootManager `Flags` experiments on the user's PC (2026-11-14, SSH session is fully elevated so Claude can write our own key)
 
 Hand-edited `Flags` on the spike's own key, user checking Explorer (reopened window / restarted Explorer):
