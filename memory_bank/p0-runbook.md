@@ -70,6 +70,42 @@ Remove-Item "$env:USERPROFILE\NoDriveSpike" -Recurse -Force
 
 Send the console output of both exes, the CSVs and screenshots of Explorer back; the full procedure with all checks is in sections 2 and 3 below.
 
+## Remote test loop: drive the PC from the Mac over SSH
+
+Windows 11 includes an OpenSSH server. With it enabled, the Mac (and Claude in this session) can run commands on the
+PC directly and tail the spike logs, which turns each iteration from "download, run, paste" into seconds.
+
+Caveat that shapes the scripts: a Cloud Files provider (and any tray icon) must run in the user's **interactive
+desktop session**; an SSH session is a separate, non-interactive logon. `spikes/remote/start-in-session.ps1`
+therefore launches the exe through a one-shot scheduled task bound to the interactive session, with the console
+redirected to a log file. Reading a placeholder from the SSH session still triggers hydration (the request comes
+from the file system, the provider answers from the desktop session), so hydration can be tested without touching
+Explorer; the visual checks (nav pane, Status column, verbs) remain manual.
+
+```powershell
+# R.1 ONE TIME, on the PC, in an ELEVATED PowerShell (right-click > Run as administrator), from the repo clone:
+cd C:\Projects\Personal\nodrive
+git pull
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\spikes\remote\enable-ssh.ps1          # installs OpenSSH server, key-only auth with the Mac's key, firewall rule for the Private profile only
+#   If it prints a network profile of "Public", switch the Wi-Fi/Ethernet to Private: Settings > Network & internet > (your network) > Private.
+#   To undo later: .\spikes\remote\enable-ssh.ps1 -Disable
+
+# R.2 From the Mac (Claude runs these):
+ssh <PC_USER>@<PC_IP> 'hostname; $PSVersionTable.PSVersion.ToString()'
+
+# R.3 Typical loop, from the Mac:
+ssh <PC_USER>@<PC_IP> 'cd C:\Projects\Personal\nodrive; git pull; cd $env:USERPROFILE\nodrive-spikes'                  # or download the CI artifact
+ssh <PC_USER>@<PC_IP> 'C:\Projects\Personal\nodrive\spikes\remote\start-in-session.ps1 -Exe $env:USERPROFILE\nodrive-spikes\cfapi-minimal\cfapi-minimal.exe -Arguments "--top 200" -Log $env:USERPROFILE\nodrive-spikes\results\cfapi.log'
+ssh <PC_USER>@<PC_IP> 'Get-Content $env:USERPROFILE\nodrive-spikes\results\cfapi.log -Tail 40'
+ssh <PC_USER>@<PC_IP> 'Get-Item $env:USERPROFILE\NoDriveSpike\<some file> | Get-Content -TotalCount 1 | Out-Null'   # triggers a hydration from the SSH side
+ssh <PC_USER>@<PC_IP> 'Get-WinEvent -LogName Microsoft-Windows-CloudFiles/Operational -MaxEvents 20 | Format-Table TimeCreated, Id, Message -Wrap'
+ssh <PC_USER>@<PC_IP> 'C:\Projects\Personal\nodrive\spikes\remote\start-in-session.ps1 -Stop'
+
+# R.4 Copy result files back to the Mac:
+scp -r <PC_USER>@<PC_IP>:nodrive-spikes/results ./results-pc
+```
+
 ## 0. Prepare the PC (once, needed to build locally)
 
 ```powershell
