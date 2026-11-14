@@ -1,4 +1,12 @@
 #!/bin/bash
+# scp over the notebook's Wi-Fi sometimes drops ("Connection closed"): retry up to 3 times.
+if [ -z "$PUT_INNER" ]; then
+  for ATTEMPTS in 1 2 3; do
+    out=$(PUT_INNER=1 "$0" "$@"); echo "$out" | grep -q "__EXIT:0" && { echo "$out"; exit 0; }
+    sleep 3
+  done
+  echo "$out"; exit 1
+fi
 # Usage: put.sh <local-file> <remote C:/ path>   scp via iTerm2 (Local Network permission), waits for completion.
 SP="${NODRIVE_SCRATCH:-/tmp}"
 ID=$(date +%s%N); OUT="$SP/put-$ID.out"; RUN="$SP/put-$ID.sh"

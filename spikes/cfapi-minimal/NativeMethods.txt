@@ -53,3 +53,8 @@ CF_HYDRATE_FLAGS
 CF_DEHYDRATE_FLAGS
 CfUpdatePlaceholder
 CF_UPDATE_FLAGS
+CfReferenceProtectedHandle
+CfReleaseProtectedHandle
+CfGetWin32HandleFromProtectedHandle
+GetProcessHeap
+HeapValidate

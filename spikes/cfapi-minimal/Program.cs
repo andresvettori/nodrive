@@ -15,6 +15,7 @@ int top = 200;
 int workers = 3;
 bool cleanup = false, forceWin32 = false, interactive = false, probeFlags = false;
 string? indexPath = null;
+int heapVariant = -1, heapIterations = 3000, heapDelay = 10, heapThreads = 4;
 for (int i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -25,6 +26,10 @@ for (int i = 0; i < args.Length; i++)
         case "--cleanup": cleanup = true; break;
         case "--probe-flags": probeFlags = true; break;
         case "--index": indexPath = args[++i]; break;
+        case "--heap-repro": heapVariant = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
+        case "--iterations": heapIterations = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
+        case "--delay-ms": heapDelay = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
+        case "--threads": heapThreads = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
         case "--win32-register": forceWin32 = true; break;
         case "--interactive": interactive = true; break;
     }
@@ -32,6 +37,15 @@ for (int i = 0; i < args.Length; i++)
 
 Console.WriteLine($"cfapi-minimal root={root} aot={!System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported} pid={Environment.ProcessId}");
 ProcessStats.PrintGcConfiguration();
+
+if (heapVariant >= 0)
+{
+    string heapRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "NoDriveHeapRepro");
+    int code = HeapRepro.Run(heapRoot, heapVariant, heapIterations, heapDelay, heapThreads);
+    HeapRepro.Unregister(heapRoot);
+    try { Directory.Delete(heapRoot, true); } catch { }
+    return code;
+}
 
 if (probeFlags)
 {
