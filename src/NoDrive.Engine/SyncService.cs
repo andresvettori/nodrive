@@ -70,7 +70,8 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         _ = Task.Run(() => ReportLoopAsync(ct), CancellationToken.None);
 
         var prefetcher = new Prefetcher(_index, population, locks, paths.SyncRoot, config.ToPopulationOptions());
-        var ingestor = new DeltaIngestor(graph, _index) { OnProgress = (pages, items) => _status = $"Indexing OneDrive: {items:N0} items" };
+        var applier = new RemoteApplier(_index, population, locks, paths.SyncRoot, rootId);
+        var ingestor = new DeltaIngestor(graph, _index) { BeforePage = (changes, full) => _indexReady && !full ? applier.Before(changes) : null, OnProgress = (pages, items) => _status = $"Indexing OneDrive: {items:N0} items" };
         int idleSeconds = config.PollActiveSeconds;
         bool prefetchStarted = false;
 

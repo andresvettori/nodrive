@@ -1,5 +1,6 @@
 using NoDrive.Core.Abstractions;
 using NoDrive.Core.Index;
+using NoDrive.Core.Model;
 
 namespace NoDrive.Core.Sync;
 
@@ -19,6 +20,12 @@ public sealed class DeltaIngestor(IRemoteDrive drive, ItemIndex index)
 
     /// <summary>Progress callback, invoked after each page: (pages so far, rows in the index is not queried here to stay cheap).</summary>
     public Action<int, long>? OnProgress { get; init; }
+
+    /// <summary>
+    /// Optional hook around each page: called before the page is applied to the index (old state still readable), returns an action run
+    /// right after (new state readable). Args: changes, whether this is a full re-enumeration. Must not throw; exceptions are swallowed so the index always advances.
+    /// </summary>
+    public Func<IReadOnlyList<DeltaChange>, bool, Action?>? BeforePage { get; init; }
 
     public async Task<IngestResult> RunAsync(CancellationToken cancellationToken)
     {
@@ -50,7 +57,10 @@ public sealed class DeltaIngestor(IRemoteDrive drive, ItemIndex index)
             bool last = page.NextLink is null;
             string key = last ? DeltaKey : NextKey;
             string token = page.NextLink ?? page.DeltaLink ?? throw new InvalidOperationException("A delta page must carry a nextLink or a deltaLink.");
+            Action? after = null;
+            try { after = BeforePage?.Invoke(page.Changes, fullResync); } catch (Exception) { /* local mirroring is best effort */ }
             var (u, d) = index.ApplyPage(page.Changes, key, token, generation);
+            try { after?.Invoke(); } catch (Exception) { }
             ups += u; dels += d; pages++;
             if (last)
             {
