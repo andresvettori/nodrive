@@ -27,33 +27,49 @@ jobs:
       # P0 spikes: AOT-publishing them here answers "does the WinRT projection / CsWin32 callback code survive
       # Native AOT on .NET 11" without a local C++ toolchain, and gives ready-to-run binaries for the test PC.
       - name: Publish spike aot-baseline (Native AOT, win-x64)
-        run: dotnet publish spikes/aot-baseline -c Release -r win-x64 -p:PublishAot=true -o artifacts/spikes/aot-baseline 2>&1 | Tee-Object artifacts/spikes/aot-baseline-publish.log
         shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force artifacts/spikes | Out-Null
+          dotnet publish spikes/aot-baseline -c Release -r win-x64 -p:PublishAot=true -o artifacts/spikes/aot-baseline | Tee-Object -FilePath artifacts/spikes/aot-baseline-publish.log
+          if ($LASTEXITCODE -ne 0) { throw "aot-baseline publish failed with exit code $LASTEXITCODE" }
       - name: Publish spike cfapi-minimal (Native AOT, win-x64)
-        run: dotnet publish spikes/cfapi-minimal -c Release -r win-x64 -p:PublishAot=true -o artifacts/spikes/cfapi-minimal 2>&1 | Tee-Object artifacts/spikes/cfapi-minimal-publish.log
+        if: always()
         shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force artifacts/spikes | Out-Null
+          dotnet publish spikes/cfapi-minimal -c Release -r win-x64 -p:PublishAot=true -o artifacts/spikes/cfapi-minimal | Tee-Object -FilePath artifacts/spikes/cfapi-minimal-publish.log
+          if ($LASTEXITCODE -ne 0) { throw "cfapi-minimal publish failed with exit code $LASTEXITCODE" }
       - name: Publish spike graph-smoke (framework-dependent, any OS)
+        if: always()
         run: dotnet publish spikes/graph-smoke -c Release -o artifacts/spikes/graph-smoke
 
       - name: Add helper scripts to the spikes artifact
+        if: always()
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force artifacts/spikes | Out-Null
           Copy-Item spikes/measure.ps1, spikes/onedrive-state.ps1, spikes/README.md artifacts/spikes/
           Copy-Item memory_bank/p0-runbook.md artifacts/spikes/P0-RUNBOOK.md
 
       - name: Report sizes and AOT warnings
+        if: always()
         shell: pwsh
         run: |
           Get-ChildItem -Recurse artifacts -File | Where-Object { $_.Extension -in '.exe','.dll' } |
             Select-Object @{n='Path';e={$_.FullName.Replace("$PWD\",'')}}, @{n='MB';e={[math]::Round($_.Length/1MB,2)}} | Format-Table -AutoSize
           "--- IL2xxx/IL3xxx warnings in spike publishes (none expected from our code) ---"
-          Select-String -Path artifacts/spikes/*-publish.log -Pattern 'IL2\d{3}|IL3\d{3}' | ForEach-Object { $_.Line } | Sort-Object -Unique
+          Get-ChildItem artifacts/spikes -Filter *-publish.log -ErrorAction SilentlyContinue | Select-String -Pattern 'IL2\d{3}|IL3\d{3}|error' | ForEach-Object { $_.Line } | Sort-Object -Unique
 
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: engine-win-x64
           path: artifacts/engine-win-x64
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: spikes-win-x64
+          if-no-files-found: warn
           path: artifacts/spikes
