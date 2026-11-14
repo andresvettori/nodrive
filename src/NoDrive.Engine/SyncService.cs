@@ -29,6 +29,9 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
 
     /// <summary>True while the engine is waiting for the user to sign in (first run, timeout, or revoked/expired token).</summary>
     public bool NeedsSignIn => _needsSignIn;
+    private LocalOps? _ops;
+    public int HeldDeletes => _ops?.HeldDeletes ?? 0;
+    public void AllowDeletes() => _ops?.AllowDeletes();
 
     /// <summary>Tray action: (re)start the interactive sign-in. Safe to call any time.</summary>
     public void RequestSignIn() => _signInRequested.Release();
@@ -74,6 +77,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         var ingestor = new DeltaIngestor(graph, _index) { BeforePage = (changes, full) => _indexReady && !full ? applier.Before(changes) : null, OnProgress = (pages, items) => _status = $"Indexing OneDrive: {items:N0} items" };
         int idleSeconds = config.PollActiveSeconds;
         bool prefetchStarted = false;
+        _ops = new LocalOps(_index, graph, paths.SyncRoot, rootId);
         var uploader = new UploadService(_index, graph, population, paths.SyncRoot, rootId);
 
         while (!ct.IsCancellationRequested)
@@ -93,6 +97,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
                 {
                     prefetchStarted = true;
                     uploader.Start(ct);
+                    _ops.Start(ct);
                     _ = Task.Run(async () =>
                     {
                         try { await prefetcher.RunAsync(ct).ConfigureAwait(false); }

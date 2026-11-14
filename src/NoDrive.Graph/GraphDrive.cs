@@ -180,6 +180,35 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
         return await ReadItemAsync(resp, ct).ConfigureAwait(false);
     }
 
+    /// <summary>Deletes an item into the OneDrive recycle bin. With an eTag the delete is refused (412) if the item changed meanwhile; a missing item counts as deleted.</summary>
+    public async Task DeleteItemAsync(string itemId, string? etag, CancellationToken ct)
+    {
+        try
+        {
+            using var resp = await SendAsync(() =>
+            {
+                var req = new HttpRequestMessage(HttpMethod.Delete, $"{_options.BaseUrl}/me/drive/items/{Uri.EscapeDataString(itemId)}");
+                if (!string.IsNullOrEmpty(etag)) { req.Headers.TryAddWithoutValidation("If-Match", etag); }
+                return req;
+            }, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound) { }
+    }
+
+    /// <summary>Renames and/or moves an item. conflictBehavior=fail: a name clash returns 409 and nothing is replaced.</summary>
+    public async Task<RemoteItem> MoveItemAsync(string itemId, string newName, string? newParentId, string? etag, CancellationToken ct)
+    {
+        string parent = newParentId is null ? "" : $",\"parentReference\":{{\"id\":\"{System.Text.Json.JsonEncodedText.Encode(newParentId)}\"}}";
+        string body = $"{{\"name\":\"{System.Text.Json.JsonEncodedText.Encode(newName)}\"{parent},\"@microsoft.graph.conflictBehavior\":\"fail\"}}";
+        using var resp = await SendAsync(() =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Patch, $"{_options.BaseUrl}/me/drive/items/{Uri.EscapeDataString(itemId)}") { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+            if (!string.IsNullOrEmpty(etag)) { req.Headers.TryAddWithoutValidation("If-Match", etag); }
+            return req;
+        }, ct).ConfigureAwait(false);
+        return await ReadItemAsync(resp, ct).ConfigureAwait(false);
+    }
+
     private static async Task<RemoteItem> ReadItemAsync(HttpResponseMessage resp, CancellationToken ct)
     {
         var dto = await resp.Content.ReadFromJsonAsync(GraphJsonContext.Default.DriveItemDto, ct).ConfigureAwait(false);

@@ -47,7 +47,7 @@ internal static class Program
             }
         });
 
-        TrayWindow.Create("NoDrive", onQuit: () => cts.Cancel(), onOpenFolder: () => OpenFolder(paths.SyncRoot), statusText: () => service.Status, onSignIn: service.RequestSignIn, needsSignIn: () => service.NeedsSignIn);
+        TrayWindow.Create("NoDrive", onQuit: () => cts.Cancel(), onOpenFolder: () => OpenFolder(paths.SyncRoot), statusText: () => service.Status, onSignIn: service.RequestSignIn, needsSignIn: () => service.NeedsSignIn, heldDeletes: () => service.HeldDeletes, onAllowDeletes: service.AllowDeletes);
         _ = Task.Run(async () =>
         {
             while (!cts.IsCancellationRequested)

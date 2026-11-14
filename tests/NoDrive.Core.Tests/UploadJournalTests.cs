@@ -31,3 +31,23 @@ public class UploadJournalTests
         Assert.Equal(1, idx.CountUploads());
     }
 }
+
+public class OpsJournalTests
+{
+    [Fact]
+    public void Ops_run_in_order_and_never_overtake_an_earlier_op_on_the_same_item()
+    {
+        using var t = new TempIndex();
+        var idx = t.Index;
+        idx.EnqueueOp("rename", "A", @"\x\new.txt", 100);
+        idx.EnqueueOp("delete", "A", null, 100);
+        idx.EnqueueOp("delete", "B", null, 100);
+        Assert.Equal(["rename", "delete"], idx.DueOps(100, 10).Select(o => o.Kind));      // A's delete waits behind A's rename
+        Assert.True(idx.HasPendingOp("A"));
+        var first = idx.DueOps(100, 10)[0];
+        idx.RescheduleOp(first.Seq, 1, 9000);                                              // backoff: A's delete must still wait
+        Assert.Equal(["B"], idx.DueOps(100, 10).Select(o => o.ItemId));
+        idx.RemoveOp(first.Seq);
+        Assert.Equal(["A", "B"], idx.DueOps(100, 10).Select(o => o.ItemId));
+    }
+}

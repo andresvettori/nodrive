@@ -144,7 +144,9 @@ internal static class CloudProvider
     private static unsafe void OnNotifyDelete(CF_CALLBACK_INFO* info, CF_CALLBACK_PARAMETERS* parameters)
     {
         long t0 = Stopwatch.GetTimestamp();
-        Ack(info, CF_OPERATION_TYPE.CF_OPERATION_TYPE_ACK_DELETE, info->ProcessInfo is not null && info->ProcessInfo->ProcessId == (uint)Environment.ProcessId ? NTSTATUS.STATUS_SUCCESS : NTSTATUS.STATUS_CLOUD_FILE_ACCESS_DENIED);   // our own remote-change mirroring is allowed, users stay read-only (M1)
+        // Acknowledge at once (a move/delete dialog must finish at local speed); the cloud catches up from the journal.
+        if (!IsSelf(info)) { LocalOps.Post("delete", Identity(info), null); }
+        Ack(info, CF_OPERATION_TYPE.CF_OPERATION_TYPE_ACK_DELETE, NTSTATUS.STATUS_SUCCESS);
         Record(t0);
     }
 
@@ -152,9 +154,12 @@ internal static class CloudProvider
     private static unsafe void OnNotifyRename(CF_CALLBACK_INFO* info, CF_CALLBACK_PARAMETERS* parameters)
     {
         long t0 = Stopwatch.GetTimestamp();
-        Ack(info, CF_OPERATION_TYPE.CF_OPERATION_TYPE_ACK_RENAME, info->ProcessInfo is not null && info->ProcessInfo->ProcessId == (uint)Environment.ProcessId ? NTSTATUS.STATUS_SUCCESS : NTSTATUS.STATUS_CLOUD_FILE_ACCESS_DENIED);   // our own remote-change mirroring is allowed, users stay read-only (M1)
+        if (!IsSelf(info)) { LocalOps.Post("rename", Identity(info), parameters->Rename.TargetPath.ToString()); }
+        Ack(info, CF_OPERATION_TYPE.CF_OPERATION_TYPE_ACK_RENAME, NTSTATUS.STATUS_SUCCESS);
         Record(t0);
     }
+
+    private static unsafe bool IsSelf(CF_CALLBACK_INFO* info) => info->ProcessInfo is not null && info->ProcessInfo->ProcessId == (uint)Environment.ProcessId;
 
     private static unsafe string Identity(CF_CALLBACK_INFO* info) =>
         info->FileIdentity is null || info->FileIdentityLength == 0 ? "" : Encoding.UTF8.GetString((byte*)info->FileIdentity, (int)info->FileIdentityLength);

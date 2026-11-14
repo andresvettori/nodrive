@@ -42,6 +42,7 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
         {
             try
             {
+                if (index.HasPendingOp(ch.Id)) { continue; }                      // the user's own delete/rename of this item is still on its way to the cloud
                 olds.TryGetValue(ch.Id, out var old);
                 if (old?.Path is { } oldPath && Path.GetDirectoryName(oldPath) is { } od) { dirty.Add(od); }
                 if (index.TryGet(ch.Id) is { } nw && population.IsPopulated(nw.ParentId ?? rootId) && PathOf(nw) is { } np && Path.GetDirectoryName(np) is { } nd) { dirty.Add(nd); }
@@ -139,7 +140,7 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log.Warn($"remote move {from} -> {to} failed: {ex.Message}"); return false; }
     }
 
-    private static void MarkInSync(string path)
+    internal static void MarkInSync(string path)
     {
         HANDLE h = default;
         fixed (char* p = path)

@@ -18,6 +18,9 @@ internal static unsafe class TrayWindow
     private const nuint IdOpenFolder = 2;
     private const nuint IdStatus = 3;
     private const nuint IdSignIn = 4;
+    private const nuint IdAllowDeletes = 5;
+    private static Func<int>? s_heldDeletes;
+    private static Action? s_onAllowDeletes;
 
     private static HWND s_hwnd;
     private static bool s_hasIcon;
@@ -28,8 +31,9 @@ internal static unsafe class TrayWindow
     private static Action? s_onSignIn;
     private static Func<bool>? s_needsSignIn;
 
-    public static HWND Create(string tooltip, Action onQuit, Action onOpenFolder, Func<string> statusText, Action onSignIn, Func<bool> needsSignIn)
+    public static HWND Create(string tooltip, Action onQuit, Action onOpenFolder, Func<string> statusText, Action onSignIn, Func<bool> needsSignIn, Func<int>? heldDeletes = null, Action? onAllowDeletes = null)
     {
+        s_heldDeletes = heldDeletes; s_onAllowDeletes = onAllowDeletes;
         s_onQuit = onQuit; s_onOpenFolder = onOpenFolder; s_statusText = statusText; s_tooltip = tooltip; s_onSignIn = onSignIn; s_needsSignIn = needsSignIn;
         HINSTANCE hInstance = new(PInvoke.GetModuleHandle((PCWSTR)null).Value);
         fixed (char* pClass = "NoDriveEngineWindow")
@@ -106,19 +110,23 @@ internal static unsafe class TrayWindow
         try
         {
             string status = s_statusText?.Invoke() ?? "";
+            string allowText = $"Allow {s_heldDeletes?.Invoke() ?? 0} held deletions...";
             fixed (char* pStatus = status)
             fixed (char* pSign = "Sign in...")
+            fixed (char* pAllow = allowText)
             fixed (char* pOpen = "Open NoDrive folder")
             fixed (char* pQuit = "Quit NoDrive")
             {
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING | MENU_ITEM_FLAGS.MF_GRAYED, IdStatus, new PCWSTR(pStatus));
                 if (s_needsSignIn?.Invoke() == true) { PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdSignIn, new PCWSTR(pSign)); }
+                if ((s_heldDeletes?.Invoke() ?? 0) > 0) { PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdAllowDeletes, new PCWSTR(pAllow)); }
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdOpenFolder, new PCWSTR(pOpen));
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdQuit, new PCWSTR(pQuit));
             }
             uint flags = (uint)(TRACK_POPUP_MENU_FLAGS.TPM_RETURNCMD | TRACK_POPUP_MENU_FLAGS.TPM_RIGHTBUTTON | TRACK_POPUP_MENU_FLAGS.TPM_NONOTIFY);
             nuint cmd = (nuint)PInvoke.TrackPopupMenuEx(menu, flags, pt.X, pt.Y, s_hwnd, null).Value;
             if (cmd == IdOpenFolder) { s_onOpenFolder?.Invoke(); }
+            else if (cmd == IdAllowDeletes) { s_onAllowDeletes?.Invoke(); }
             else if (cmd == IdSignIn) { s_onSignIn?.Invoke(); }
             else if (cmd == IdQuit) { PInvoke.DestroyWindow(s_hwnd); }
         }

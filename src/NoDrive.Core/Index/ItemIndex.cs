@@ -9,9 +9,11 @@ namespace NoDrive.Core.Index;
 /// resume token inside it so a crash resumes exactly.
 /// The host must initialise the SQLitePCL provider before the first use.
 /// </summary>
+public sealed record RemoteOp(long Seq, string Kind, string ItemId, string? Target, int Attempts);
+
 public sealed class ItemIndex : IDisposable
 {
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
     private static readonly string[] UpsertParameters = ["$id", "$p", "$n", "$s", "$m", "$f", "$e", "$c", "$q", "$g"];
     private readonly string _path;
     private readonly SqliteConnection _writer;
@@ -58,6 +60,7 @@ public sealed class ItemIndex : IDisposable
                 ) WITHOUT ROWID;
                 CREATE INDEX IF NOT EXISTS ix_items_parent_name ON items(parent_id, name);
                 CREATE TABLE IF NOT EXISTS uploads(path TEXT PRIMARY KEY NOT NULL, depth INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL) WITHOUT ROWID;
+                CREATE TABLE IF NOT EXISTS remote_ops(seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, item_id TEXT NOT NULL, target TEXT, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY NOT NULL, v TEXT) WITHOUT ROWID;
                 """);
             Exec(_writer, $"PRAGMA user_version={SchemaVersion}");
@@ -286,6 +289,38 @@ public sealed class ItemIndex : IDisposable
         using var cmd = c.CreateCommand();
         cmd.CommandText = "SELECT COUNT(*) FROM uploads";
         return Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    // ---------------- local-change journal (delete/rename made in Explorer, replayed to the cloud) ----------------
+
+    public void EnqueueOp(string kind, string itemId, string? target, long dueTicks) =>
+        ExecWrite("INSERT INTO remote_ops(kind,item_id,target,attempts,due) VALUES($k,$i,$t,0,$d)", ("$k", kind), ("$i", itemId), ("$t", (object?)target ?? DBNull.Value), ("$d", dueTicks));
+
+    /// <summary>Due operations in arrival order; an operation never overtakes an earlier one on the same item.</summary>
+    public IReadOnlyList<RemoteOp> DueOps(long nowTicks, int max)
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT seq,kind,item_id,target,attempts FROM remote_ops o WHERE due<=$n AND NOT EXISTS (SELECT 1 FROM remote_ops e WHERE e.item_id=o.item_id AND e.seq<o.seq) ORDER BY seq LIMIT $m";
+        cmd.Parameters.AddWithValue("$n", nowTicks);
+        cmd.Parameters.AddWithValue("$m", max);
+        var list = new List<RemoteOp>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) { list.Add(new RemoteOp(r.GetInt64(0), r.GetString(1), r.GetString(2), r.IsDBNull(3) ? null : r.GetString(3), r.GetInt32(4))); }
+        return list;
+    }
+
+    public void RescheduleOp(long seq, int attempts, long dueTicks) => ExecWrite("UPDATE remote_ops SET attempts=$a,due=$d WHERE seq=$s", ("$a", attempts), ("$d", dueTicks), ("$s", seq));
+
+    public void RemoveOp(long seq) => ExecWrite("DELETE FROM remote_ops WHERE seq=$s", ("$s", seq));
+
+    public bool HasPendingOp(string itemId)
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT 1 FROM remote_ops WHERE item_id=$i LIMIT 1";
+        cmd.Parameters.AddWithValue("$i", itemId);
+        return cmd.ExecuteScalar() is not null;
     }
 
     private void ExecWrite(string sql, params (string Name, object Value)[] args)
