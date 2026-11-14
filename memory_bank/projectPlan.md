@@ -126,6 +126,12 @@ Each epic lists acceptance criteria. "Harness" = the P0 responsiveness harness; 
 - Guards: remote deletes go to the OneDrive recycle bin only (`permanentDelete` exists on personal, https://learn.microsoft.com/en-us/graph/api/driveitem-permanentdelete?view=graph-rest-1.0, but is never used by default); mass-delete threshold (N items or X% of the index in one batch) pauses sync and asks; move-out of the root: a hydrated item is acked and journaled as a remote `Delete`; a dehydrated placeholder is denied (`ACK_RENAME` with a failure status, the tray explains how to hydrate first) because hydrating inside the ack would block Explorer's dialog, and P2 adds a CopyHook warning (see `systemPatterns.md` 3e); never dehydrate a NotInSync file.
 - Acceptance: move a folder of 10k placeholders inside the root and then out of it; the Explorer dialog completes in local-move time, remote reconciles later with zero duplicates or conflicts; delete 60% of the index in one shot and sync pauses with a prompt.
 
+### E7a. Elevated setup and Explorer verbs (ADR-0009)
+- `--setup` (UAC): `Register` the sync root, write `Flags=1058` under our SyncRootManager key; engine start-up never calls `Register`, only `CfConnectSyncRoot`.
+- Start-up read-only check of `Flags`; tray notice and elevated repair action if it differs; sync continues regardless.
+- Uninstall: elevated `Unregister` after hydrate-or-warn.
+- Acceptance: on a clean Windows 11 build the verbs appear after setup; killing and restarting the engine keeps them; a test fails if the engine binary can reach `Register`; re-test on each supported Windows build. Status column/icon handling decided separately (ADR-0009 point 5).
+
 ### E7. Tray and lifecycle
 - Message-only window + `Shell_NotifyIcon` menu: status, pause/resume, "Free up space in folder..." and "Keep folder offline" fallbacks (calling `CfSetPinState` / `CfDehydratePlaceholder` ourselves, because the built-in verbs may have moved into a flyout and `NOTIFY_DEHYDRATE` does not fire on "Free up space": community-reported, https://learn.microsoft.com/en-gb/answers/questions/1694157/when-will-cf-callback-type-notify-dehydrate-be-inv), sign in/out, open folder, quit.
 - HKCU Run autostart, single-instance mutex, Task Scheduler restart-on-failure, `CfDisconnectSyncRoot` on `WM_QUERYENDSESSION`, refuse to start while OneDrive.exe is linked to the same account.

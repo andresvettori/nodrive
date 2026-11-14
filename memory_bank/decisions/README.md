@@ -13,6 +13,7 @@ One ADR per default decision taken in the approved plan of 2026-11-13. ADRs are 
 | [ADR-0005](ADR-0005.md) | SQLite via the system `winsqlite3.dll` as the disk-backed index and journal | Accepted 2026-11-13 |
 | [ADR-0006](ADR-0006.md) | MIT licence for NoDrive; permissive sources only; GPL projects as read-only references | Accepted 2026-11-13 |
 | [ADR-0007](ADR-0007.md) | Lazy population (PopulationPolicy PARTIAL + FETCH_PLACEHOLDERS from the index) and PROGRESSIVE hydration for a 500k-item drive | Accepted 2026-11-13 |
+| [ADR-0009](ADR-0009.md) | Explorer verbs via a one-time elevated setup that writes SyncRootManager Flags (1058); engine never re-registers at start-up | Accepted 2026-11-14 (provisional) |
 | [ADR-0008](ADR-0008.md) | Coexistence with OneDrive.exe: detection of a linked personal account and its folder, refuse-to-run rule, adoption of the existing sync folder | Accepted 2026-11-13 |
 
 ## Conventions
