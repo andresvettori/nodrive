@@ -44,6 +44,10 @@ Decision records behind this table: [ADR-0001](decisions/ADR-0001.md) cfapi over
 - Central package management (`Directory.Packages.props`) pins: Microsoft.Windows.CsWin32 0.3.371, Microsoft.Data.Sqlite.Core 11.0.0, SQLitePCLRaw.provider.winsqlite3 3.0.5, xunit.v3 4.0.3, xunit.runner.visualstudio 4.0.1 (latest stable on NuGet 2026-11-13).
 - `TreatWarningsAsErrors` + `AnalysisLevel latest-recommended` are on for every project; CA1707 (underscores) is suppressed for test projects only.
 
+### Repository
+
+- Remote: private GitHub repo `https://github.com/andresvettori/nodrive` (SSH `git@github.com:andresvettori/nodrive.git`), branch `main`, first push 2026-11-13. CI: `.github/workflows/windows.yml` on windows-latest.
+
 ### Repository layout (P0, from the approved plan)
 
 - `CLAUDE.md`: memory-bank reading/updating rules plus build commands (read all `memory_bank/` files at the start of every task; update `activeContext.md` and `progress.md` after each session; review every file on "update memory bank").
