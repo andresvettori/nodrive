@@ -2,6 +2,8 @@
 
 Updated at the end of every session. Read this file after `projectbrief.md` and before touching code.
 
+- User insight (2026-11-14): knowing which apps behave well with online-only files improves UX a lot; recorded in `research/app-compatibility.md` and plan item E3d (Media Player is the modern Windows 11 app and still requests whole files; others still to be measured).
+
 ## Current focus (updated 2026-11-14): P0 finished, verdict GO
 
 Read `p0-results.md` first. Next: start P1 in the order recommended there (E1 registration with Flags 1058, then the delta/index pipeline, population, hydration with watchdog). The PC is clean (no sync roots, tasks or processes); `index500k.db` and the AOT binaries stay under `C:\Users\<PC_USER>\nodrive-dev` and `nodrive-aot` for later runs.
