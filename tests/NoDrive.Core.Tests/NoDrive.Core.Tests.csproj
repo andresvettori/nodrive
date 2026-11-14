@@ -5,6 +5,13 @@
     <IsTestProject>true</IsTestProject>
     <OutputType>Exe</OutputType>
   </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <DefineConstants>$(DefineConstants);WINSQLITE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SQLitePCLRaw.provider.winsqlite3" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Condition="!$([MSBuild]::IsOSPlatform('Windows'))" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />

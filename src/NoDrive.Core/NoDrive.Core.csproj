@@ -2,6 +2,10 @@
   <PropertyGroup>
     <TargetFramework>net11.0</TargetFramework>
     <RootNamespace>NoDrive.Core</RootNamespace>
-    <Description>Platform-neutral sync engine: reconciler, item state machine, index and journal abstractions.</Description>
+    <Description>Platform-neutral sync engine: item index, delta ingestion, population planning, hydration failure policy.</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- The host (engine or tests) initialises the SQLitePCL provider: winsqlite3 on Windows, the bundled e_sqlite3 elsewhere. -->
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" />
+  </ItemGroup>
 </Project>
