@@ -8,6 +8,7 @@
     <Project Path="spikes/graph-smoke/graph-smoke.csproj" />
     <Project Path="spikes/aot-baseline/aot-baseline.csproj" />
     <Project Path="spikes/cfapi-minimal/cfapi-minimal.csproj" />
+    <Project Path="spikes/scale-500k/scale-500k.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/NoDrive.Core.Tests/NoDrive.Core.Tests.csproj" />

@@ -44,6 +44,14 @@ jobs:
           New-Item -ItemType Directory -Force artifacts/spikes | Out-Null
           dotnet publish spikes/cfapi-minimal -c Release -r win-x64 -p:PublishAot=true -o artifacts/spikes/cfapi-minimal | Tee-Object -FilePath artifacts/spikes/cfapi-minimal-publish.log
           if ($LASTEXITCODE -ne 0) { throw "cfapi-minimal publish failed with exit code $LASTEXITCODE" }
+      - name: Publish spike scale-500k (Native AOT, win-x64)
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force artifacts/spikes | Out-Null
+          dotnet publish spikes/scale-500k -c Release -r win-x64 -p:PublishAot=true -o artifacts/spikes/scale-500k | Tee-Object -FilePath artifacts/spikes/scale-500k-publish.log
+          if ($LASTEXITCODE -ne 0) { throw "scale-500k publish failed with exit code $LASTEXITCODE" }
       - name: Publish spike graph-smoke (framework-dependent, any OS)
         if: always()
         run: dotnet publish spikes/graph-smoke -c Release -o artifacts/spikes/graph-smoke
