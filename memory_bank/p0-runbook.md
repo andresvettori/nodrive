@@ -91,6 +91,11 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 #   If it prints a network profile of "Public", switch the Wi-Fi/Ethernet to Private: Settings > Network & internet > (your network) > Private.
 #   To undo later: .\spikes\remote\enable-ssh.ps1 -Disable
 
+# R.1b Mac-side note: VS Code's own shell lacks the macOS "Local Network" permission (ssh says "No route to host" while Terminal/iTerm2 works).
+#      Claude therefore runs remote commands through iTerm2 with spikes/remote/mac-pc.sh '<powershell>' and copies files with
+#      spikes/remote/mac-put.sh <local-file> C:/path/on/pc (export NODRIVE_SCRATCH=<a writable dir> first). `git pull` over SSH on the PC
+#      fails (HTTPS credential needs a UI), so use mac-put.sh to ship changed files, or pull interactively on the PC.
+
 # R.2 From the Mac (Claude runs these):
 ssh <PC_USER>@<PC_IP> 'hostname; $PSVersionTable.PSVersion.ToString()'
 

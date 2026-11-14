@@ -8,6 +8,27 @@ Related: `memory_bank/systemPatterns.md` (how we apply this), `memory_bank/bestP
 
 ---
 
+## Hydration, acks, provider-down and cleanup, measured over SSH (2026-11-14, same PC, JIT build of `cfapi-minimal`, OneDrive.exe running)
+
+Driven from the Mac over SSH (reads/renames/deletes issued from a non-interactive session; the provider ran in the interactive session 1):
+
+| Test | Result |
+|---|---|
+| Open + read a 14 KB online-only PNG | Intact (PNG header ok), 2.1 s total. Request logged: `required=[0+14741]`, caller `powershell.exe` (CF_PROCESS_INFO works). |
+| Rename a placeholder | `NOTIFY_RENAME` received with correct source/target paths and flags `SOURCE_IN_SCOPE | TARGET_IN_SCOPE`, acked inside the callback; **8 ms** for the caller. |
+| Delete a placeholder | `NOTIFY_DELETE` received, acked in the callback; **8 ms** for the caller. |
+| Hydrate a 1.7 GB / 1.4 GB / 0.9 GB / 0.6 GB file | All completed correctly. Throughput about 12.5-15 MB/s on the user's Wi-Fi (1676.8 MiB in 134 s; 572 MiB in 38 s). **Spike private bytes stayed 16-21 MB** (JIT build) through a 1.7 GB hydration: streaming into `CfExecute(TRANSFER_DATA)` with one pooled 1 MiB buffer keeps memory flat. Progress reported every chunk; no 60 s timeout despite 134 s hydrations. |
+| **Required range with PROGRESSIVE policy** | **Every open requested `required=[0+<whole file size>] optional=[0+0] flags=0x0`**, for reads at offset 0, at the middle, with `FileOptions.RandomAccess`, and via raw Win32 `CreateFile`/`ReadFile`. The platform recorded the policy we asked for (`CfGetSyncRootInfoByPath`: hydration=PROGRESSIVE/AUTO_DEHYDRATION_ALLOWED, population=ALWAYS_FULL). |
+| **Where the caller blocks** | In **`CreateFile` (the open)**, not in the read: a raw `CreateFile` took the whole hydration time (about 42 s for 572 MB) and the following `ReadFile` at the middle took 0.0 s. A .NET `File.Open` + 4 KB read returned after 38.1 s = exactly the hydration time of that file. Effective behaviour on this build is therefore **FULL-like: the opener waits until the entire file is local**, whatever the app reads. |
+| Provider stopped, open an online-only file | **Fails in 17 ms** with `0x80070194` "The cloud file provider exited unexpectedly" (not 0x8007016A, which applies when no provider ever connected); directory listing still works. No hang. |
+| `--cleanup` (`StorageProviderSyncRootManager.Unregister`) | 581 ms. Of 171 entries, the 7 hydrated files stayed as ordinary files and the **164 unhydrated placeholders were deleted**; SyncRootManager key removed. Confirms the data-loss semantics of unregistering. |
+| `NormalizedPath` in FETCH_DATA | Empty in this callback (populated in the RENAME/DELETE callbacks). Do not rely on it for FETCH_DATA; use `FileIdentity` (we store the Graph item id there) and `FileId`. |
+
+Implications (to evaluate next):
+1. The user-visible risk for "never hang" is not our callbacks (microseconds) but **open-time blocking for large files**: opening a 4 GB video blocks the opening app for the entire download (about 5 minutes at 13 MB/s). Explorer itself did not hang in our tests because we never opened files through the shell, so this needs a manual Explorer/media-player test (runbook F.4 f).
+2. Hypotheses for why PROGRESSIVE behaves like FULL: (a) the first FETCH_DATA is always issued for the whole file at open and the platform only completes the user IO once the provider has transferred the range the IO needs, and our provider transfers strictly sequentially from 0; (b) an app-side policy of FULL wins (`max(app, provider)`), e.g. triggered by antivirus or by the open's access mask; (c) a behaviour change in this Insider-class build (26H2, 26300.x). Next experiments: log the optional range and further FETCH_DATA callbacks for the same file while a reader holds it open; try transferring the *middle* range first and see whether the blocked ReadFile completes before the rest arrives; open with `FILE_READ_ATTRIBUTES` only (should not hydrate); test with an Explorer double-click and a media player.
+3. Until resolved, design the engine so that large-file opens are cancellable and visibly progressing (tray + CfReportProviderProgress), and consider `CF_HYDRATION_POLICY_PARTIAL`.
+
 ## Observed on the developer's PC (2026-11-14, Windows 11 26H2 build 26300.9974, cldflt.sys 10.0.26100.9974)
 
 - `StorageProviderSyncRootManager.Register` from an **unpackaged Native AOT exe** succeeded (CsWinRT projection on net11.0-windows10.0.26100.0; id `NoDriveSpike!<SID>!Personal`), while OneDrive.exe was running with its own root at `%USERPROFILE%\OneDrive`. `CfConnectSyncRoot` with `REQUIRE_PROCESS_INFO | BLOCK_SELF_IMPLICIT_HYDRATION` returned a key; `CfCreatePlaceholders` created 200 entries (folders with `DISABLE_ON_DEMAND_POPULATION`, files `MARK_IN_SYNC`) with no per-entry errors. `CfDisconnectSyncRoot` returned S_OK on quit.

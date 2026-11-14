@@ -20,7 +20,7 @@ namespace NoDrive.Spikes.CfApiMinimal;
 /// </summary>
 internal static class CloudProvider
 {
-    private sealed record HydrationRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, string Path, long FileSize, long Offset, long Length, byte Priority, string? Process);
+    private sealed record HydrationRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, string Path, long FileSize, long Offset, long Length, long OptOffset, long OptLength, uint Flags, byte Priority, string? Process);
 
     private static readonly Channel<HydrationRequest> s_queue = Channel.CreateBounded<HydrationRequest>(new BoundedChannelOptions(256) { FullMode = BoundedChannelFullMode.Wait });
     private static readonly ConcurrentDictionary<long, CancellationTokenSource> s_inFlight = new();
@@ -89,6 +89,9 @@ internal static class CloudProvider
             info->FileSize,
             fd.RequiredFileOffset,
             fd.RequiredLength,
+            fd.OptionalFileOffset,
+            fd.OptionalLength,
+            (uint)fd.Flags,
             info->PriorityHint,
             info->ProcessInfo is null ? null : info->ProcessInfo->ImagePath.ToString());
 
@@ -165,11 +168,11 @@ internal static class CloudProvider
         {
             var cts = s_inFlight.GetValueOrDefault(req.TransferKey) ?? new CancellationTokenSource();
             var sw = Stopwatch.StartNew();
-            Console.WriteLine($"[hydrate] {req.Path} offset={req.Offset} length={req.Length} size={req.FileSize} prio={req.Priority} by={System.IO.Path.GetFileName(req.Process ?? "?")}");
+            Console.WriteLine($"[hydrate] item={req.ItemId} required=[{req.Offset}+{req.Length}] optional=[{req.OptOffset}+{req.OptLength}] size={req.FileSize} flags=0x{req.Flags:X} prio={req.Priority} by={System.IO.Path.GetFileName(req.Process ?? "?")}");
             try
             {
                 await HydrateAsync(req, cts.Token);
-                Console.WriteLine($"[hydrate] done {req.Path} {req.Length / 1048576.0:F1} MiB in {sw.Elapsed.TotalSeconds:F1} s");
+                Console.WriteLine($"[hydrate] done item={req.ItemId} {req.Length / 1048576.0:F1} MiB in {sw.Elapsed.TotalSeconds:F1} s");
             }
             catch (OperationCanceledException)
             {
@@ -233,6 +236,7 @@ internal static class CloudProvider
                 TransferData(req, buffer, position, filled);
                 position += filled;
                 PInvoke.CfReportProviderProgress(new CF_CONNECTION_KEY(req.ConnectionKey), req.TransferKey, req.Length, position - req.Offset);
+                if (((position - req.Offset) & ((64L << 20) - 1)) < chunkSize) { Console.WriteLine($"[hydrate] item={req.ItemId} {(position - req.Offset) / 1048576} / {req.Length / 1048576} MiB"); }
             }
         }
         finally

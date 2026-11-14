@@ -118,6 +118,21 @@ internal static class SyncRootRegistrar
         }
     }
 
+    /// <summary>Prints the policies the platform actually recorded for the sync root (to compare with what we asked for).</summary>
+    public static unsafe void PrintEffectivePolicies(string rootPath)
+    {
+        const int size = 4096;
+        byte* buf = stackalloc byte[size];
+        uint returned;
+        fixed (char* p = rootPath)
+        {
+            HRESULT hr = PInvoke.CfGetSyncRootInfoByPath(new PCWSTR(p), CF_SYNC_ROOT_INFO_CLASS.CF_SYNC_ROOT_INFO_STANDARD, buf, size, &returned);
+            if (hr.Failed) { Console.WriteLine($"CfGetSyncRootInfoByPath(STANDARD) -> 0x{hr.Value:X8}"); return; }
+        }
+        var s = (CF_SYNC_ROOT_STANDARD_INFO*)buf;
+        Console.WriteLine($"effective policies: hydration={s->HydrationPolicy.Primary}/{s->HydrationPolicy.Modifier} population={s->PopulationPolicy.Primary} insync={s->InSyncPolicy} hardlink={s->HardLinkPolicy} provider='{s->ProviderName}'");
+    }
+
     /// <summary>True when our own registration (from a previous run) exists in the shell's SyncRootManager key.</summary>
     public static bool IsRegisteredByUs()
     {

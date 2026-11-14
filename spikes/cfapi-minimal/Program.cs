@@ -104,6 +104,7 @@ Console.WriteLine($"resolvable under root: {relPath.Count}, skipped (parent not 
 string how = await SyncRootRegistrar.RegisterAsync(root, forceWin32);
 Console.WriteLine($"registered via {how}: id={SyncRootRegistrar.SyncRootId}");
 CloudProvider.Connect(root, graph, workers);
+SyncRootRegistrar.PrintEffectivePolicies(root);
 
 // 3. Create placeholders, directories first, shallow to deep.
 var byParentDir = relPath
