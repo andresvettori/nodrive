@@ -264,6 +264,18 @@ public sealed class ItemIndex : IDisposable
         return chain;
     }
 
+    /// <summary>Ids of folders whose placeholders have already been created on disk.</summary>
+    public HashSet<string> PopulatedFolderIds()
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT id FROM items WHERE populated=1";
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) { set.Add(r.GetString(0)); }
+        return set;
+    }
+
     public string? GetName(string id) => TryGet(id)?.Name;
 
     private const string SelectColumns = "SELECT id,parent_id,name,size,mtime,is_folder,etag,ctag,qxor,populated FROM items";
