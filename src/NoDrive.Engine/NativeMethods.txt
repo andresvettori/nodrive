@@ -66,3 +66,4 @@ WM_COMMAND
 // Refresh Explorer icons after pin/unpin
 SHChangeNotify
 CfConvertToPlaceholder
+CfSetInSyncState
