@@ -59,7 +59,7 @@ Fill one row per variant; all on the same PC, same OS build, Defender on, AC pow
 | tray + HttpClient 1 GB | AOT, UseWindowsThreadPool=false | | | | | | | | |
 | tray + HttpClient 1 GB | JIT fx-dep | | | | | | | | |
 | tray + cfapi connected, 200 placeholders (pin hydration of 1.68 GB) | AOT | 12.7 MB (baseline) / 10.8 MB (first run) | 15.2 MB (60 s after burst) | 16.2 MB | 12-19 | 522-608 | **15.2 MB** (+2.6 MB) while `CfHydratePlaceholder` pulled 1.68 GB in 120.7 s (13.9 MB/s) | **15.2 MB** at +60 s (+2.5 MB vs baseline; working set fell 30.6 -> 16.2 MB) | 2026-11-14, Native AOT `cfapi-minimal` from CI branch ci-binaries, no post-burst GC call in this spike |
-| tray + cfapi + 500k-item index idle | AOT | | | | | | | | must be within budget of previous row |
+| SQLite index with 500k items, AOT process (no tray/cfapi yet) | AOT | 10.3 MB (after release GC, DB open, 4 MB page cache) | 10.3 MB | 21.8 MB | 7-8 | 239 | **33.0 MB** peak while ingesting 500,000 items (312 MiB JSON, 500 pages); 50k items on the same PC peaked at 38.6 MB (JIT) / settled 13.5 MB, vs 500k JIT 40.7 MB / 13.8 MB | **10.3 MB** | 2026-11-14, `scale-500k` AOT from CI, fake Graph server in a separate process. Memory is independent of item count. Adding the cfapi provider (+about 8 MB measured) predicts about 20 MB; to confirm in P1. |
 | OneDrive.exe (same account, idle) | n/a | 209.4 MB | n/a | 142.1 MB | 31 | 1,061 | not measured (user reports about 4 GB under many-file load) | | 2026-11-14 snapshot, idle with Explorer open; explorer.exe was 151 MB private, SearchHost 38 MB |
 | rclone mount (same remote, idle) | n/a | | | | | | | | reference |
 
