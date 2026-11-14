@@ -6,6 +6,11 @@ Why this matters for NoDrive: OneDrive.exe reached almost 4 GB on the user's 8 G
 
 ---
 
+## Measured in CI (2026-11-13, windows-latest, .NET SDK 11.0.100, ILCompiler 11.0.0)
+
+- Native AOT publish of `net11.0-windows10.0.26100.0` projects works: engine stub 0.78 MB; `aot-baseline` (message loop + tray + HttpClient + JsonNode) 4.41 MB; `cfapi-minimal` (adds WinRT `Windows.Storage.Provider` projection via CsWinRT and the Cloud Files callbacks) 6.06 MB. Zero IL2xxx/IL3xxx warnings from any project, so CsWinRT's projection for the .NET 11 TFM is AOT-clean in this configuration.
+- ILCompiler warns and ignores `runtimeconfig.template.json`; GC knobs must be `RuntimeHostConfigurationOption` items (now in `eng/LowFootprint.props`).
+
 ## 1. .NET 11 status (as of 2026-11-13)
 
 - .NET 11 is GA since 2026-11-10, a **Standard Term Support** release, end of support **2028-11-14**. .NET 10 LTS (released November 2025) has the **same** end date. .NET 8 and 9 went out of support 2026-11-10. Choosing net11.0 vs net10.0 does not change the support horizon; it is a features-vs-maturity call only.

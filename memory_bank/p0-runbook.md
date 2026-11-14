@@ -14,7 +14,7 @@ framework-dependent `graph-smoke`, the helper scripts and a copy of this runbook
 on the PC for steps 2 and 3 except Windows itself (and .NET 11 only if you want `graph-smoke`).
 
 ```powershell
-# F.1 Download: open the latest green run, scroll to "Artifacts", click spikes-win-x64 (GitHub needs you signed in; the repo is private).
+# F.1 Download: open the latest green run (run #6 or later: earlier binaries had default GC settings), scroll to "Artifacts", click spikes-win-x64 (GitHub needs you signed in; the repo is private).
 #     The browser saves spikes-win-x64.zip to Downloads. Then:
 New-Item -ItemType Directory -Force $env:USERPROFILE\nodrive-spikes | Out-Null
 Expand-Archive -Force "$env:USERPROFILE\Downloads\spikes-win-x64.zip" "$env:USERPROFILE\nodrive-spikes"
