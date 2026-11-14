@@ -26,6 +26,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
     private readonly ConcurrentDictionary<string, byte> _seen = new(StringComparer.OrdinalIgnoreCase);
     private FileSystemWatcher? _watcher;
     private volatile bool _rescan;
+    private readonly Dictionary<string, Task> _active = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Number of queued uploads (for the status line).</summary>
     public long Pending => index.CountUploads();
@@ -72,9 +73,17 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                 {
                     if (_rescan) { _rescan = false; await ScanPopulatedAsync(ct).ConfigureAwait(false); }
                     FlushSeen();
-                    var due = index.DueUploads(DateTime.UtcNow.Ticks, Lanes);
-                    if (due.Count == 0) { await Task.Delay(TimeSpan.FromSeconds(3), ct).ConfigureAwait(false); continue; }
-                    await Task.WhenAll(due.Select(j => ProcessAsync(j.Path, j.Attempts, ct))).ConfigureAwait(false);
+                    foreach (var done in _active.Where(kv => kv.Value.IsCompleted).Select(kv => kv.Key).ToList()) { _active.Remove(done); }
+                    if (_active.Count < Lanes)
+                    {
+                        // A long upload occupies one lane only; the other lane keeps taking due work.
+                        foreach (var j in index.DueUploads(DateTime.UtcNow.Ticks, Lanes + _active.Count))
+                        {
+                            if (_active.Count >= Lanes) { break; }
+                            if (!_active.ContainsKey(j.Path)) { _active[j.Path] = ProcessAsync(j.Path, j.Attempts, ct); }
+                        }
+                    }
+                    await Task.Delay(TimeSpan.FromSeconds(_active.Count == 0 ? 3 : 1), ct).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
                 catch (Exception ex) { Log.Warn($"upload loop: {ex.Message}"); await Task.Delay(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false); }
@@ -158,11 +167,11 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             {
                 try { using var probe = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
                 catch (IOException) { Defer(path, attempts, TimeSpan.FromSeconds(10), bump: false); return; }          // still being written
-                try { item = await graph.UploadNewFileAsync(parentId, name, path, ct).ConfigureAwait(false); }
+                try { item = await graph.UploadNewFileAsync(parentId, name, path, ct, ProgressLogger(name)).ConfigureAwait(false); }
                 catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
                 {
                     string copy = ConflictName(name);
-                    item = await graph.UploadNewFileAsync(parentId, copy, path, ct).ConfigureAwait(false);
+                    item = await graph.UploadNewFileAsync(parentId, copy, path, ct, ProgressLogger(copy)).ConfigureAwait(false);
                     finalPath = Path.Combine(Path.GetDirectoryName(path)!, copy);
                     File.Move(path, finalPath);
                     Log.Warn($"name clash for '{name}': uploaded as '{copy}'");
@@ -174,6 +183,8 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             bool converted = ConvertToPlaceholder(finalPath, item.Id);
             if (isDir) { population.Set(item.Id, true); QueueChildren(finalPath); }
             index.RemoveUpload(path);
+            PinWatcher.NotifyShell(finalPath);
+            if (Path.GetDirectoryName(finalPath) is { } parentDir) { RemoteApplier.NotifyDir(parentDir); }
             Log.Info($"uploaded {(isDir ? "folder" : "file")} '{Path.GetFileName(finalPath)}' in {sw.ElapsedMilliseconds} ms{(converted ? "" : " (placeholder conversion failed, will show as local until the next sync)")}");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -188,6 +199,18 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             Log.Warn($"upload of '{Path.GetFileName(path)}' failed ({ex.Message}); retry in {wait.TotalSeconds:F0} s");
             Defer(path, attempts, wait, bump: true);
         }
+    }
+
+    /// <summary>Logs large uploads about every 10%; small files stay silent.</summary>
+    private static Action<long, long> ProgressLogger(string name)
+    {
+        int last = 0;
+        return (sent, total) =>
+        {
+            if (total < 20 * 1024 * 1024) { return; }
+            int pct = (int)(sent * 100 / total) / 10 * 10;
+            if (pct > last && pct < 100) { last = pct; Log.Info($"uploading '{name}': {pct}% ({sent / 1048576} of {total / 1048576} MiB)"); }
+        };
     }
 
     private void Defer(string path, int attempts, TimeSpan wait, bool bump) => index.RescheduleUpload(path, bump ? attempts + 1 : attempts, DateTime.UtcNow.Add(wait).Ticks);

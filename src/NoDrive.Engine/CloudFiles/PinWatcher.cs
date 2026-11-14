@@ -99,7 +99,7 @@ internal static class PinWatcher
     }
 
     /// <summary>Tells Explorer the item changed so the icon refreshes without F5.</summary>
-    private static unsafe void NotifyShell(string path)
+    internal static unsafe void NotifyShell(string path)
     {
         fixed (char* p = path) { PInvoke.SHChangeNotify(Windows.Win32.UI.Shell.SHCNE_ID.SHCNE_UPDATEITEM, Windows.Win32.UI.Shell.SHCNF_FLAGS.SHCNF_PATHW | Windows.Win32.UI.Shell.SHCNF_FLAGS.SHCNF_FLUSHNOWAIT, p, null); }
     }

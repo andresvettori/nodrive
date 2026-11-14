@@ -99,7 +99,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
     /// Uploads a NEW file. conflictBehavior=fail: an existing name is never replaced; the caller gets an HttpRequestException with
     /// StatusCode Conflict and picks another name. Throws if the file changes size while reading. Never overwrites, never deletes.
     /// </summary>
-    public async Task<RemoteItem> UploadNewFileAsync(string parentId, string name, string localPath, CancellationToken ct)
+    public async Task<RemoteItem> UploadNewFileAsync(string parentId, string name, string localPath, CancellationToken ct, Action<long, long>? progress = null)
     {
         long size = new FileInfo(localPath).Length;
         if (size <= SimpleUploadLimit)
@@ -153,6 +153,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
                         }
                         resp.EnsureSuccessStatusCode();
                         sent += n;
+                        progress?.Invoke(sent, size);
                         if (sent >= size) { return await ReadItemAsync(resp, ct).ConfigureAwait(false); }
                         break;
                     }

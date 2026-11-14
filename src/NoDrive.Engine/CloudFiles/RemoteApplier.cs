@@ -75,7 +75,7 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
     }
 
     /// <summary>Tells Explorer the folder listing changed so it refreshes without F5.</summary>
-    private static void NotifyDir(string dir)
+    internal static void NotifyDir(string dir)
     {
         fixed (char* p = dir) { PInvoke.SHChangeNotify(Windows.Win32.UI.Shell.SHCNE_ID.SHCNE_UPDATEDIR, Windows.Win32.UI.Shell.SHCNF_FLAGS.SHCNF_PATHW | Windows.Win32.UI.Shell.SHCNF_FLAGS.SHCNF_FLUSHNOWAIT, p, null); }
     }
