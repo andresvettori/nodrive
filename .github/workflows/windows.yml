@@ -10,8 +10,8 @@ jobs:
   build-test-publish:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
       - name: Restore
@@ -20,12 +20,34 @@ jobs:
         run: dotnet build --no-restore -c Release
       - name: Test
         run: dotnet test --no-build -c Release
+
       - name: Publish engine (Native AOT, win-x64)
         run: dotnet publish src/NoDrive.Engine -c Release -r win-x64 -p:PublishAot=true -o artifacts/engine-win-x64
-      - name: Report binary size
+
+      # P0 spikes: AOT-publishing them here answers "does the WinRT projection / CsWin32 callback code survive
+      # Native AOT on .NET 11" without a local C++ toolchain, and gives ready-to-run binaries for the test PC.
+      - name: Publish spike aot-baseline (Native AOT, win-x64)
+        run: dotnet publish spikes/aot-baseline -c Release -r win-x64 -p:PublishAot=true -o artifacts/spikes/aot-baseline 2>&1 | Tee-Object artifacts/spikes/aot-baseline-publish.log
         shell: pwsh
-        run: Get-ChildItem artifacts/engine-win-x64 | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,2)}} | Format-Table
-      - uses: actions/upload-artifact@v4
+      - name: Publish spike cfapi-minimal (Native AOT, win-x64)
+        run: dotnet publish spikes/cfapi-minimal -c Release -r win-x64 -p:PublishAot=true -o artifacts/spikes/cfapi-minimal 2>&1 | Tee-Object artifacts/spikes/cfapi-minimal-publish.log
+        shell: pwsh
+      - name: Publish spike graph-smoke (framework-dependent, any OS)
+        run: dotnet publish spikes/graph-smoke -c Release -o artifacts/spikes/graph-smoke
+
+      - name: Report sizes and AOT warnings
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse artifacts -File | Where-Object { $_.Extension -in '.exe','.dll' } |
+            Select-Object @{n='Path';e={$_.FullName.Replace("$PWD\",'')}}, @{n='MB';e={[math]::Round($_.Length/1MB,2)}} | Format-Table -AutoSize
+          "--- IL2xxx/IL3xxx warnings in spike publishes (none expected from our code) ---"
+          Select-String -Path artifacts/spikes/*-publish.log -Pattern 'IL2\d{3}|IL3\d{3}' | ForEach-Object { $_.Line } | Sort-Object -Unique
+
+      - uses: actions/upload-artifact@v7
         with:
           name: engine-win-x64
           path: artifacts/engine-win-x64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: spikes-win-x64
+          path: artifacts/spikes

@@ -4,6 +4,8 @@
 
 ## What works
 
+- **CI on windows-latest is green (run #2, 2026-11-13, 2m20s):** restore, build, tests, and a **Native AOT publish of `NoDrive.Engine` for win-x64 on .NET 11 succeeded** (artifact `engine-win-x64`, 1.87 MB zipped). The engine is a stub, so this proves the toolchain (CsWin32 build-task bindings + ILC on net11.0-windows10.0.26100.0), not the runtime behaviour. The workflow now also AOT-publishes `aot-baseline` and `cfapi-minimal` and uploads them as `spikes-win-x64`, so the WinRT-projection-under-AOT question is answered by CI and the binaries can be downloaded straight to the test PC.
+
 - `spikes/graph-smoke` (JIT console, any OS): PKCE sign-in via browser + loopback, refresh-token grant, `/me/drive`, delta pages with `$top`, item GET with downloadUrl, two Range reads (206). P0 step 1 passed on 2026-11-13.
 
 - `dotnet build NoDrive.slnx` compiles `NoDrive.Core`, `NoDrive.Graph`, `NoDrive.Engine` (Windows TFM, restores on macOS via EnableWindowsTargeting) and `NoDrive.Core.Tests` with 0 warnings under warnings-as-errors.

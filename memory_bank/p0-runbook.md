@@ -15,6 +15,8 @@ $cv = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
 (Get-Item "$env:SystemRoot\System32\drivers\cldflt.sys").VersionInfo.FileVersion
 
 # 0.2 Tools (winget ids verified 2026-11-13 names; accept the prompts)
+#     Shortcut for a first look without the C++ build tools: download the `spikes-win-x64` artifact from the latest
+#     green run at https://github.com/andresvettori/nodrive/actions (ready AOT binaries for aot-baseline and cfapi-minimal).
 winget install --id Microsoft.DotNet.SDK.11 -e
 winget install --id Git.Git -e
 winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
@@ -26,8 +28,8 @@ winget install --id Microsoft.Sysinternals.ProcessExplorer -e
 dotnet --version        # 11.0.1xx
 git --version
 
-# 0.4 Get the code (the repo has no remote yet: ask Claude for the first commit and push, or copy the folder without bin/ and obj/)
-git clone <your-remote-url> nodrive
+# 0.4 Get the code
+git clone git@github.com:andresvettori/nodrive.git nodrive    # or https://github.com/andresvettori/nodrive.git
 cd nodrive
 dotnet build            # 0 warnings expected
 dotnet test             # all green
