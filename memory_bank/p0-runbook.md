@@ -255,7 +255,7 @@ Get-Content ..\CloudFiles-HeapCorrupt\README.md     # build/run per its instruct
 ```
 If it reproduces, the engine prefers `CfSetInSyncState`/`CfSetPinState` and limits `CfUpdatePlaceholder` to metadata-only updates behind an oplock.
 
-## 5. SQLite via winsqlite3 under AOT **[to write: `spikes/sqlite-aot`]**
+## 5. SQLite via winsqlite3 under AOT **[done 2026-11-14: `spikes/scale-500k`; run `scale-500k.exe run --items 500000` from the `ci-binaries` branch or the CI artifact]**
 
 Console app referencing `Microsoft.Data.Sqlite.Core` + `SQLitePCLRaw.provider.winsqlite3`, calling `SQLitePCL.raw.SetProvider(new SQLite3Provider_winsqlite3())`, creating the planned `items` table and inserting 500,000 synthetic rows in 5,000-row transactions, then querying children of one parent with 30,000 rows.
 ```powershell
@@ -265,7 +265,7 @@ Select-String -Path results\sqlite-publish.log -Pattern 'IL2','IL3'
 ```
 Record: warnings (which package), insert time, children-query time, DB size, peak Private Bytes. Fallback if not AOT-clean: raw `LibraryImport` to `winsqlite3.dll`.
 
-## 6. 500k-item scale test **[to write; mostly macOS]**
+## 6. 500k-item scale test **[index half done 2026-11-14 with the same spike; cfapi half (FETCH_PLACEHOLDERS from the index) still to write]**
 
 Fake Graph server emitting 500,000 synthetic delta items, streamed into SQLite; on Windows add `FETCH_PLACEHOLDERS` for a 30,000-child folder answered from the index. Real-account reference from step 1: 136,411 items in 129 pages, 6.5 min, 3.0 s/page.
 
