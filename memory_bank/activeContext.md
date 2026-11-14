@@ -68,6 +68,12 @@ Non-blocking: CfUpdatePlaceholder heap corruption status (step 4), winsqlite3 AO
 
 ## Session log
 
+### 2026-11-14
+- First run on the user's Windows 11 PC (26H2 build 26300.9974, OneDrive.exe running): `onedrive-state.ps1` shows folder backup ON for Desktop/Documentos/Fotos (localised names); `aot-baseline --variant tray` idles at **4.3 MB private / 14.5 MB WS** for 20 min; `cfapi-minimal` registered via WinRT under AOT, connected, created 200 placeholders, idle **10.6 MB private**. No Explorer interaction happened, so hydration/acks are still untested.
+- Feedback from the user: say explicitly which commands block and how to stop them. Runbook, README and both spikes' start-up text now state it.
+- Spike hardened for re-runs: detects its own registration via the SyncRootManager registry key, skips existing placeholders, prints a hint if no callback arrives in 2 minutes.
+- Next on the PC: the Explorer sequence in runbook F.4 (nav pane, Status column, double-click a small file, pin, rename, delete), then the provider-kill test and `--cleanup`; then step 2 burst and reference rows.
+
 ### 2026-11-13
 - Research pass (cfapi, graph, oss, memory, ux) with skeptic verdicts and completeness critique completed; corrections honoured.
 - Plan reviewed and approved by the user; decisions confirmed: v1 scope browse/download/upload-new, OneDrive.exe replacement, 500k-item design target, MIT, unpackaged, hand-rolled PKCE, no Graph SDK.
@@ -90,4 +96,5 @@ Non-blocking: CfUpdatePlaceholder heap corruption status (step 4), winsqlite3 AO
 - Runbook and README now have a "fast path": download the `spikes-win-x64` CI artifact (exes + scripts + runbook copy), `Unblock-File`, run `onedrive-state.ps1`, `aot-baseline`, `cfapi-minimal` with no SDK or build tools on the PC.
 - CI run #5 surfaced that Native AOT ignores `runtimeconfig.template.json`; GC settings moved to `RuntimeHostConfigurationOption` items in `eng/LowFootprint.props` (shared by engine and spikes). Without this, step 2 memory numbers would have been measured with default GC settings.
 - CI run #5 green with zero AOT warnings for both spikes (cfapi-minimal 6.06 MB): WinRT projection + callbacks compile under Native AOT on .NET 11. Download artifacts from run #6+ (GC fix).
+- First PC run done 2026-11-14 (see session log): tray idle 4.3 MB, cfapi registration + 200 placeholders OK under AOT; hydration not yet exercised.
 - Next: on the notebook `git clone git@github.com:andresvettori/nodrive.git` (or HTTPS), run `.\spikes\onedrive-state.ps1`, then runbook steps 2 and 3; expect to iterate on the cfapi spike with real callback behaviour.

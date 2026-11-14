@@ -15,6 +15,10 @@ The user reported not seeing "Back up folders" / "Manage backup" in their OneDri
 - [MS] On domain-joined PCs Microsoft blocks folder backup to personal accounts ("Moving known folders to personal OneDrive accounts is already blocked on domain-joined PCs", https://learn.microsoft.com/en-us/sharepoint/use-group-policy). Not applicable to a personal notebook.
 Diagnostic: `spikes/onedrive-state.ps1` prints domain/Entra join state, the account keys, `KfmFoldersProtectedNow`, the three known-folder paths versus their defaults, and the policy values. **If no known folder is redirected, folder backup is off and the migration section does not apply.**
 
+### 1c. The user's actual state (measured 2026-11-14 with `onedrive-state.ps1`)
+
+Folder backup **is on**: `KfmFoldersProtectedNow=3584` (Desktop+Documents+Pictures) and `SHGetKnownFolderPath` resolves Desktop -> `C:\Users\<PC_USER>\OneDrive\Desktop`, Documents -> `...\OneDrive\Documentos`, Pictures -> `...\OneDrive\Fotos`. The user also found the setting in the client (it exists; the earlier "not visible" was a UI-location issue). Design notes: the folder names under the OneDrive root are **localised** (Spanish `Documentos`, `Fotos`), so adoption and the future KFM feature must map known folders by path, never by English names; the user reports "some others" also backed up (likely Screenshots / Camera Roll under Pictures). The PC is not domain/Entra joined and no KFM policies are set. The README migration procedure therefore applies before adoption (P1).
+
 ## 2. Turning it off in the current client (2025-2026 UI)
 
 - Path [MS]: OneDrive icon > Settings > **Sync and backup** > **Manage backup** > turn the folder's toggle off.

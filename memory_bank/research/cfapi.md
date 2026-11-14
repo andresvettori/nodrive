@@ -8,6 +8,13 @@ Related: `memory_bank/systemPatterns.md` (how we apply this), `memory_bank/bestP
 
 ---
 
+## Observed on the developer's PC (2026-11-14, Windows 11 26H2 build 26300.9974, cldflt.sys 10.0.26100.9974)
+
+- `StorageProviderSyncRootManager.Register` from an **unpackaged Native AOT exe** succeeded (CsWinRT projection on net11.0-windows10.0.26100.0; id `NoDriveSpike!<SID>!Personal`), while OneDrive.exe was running with its own root at `%USERPROFILE%\OneDrive`. `CfConnectSyncRoot` with `REQUIRE_PROCESS_INFO | BLOCK_SELF_IMPLICIT_HYDRATION` returned a key; `CfCreatePlaceholders` created 200 entries (folders with `DISABLE_ON_DEMAND_POPULATION`, files `MARK_IN_SYNC`) with no per-entry errors. `CfDisconnectSyncRoot` returned S_OK on quit.
+- Idle connected provider: 10.6 MB private bytes, 47.5 MB working set, 11-19 threads, ~578 handles (3 min). No callback was triggered in this run (nothing opened in Explorer), so hydration, acks and Explorer rendering are still unverified.
+- OneDrive's own sync-root id on this PC: `OneDrive!<SID>!Personal|<32-hex drive id>`, so match on the prefix `OneDrive!<SID>!Personal` (answers an open question in `onedrive-client-coexistence.md`).
+- `HKCU\Software\Microsoft\OneDrive\Accounts` also contains a `FileCoAuth` key with no `UserEmail`/`UserFolder` (Office co-authoring pseudo-account): detection must ignore account keys without `UserEmail`.
+
 ## 1. Platform overview
 
 ### Layers
