@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <Deterministic>true</Deterministic>
+    <!-- Allow restoring/building Windows-targeted projects while scaffolding on macOS/Linux.
+         Running and Native AOT publishing still require a Windows machine. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- Every library must be trim/AOT clean; the engine is published Native AOT. -->
+    <IsAotCompatible Condition="'$(IsTestProject)' != 'true' and '$(OutputType)' != 'Exe' and '$(OutputType)' != 'WinExe'">true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+</Project>

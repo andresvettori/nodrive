@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/NoDrive.Core/NoDrive.Core.csproj" />
+    <Project Path="src/NoDrive.Graph/NoDrive.Graph.csproj" />
+    <Project Path="src/NoDrive.Engine/NoDrive.Engine.csproj" />
+  </Folder>
+  <Folder Name="/spikes/">
+    <Project Path="spikes/graph-smoke/graph-smoke.csproj" />
+    <Project Path="spikes/aot-baseline/aot-baseline.csproj" />
+    <Project Path="spikes/cfapi-minimal/cfapi-minimal.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NoDrive.Core.Tests/NoDrive.Core.Tests.csproj" />
+  </Folder>
+  <Folder Name="/solution items/">
+    <File Path="CLAUDE.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
+    <File Path=".editorconfig" />
+  </Folder>
+</Solution>

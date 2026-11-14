@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0-windows10.0.26100.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.26100.0</SupportedOSPlatformVersion>
+    <RootNamespace>NoDrive.Spikes.CfApiMinimal</RootNamespace>
+    <AssemblyName>cfapi-minimal</AssemblyName>
+    <Description>P0 step 3: unpackaged sync root, placeholders from one delta page, PROGRESSIVE hydration via Range downloads, under Native AOT.</Description>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <EventSourceSupport>false</EventSourceSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <Http3Support>false</Http3Support>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DisableRuntimeMarshalling>true</DisableRuntimeMarshalling>
+    <CsWin32RunAsBuildTask>true</CsWin32RunAsBuildTask>
+    <CsWin32PlatformTarget Condition="'$(RuntimeIdentifier)' == ''">x64</CsWin32PlatformTarget>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <UseWindowsThreadPool>true</UseWindowsThreadPool>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/NoDrive.Graph/NoDrive.Graph.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/TrayWindow.cs" Link="Shared/TrayWindow.cs" />
+    <Compile Include="../Shared/ProcessStats.cs" Link="Shared/ProcessStats.cs" />
+    <Compile Include="../Shared/SpikeAuth.cs" Link="Shared/SpikeAuth.cs" />
+  </ItemGroup>
+</Project>

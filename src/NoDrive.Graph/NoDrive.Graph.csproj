@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <RootNamespace>NoDrive.Graph</RootNamespace>
+    <Description>Hand-written Microsoft Graph client for OneDrive personal: PKCE auth, delta, download, upload sessions, quickXorHash.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../NoDrive.Core/NoDrive.Core.csproj" />
+  </ItemGroup>
+</Project>

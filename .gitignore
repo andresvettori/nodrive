@@ -1,0 +1,22 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.swp
+TestResults/
+artifacts/
+publish/
+*.nupkg
+*.binlog
+# Rider / VS Code
+.idea/
+.vscode/
+!.vscode/settings.json
+# OS
+.DS_Store
+Thumbs.db
+# Local secrets (never commit)
+*.local.json
+.env

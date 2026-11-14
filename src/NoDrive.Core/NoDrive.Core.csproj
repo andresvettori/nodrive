@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <RootNamespace>NoDrive.Core</RootNamespace>
+    <Description>Platform-neutral sync engine: reconciler, item state machine, index and journal abstractions.</Description>
+  </PropertyGroup>
+</Project>

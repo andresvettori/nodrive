@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <RootNamespace>NoDrive.Spikes.GraphSmoke</RootNamespace>
+    <AssemblyName>graph-smoke</AssemblyName>
+    <Description>P0 step 1: PKCE sign-in with a personal Microsoft account, /me/drive, delta pages, Range download. Runs on any OS.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/NoDrive.Graph/NoDrive.Graph.csproj" />
+  </ItemGroup>
+</Project>

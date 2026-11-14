@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows10.0.26100.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.26100.0</SupportedOSPlatformVersion>
+    <RootNamespace>NoDrive.Engine</RootNamespace>
+    <AssemblyName>NoDrive.Engine</AssemblyName>
+    <Description>Always-on, headless Native AOT process: tray icon, Cloud Files provider, local watcher, sync engine.</Description>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+
+    <!-- Native AOT, size-optimised. See memory_bank/techContext.md and research/dotnet-memory.md. -->
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <StackTraceSupport>true</StackTraceSupport>
+    <DebuggerSupport>true</DebuggerSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <EventSourceSupport>false</EventSourceSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <Http3Support>false</Http3Support>
+    <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+
+    <!-- Interop hygiene required for AOT-safe CsWin32 output. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DisableRuntimeMarshalling>true</DisableRuntimeMarshalling>
+    <CsWin32RunAsBuildTask>true</CsWin32RunAsBuildTask>
+    <!-- Some structs (e.g. NOTIFYICONDATAW) are architecture-specific; when building AnyCPU on a dev box pick x64.
+         A RID-specific publish (win-x64 / win-arm64) sets PlatformTarget itself. -->
+    <CsWin32PlatformTarget Condition="'$(RuntimeIdentifier)' == ''">x64</CsWin32PlatformTarget>
+
+    <!-- Low-footprint GC: workstation, non-concurrent. Remaining knobs are in runtimeconfig.template.json. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>false</TieredPGO>
+    <UseWindowsThreadPool>true</UseWindowsThreadPool>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../NoDrive.Core/NoDrive.Core.csproj" />
+    <ProjectReference Include="../NoDrive.Graph/NoDrive.Graph.csproj" />
+  </ItemGroup>
+</Project>

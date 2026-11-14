@@ -1,0 +1,9 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <PropertyGroup>
+    <!-- Spikes are throwaway measurement apps: keep analyzers on but do not fail the build on them. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <IsAotCompatible>false</IsAotCompatible>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>
