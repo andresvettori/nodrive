@@ -65,7 +65,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         var hydrator = new Hydrator(graph, policy, new FailureMemory(policy.FailureMemory));
 
         _indexReady = _index.GetMeta(DeltaIngestor.DeltaKey) is not null && _index.GetMeta(DeltaIngestor.NextKey) is null;
-        CloudProvider.Start(paths.SyncRoot, new ProviderServices(_index, hydrator, population, locks, _callers, () => _indexReady, config.HydrationWorkers));
+        CloudProvider.Start(paths.SyncRoot, new ProviderServices(_index, hydrator, population, locks, _callers, () => _indexReady, config.HydrationWorkers, new ReadAheadPlanner()));
         PinWatcher.Start(paths.SyncRoot);
         _ = Task.Run(() => ReportLoopAsync(ct), CancellationToken.None);
 

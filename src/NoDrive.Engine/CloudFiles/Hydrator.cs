@@ -38,7 +38,8 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
         return c;
     }
 
-    public async Task StreamAsync(string itemId, long offset, long length, ChunkSink sink, Action<long> progress, CancellationToken ct)
+    /// <param name="firstFlush">Bytes to deliver as soon as they arrive (the part a caller is blocked on); the rest streams in full chunks.</param>
+    public async Task StreamAsync(string itemId, long offset, long length, long firstFlush, ChunkSink sink, Action<long> progress, CancellationToken ct)
     {
         if (failures.IsRecentlyFailed(itemId, out var age))
         {
@@ -48,7 +49,7 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
         watchdog.CancelAfter(policy.NoProgressTimeout);
         try
         {
-            await StreamCoreAsync(itemId, offset, length, sink, progress, watchdog, ct).ConfigureAwait(false);
+            await StreamCoreAsync(itemId, offset, length, firstFlush, sink, progress, watchdog, ct).ConfigureAwait(false);
             failures.Clear(itemId);
         }
         catch (OperationCanceledException) when (watchdog.IsCancellationRequested && !ct.IsCancellationRequested)
@@ -67,7 +68,7 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
         }
     }
 
-    private async Task StreamCoreAsync(string itemId, long offset, long length, ChunkSink sink, Action<long> progress, CancellationTokenSource watchdog, CancellationToken ct)
+    private async Task StreamCoreAsync(string itemId, long offset, long length, long firstFlush, ChunkSink sink, Action<long> progress, CancellationTokenSource watchdog, CancellationToken ct)
     {
         var token = watchdog.Token;
         long end = offset + length;                                                       // exclusive
@@ -118,6 +119,12 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
             while (position < end)
             {
                 int want = (int)Math.Min(ChunkSize, end - position);
+                if (position == offset && firstFlush > 0)
+                {
+                    // Unblock the caller as early as possible: the first transfer covers just what it asked for (4 KiB aligned unless it ends the range).
+                    long first = (firstFlush + 4095) / 4096 * 4096;
+                    want = (int)Math.Min(want, Math.Max(4096, first));
+                }
                 int filled = 0;
                 while (filled < want)
                 {

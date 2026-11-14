@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
+using NoDrive.Core.Hydration;
 using NoDrive.Core.Index;
 using NoDrive.Engine.Infrastructure;
 using Windows.Win32;
@@ -13,7 +14,7 @@ using Windows.Win32.Storage.CloudFilters;
 namespace NoDrive.Engine.CloudFiles;
 
 /// <summary>Everything the callbacks need, injected once by <see cref="CloudProvider.Start"/>.</summary>
-internal sealed record ProviderServices(ItemIndex Index, Hydrator Hydrator, PopulationState Population, FolderLocks Locks, CallerStats Callers, Func<bool> IndexReady, int HydrationWorkers);
+internal sealed record ProviderServices(ItemIndex Index, Hydrator Hydrator, PopulationState Population, FolderLocks Locks, CallerStats Callers, Func<bool> IndexReady, int HydrationWorkers, ReadAheadPlanner ReadAhead);
 
 /// <summary>
 /// The Cloud Files connection. Design rule 1 (never block Explorer): every callback only copies its request into a bounded channel and
@@ -22,7 +23,10 @@ internal sealed record ProviderServices(ItemIndex Index, Hydrator Hydrator, Popu
 /// </summary>
 internal static class CloudProvider
 {
-    private sealed record DataRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, long FileSize, long Offset, long Length, string? Process);
+    private sealed record DataRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, long FileSize, long Offset, long Length, long OptionalOffset, long OptionalLength, string? Process);
+
+    /// <summary>Thrown when Windows refuses data BEYOND the required range (it may already have it): read-ahead stops quietly, the request itself succeeded.</summary>
+    private sealed class ReadAheadStopped : Exception { }
     private sealed record PopulateRequest(long ConnectionKey, long TransferKey, long RequestKey, string FolderId, long EnqueuedTicks);
 
     private static ProviderServices s_svc = null!;
@@ -39,13 +43,14 @@ internal static class CloudProvider
     public static unsafe void Start(string rootPath, ProviderServices services)
     {
         s_svc = services;
-        var table = stackalloc CF_CALLBACK_REGISTRATION[6];
+        var table = stackalloc CF_CALLBACK_REGISTRATION[7];
         table[0] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_FETCH_DATA, Callback = &OnFetchData };
         table[1] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_CANCEL_FETCH_DATA, Callback = &OnCancelFetchData };
         table[2] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_FETCH_PLACEHOLDERS, Callback = &OnFetchPlaceholders };
         table[3] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_NOTIFY_DELETE, Callback = &OnNotifyDelete };
         table[4] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_NOTIFY_RENAME, Callback = &OnNotifyRename };
-        table[5] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_NONE, Callback = null };
+        table[5] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_NOTIFY_FILE_OPEN_COMPLETION, Callback = &OnFileOpenCompletion };
+        table[6] = new CF_CALLBACK_REGISTRATION { Type = CF_CALLBACK_TYPE.CF_CALLBACK_TYPE_NONE, Callback = null };
 
         fixed (char* p = rootPath)
         {
@@ -77,7 +82,7 @@ internal static class CloudProvider
     {
         long t0 = Stopwatch.GetTimestamp();
         var req = new DataRequest(info->ConnectionKey.Value, info->TransferKey, info->RequestKey, Identity(info), info->FileSize,
-            parameters->FetchData.RequiredFileOffset, parameters->FetchData.RequiredLength,
+            parameters->FetchData.RequiredFileOffset, parameters->FetchData.RequiredLength, parameters->FetchData.OptionalFileOffset, parameters->FetchData.OptionalLength,
             info->ProcessInfo is null ? null : info->ProcessInfo->ImagePath.ToString());
         s_inFlight[req.TransferKey] = CancellationTokenSource.CreateLinkedTokenSource(s_stop.Token);
         if (req.ItemId.Length == 0 || !s_dataQueue.Writer.TryWrite(req)) { CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
@@ -100,6 +105,19 @@ internal static class CloudProvider
         string folderId = info->FileIdentityLength == 0 ? s_svc.Population.RootId : Identity(info);
         var req = new PopulateRequest(info->ConnectionKey.Value, info->TransferKey, info->RequestKey, folderId, t0);
         if (!s_populateQueue.Writer.TryWrite(req)) { CompletePopulate(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
+        Record(t0);
+    }
+
+    /// <summary>
+    /// A placeholder was opened (Explorer opens a file to pin or free it). No acknowledgement is needed; we only record a hint so the pin
+    /// state is checked shortly afterwards (debounced), because CfSetPinState raises no file-system notification.
+    /// </summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static unsafe void OnFileOpenCompletion(CF_CALLBACK_INFO* info, CF_CALLBACK_PARAMETERS* parameters)
+    {
+        long t0 = Stopwatch.GetTimestamp();
+        string path = info->VolumeDosName.ToString() + info->NormalizedPath.ToString();
+        if (path.Length > 3) { PinWatcher.Hint(path, TimeSpan.FromMilliseconds(1200)); }
         Record(t0);
     }
 
@@ -144,10 +162,16 @@ internal static class CloudProvider
             s_svc.Callers.Record(req.Process, req.Length, req.FileSize);
             try
             {
-                await s_svc.Hydrator.StreamAsync(req.ItemId, req.Offset, req.Length,
-                    (chunk, offset) => TransferData(req, chunk, offset),
-                    done => PInvoke.CfReportProviderProgress(new CF_CONNECTION_KEY(req.ConnectionKey), req.TransferKey, req.Length, done),
-                    cts.Token).ConfigureAwait(false);
+                // Read-ahead (P1 finding): a player reading 40 KB at a time pays a network round trip per read; fetch a growing window beyond the required range.
+                long fetch = s_svc.ReadAhead.Plan(req.ItemId, req.Offset, req.Length, req.OptionalOffset, req.OptionalLength, req.FileSize);
+                try
+                {
+                    await s_svc.Hydrator.StreamAsync(req.ItemId, req.Offset, fetch, req.Length,
+                        (chunk, offset) => TransferData(req, chunk, offset),
+                        done => PInvoke.CfReportProviderProgress(new CF_CONNECTION_KEY(req.ConnectionKey), req.TransferKey, req.Length, Math.Min(done, req.Length)),
+                        cts.Token).ConfigureAwait(false);
+                }
+                catch (ReadAheadStopped) { /* the required part was delivered; nothing more to do */ }
                 if (sw.ElapsedMilliseconds > 3000) { Log.Info($"hydrated {req.ItemId} [{req.Offset}+{req.Length}] for {Path.GetFileName(req.Process ?? "?")} in {sw.Elapsed.TotalSeconds:F1} s"); }
             }
             catch (OperationCanceledException)
@@ -180,7 +204,11 @@ internal static class CloudProvider
             prm.TransferData.Offset = offset;
             prm.TransferData.Length = chunk.Length;
             HRESULT hr = PInvoke.CfExecute(&op, &prm);
-            if (hr.Failed) { throw new IOException($"CfExecute(TRANSFER_DATA) at {offset}+{chunk.Length} failed 0x{hr.Value:X8}"); }
+            if (hr.Failed)
+            {
+                if (offset >= req.Offset + req.Length) { throw new ReadAheadStopped(); }               // beyond the required range: not an error
+                throw new IOException($"CfExecute(TRANSFER_DATA) at {offset}+{chunk.Length} failed 0x{hr.Value:X8}");
+            }
         }
         }
     }
