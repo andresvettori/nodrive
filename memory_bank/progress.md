@@ -1,5 +1,7 @@
 # Progress
 
+**P0 COMPLETE 2026-11-14: verdict GO, see `p0-results.md`.**
+
 **Status (2026-11-13):** planning complete, memory bank created and reviewed, repo scaffolded and building (0 warnings) with 2/2 smoke tests green on macOS; P0 spike not started; no engine code runs yet; nothing committed to git.
 
 ## What works
@@ -26,8 +28,8 @@ Checkboxes mirror `projectPlan.md`. Tick here when the plan row is updated.
 - [x] 4. **DONE 2026-11-14: heap corruption NOT reproduced on Win11 26H2 build 26300.9974 (14,000 CfUpdatePlaceholder calls, 3 variants incl. 4 threads, heap validate OK, no crash events); keep `cfapi-minimal --heap-repro` as a per-build regression check; use CfUpdatePlaceholder sparingly.** CfUpdatePlaceholder heap-corruption repro on the dev build; decision recorded
 - [x] 5. **PASSED 2026-11-14: `Microsoft.Data.Sqlite.Core` + `SQLitePCLRaw.provider.winsqlite3` + source-generated STJ publish Native AOT with zero IL2xxx/IL3xxx warnings (5.30 MB exe, no native SQLite shipped, uses System32 winsqlite3.dll 3.53.4); 500,000 rows inserted and queried on the user's PC (spikes/scale-500k).** 500k-row insert/query
 - [~] 6. **USER-OBSERVED PROBLEM: on-demand population of a 31,030-child folder freezes the Explorer window 7-10 s (busy cursor, no hang state). Not tunable (batch/parallel matrix: 4.8-5.3 s provider regardless). FIX PROVEN: background prefetch (`Prefetcher`): 6.4 s off the user path, foreground listing unaffected, then cold open 1.1 s with 0 callbacks; awaiting the user's Explorer confirmation. Plan item E3c.** cfapi half measured by SSH 2026-11-14: FETCH_PLACEHOLDERS answered from the 500k index with population FULL; 31,030-child folder populated in 6.5 s (32 batches), root in 39 ms, callbacks 0.1-5 ms, +2.5 MB provider memory. Pending: the user's visual Explorer check of responsiveness while opening that folder cold.** Index half PASSED 2026-11-14 (Native AOT, user's PC): 500,000 items ingested in 60.7 s locally (network-bound against real Graph), peak private 33.0 MB, 10.3 MB after release, DB 154 MB (323 B/row), 30,030-child folder listed from the index in 153 ms (first 512 rows 3.1 ms), 100k lookups 16 us each, incremental 5,000 changes 0.87 s, interrupt+resume exact. Memory independent of item count (50k vs 500k peaks within 2 MB). STILL OPEN: the cfapi half (FETCH_PLACEHOLDERS answered from this index under real Explorer, PARTIAL population).** Fake Graph server 500k-item scale test: first-sync time, index size, peak/idle memory, 30k-child FETCH_PLACEHOLDERS latency
-- [ ] 7. Responsiveness harness: callback-latency histogram, pending-request age tracker, fault-injecting fake server (429/timeout/expired URL/network loss/200-instead-of-206)
-- [ ] Kill/go decision written, with an answer for every open question in `projectPlan.md` section 8
+- [x] 7. **DONE 2026-11-14 (`spikes/remote/responsiveness.ps1`, fake server with fault injection): throttling error 0.18 s, stall error 15.2 s, reset recovered, slow-but-alive OK, kill -> error 0.2 s and clean restart, 4 concurrent hydrations OK (peak 18.3 MB); Explorer-style probes median < 5 ms, max 25 ms in every scenario.** Responsiveness harness: callback-latency histogram, pending-request age tracker, fault-injecting fake server (429/timeout/expired URL/network loss/200-instead-of-206)
+- [x] Kill/go decision written: **GO** (`memory_bank/p0-results.md`); open questions answered there
 
 ### P1: v1 (2-3 months)
 - [ ] E1 Registration and placeholders (PARTIAL population, PROGRESSIVE hydration, crawl scope, overlap check, never unregister on exit)

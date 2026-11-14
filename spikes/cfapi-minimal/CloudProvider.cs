@@ -43,6 +43,23 @@ internal static class CloudProvider
     private static readonly Stopwatch s_clock = Stopwatch.StartNew();
     private static readonly ConcurrentBag<double> s_callbackMicros = new();
 
+    // Hydration source and fault injection for the P0 responsiveness tests (NODRIVE_DOWNLOAD_BASE=http://127.0.0.1:5799, NODRIVE_FAULT=stall|429|reset|ignorerange|slow).
+    private static readonly string? s_downloadBase = Environment.GetEnvironmentVariable("NODRIVE_DOWNLOAD_BASE");
+    private static readonly string s_fault = Environment.GetEnvironmentVariable("NODRIVE_FAULT") ?? "none";
+    private static readonly TimeSpan NoProgressTimeout = TimeSpan.FromSeconds(15);   // a request that stops moving is failed long before the platform's 60 s deadline
+    private static readonly TimeSpan MaxRetryAfterWait = TimeSpan.FromSeconds(5);    // a longer Retry-After is reported as a failure instead of leaving Explorer waiting
+    private static readonly HttpClient s_download = CreateDownloadClient();
+    // Windows re-issues a failed FETCH_DATA; remembering a recent network failure per item makes the retry fail instantly instead of waiting out the watchdog again.
+    private static readonly ConcurrentDictionary<string, DateTime> s_recentFailures = new();
+    private static readonly TimeSpan FailureMemory = TimeSpan.FromSeconds(30);
+
+    private static HttpClient CreateDownloadClient()
+    {
+        var c = new HttpClient(new SocketsHttpHandler { PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30), PooledConnectionLifetime = TimeSpan.FromMinutes(5), MaxConnectionsPerServer = 8 }) { Timeout = Timeout.InfiniteTimeSpan };
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("ISV|NoDrive|NoDrive/0.0.1-spike");
+        return c;
+    }
+
     private static CF_CONNECTION_KEY s_connection;
     private static HttpClient? s_graph;
     private static int s_maxConcurrent = 3;
@@ -249,7 +266,12 @@ internal static class CloudProvider
             Console.WriteLine($"[hydrate] item={req.ItemId} required=[{req.Offset}+{req.Length}] optional=[{req.OptOffset}+{req.OptLength}] size={req.FileSize} flags=0x{req.Flags:X} prio={req.Priority} by={System.IO.Path.GetFileName(req.Process ?? "?")}");
             try
             {
+                if (s_recentFailures.TryGetValue(req.ItemId, out var failedAt) && DateTime.UtcNow - failedAt < FailureMemory)
+                {
+                    throw new IOException($"item failed {(DateTime.UtcNow - failedAt).TotalSeconds:F0} s ago; failing fast (retry window {FailureMemory.TotalSeconds:F0} s)");
+                }
                 await HydrateAsync(req, cts.Token);
+                s_recentFailures.TryRemove(req.ItemId, out _);
                 Console.WriteLine($"[hydrate] done item={req.ItemId} {req.Length / 1048576.0:F1} MiB in {sw.Elapsed.TotalSeconds:F1} s");
             }
             catch (OperationCanceledException)
@@ -259,6 +281,8 @@ internal static class CloudProvider
             }
             catch (Exception ex)
             {
+                // Remember only failures where an immediate retry is pointless (no progress, throttling, not found). A dropped connection is transient: Windows re-requests the missing range and it can succeed.
+                if (ex is TimeoutException or HttpRequestException) { s_recentFailures[req.ItemId] = DateTime.UtcNow; }
                 Console.WriteLine($"[hydrate] FAILED {req.Path}: {ex.GetType().Name} {ex.Message}");
                 Complete(req, NTSTATUS.STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE);
             }
@@ -271,18 +295,56 @@ internal static class CloudProvider
 
     private static async Task HydrateAsync(HydrationRequest req, CancellationToken ct)
     {
-        string url = await GetDownloadUrlAsync(req.ItemId, ct);
+        string url = s_downloadBase is not null
+            ? $"{s_downloadBase}/download/{Uri.EscapeDataString(req.ItemId)}?fault={s_fault}"
+            : await GetDownloadUrlAsync(req.ItemId, ct);
         long end = req.Offset + req.Length; // exclusive
-        using var http = new HttpClient(new SocketsHttpHandler { PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30) });
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("ISV|NoDrive|NoDrive/0.0.1-spike");
-        using var msg = new HttpRequestMessage(HttpMethod.Get, url);
-        msg.Headers.Range = new RangeHeaderValue(req.Offset, end - 1);
-        using var resp = await http.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, ct);
-        resp.EnsureSuccessStatusCode();
-        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+
+        // Watchdog (design rule 2): every await below is bounded by "no progress for 20 s"; the timer is re-armed after each chunk.
+        using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        watchdog.CancelAfter(NoProgressTimeout);
+        try
+        {
+            await HydrateCoreAsync(req, url, end, watchdog, ct);
+        }
+        catch (OperationCanceledException) when (watchdog.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"no progress for {NoProgressTimeout.TotalSeconds:F0} s, failing the request instead of leaving the caller waiting");
+        }
+    }
+
+    private static async Task HydrateCoreAsync(HydrationRequest req, string url, long end, CancellationTokenSource watchdog, CancellationToken ct)
+    {
+        var token = watchdog.Token;
+        HttpResponseMessage resp;
+        int attempt = 0;
+        while (true)
+        {
+            using var msg = new HttpRequestMessage(HttpMethod.Get, url);
+            msg.Headers.Range = new RangeHeaderValue(req.Offset, end - 1);
+            resp = await s_download.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, token);
+            if ((int)resp.StatusCode is 429 or 503)
+            {
+                var wait = resp.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(30);
+                resp.Dispose();
+                if (wait > MaxRetryAfterWait || ++attempt > 2)
+                {
+                    throw new HttpRequestException($"throttled: Retry-After {wait.TotalSeconds:F0} s exceeds the {MaxRetryAfterWait.TotalSeconds:F0} s budget; failing the request now (attempt {attempt})");
+                }
+                Console.WriteLine($"[hydrate] throttled, waiting Retry-After {wait.TotalSeconds:F0} s (attempt {attempt})");
+                await Task.Delay(wait, token);
+                watchdog.CancelAfter(NoProgressTimeout);
+                continue;
+            }
+            break;
+        }
+        using var response = resp;
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(token);
+        var http = response;   // keeps the status check below readable
 
         long skip = 0;
-        if (resp.StatusCode == System.Net.HttpStatusCode.OK && req.Offset > 0)
+        if (http.StatusCode == System.Net.HttpStatusCode.OK && req.Offset > 0)
         {
             skip = req.Offset; // Range ignored: server sent the whole file; discard the prefix.
             Console.WriteLine($"[hydrate] server ignored Range (200); skipping {skip} bytes");
@@ -294,7 +356,8 @@ internal static class CloudProvider
         {
             while (skip > 0)
             {
-                int n = await stream.ReadAsync(buffer.AsMemory(0, (int)Math.Min(chunkSize, skip)), ct);
+                int n = await stream.ReadAsync(buffer.AsMemory(0, (int)Math.Min(chunkSize, skip)), token);
+                watchdog.CancelAfter(NoProgressTimeout);
                 if (n == 0) { throw new IOException("stream ended while skipping"); }
                 skip -= n;
             }
@@ -306,7 +369,8 @@ internal static class CloudProvider
                 int filled = 0;
                 while (filled < want)
                 {
-                    int n = await stream.ReadAsync(buffer.AsMemory(filled, want - filled), ct);
+                    int n = await stream.ReadAsync(buffer.AsMemory(filled, want - filled), token);
+                    watchdog.CancelAfter(NoProgressTimeout);
                     if (n == 0) { break; }
                     filled += n;
                 }

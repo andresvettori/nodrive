@@ -15,7 +15,7 @@ EVERY task read all of these, in this order:
 4. `memory_bank/techContext.md` - stack, versions, build/publish commands, constraints
 5. `memory_bank/activeContext.md` - current focus, recent changes, next steps
 6. `memory_bank/progress.md` - what works, what is left, known issues
-7. `memory_bank/projectPlan.md`, `memory_bank/p0-runbook.md`, `memory_bank/bestPractices.md`, `memory_bank/decisions/` (ADRs),
+7. `memory_bank/p0-results.md` (P0 findings, go/no-go and the design changes they imply), `memory_bank/projectPlan.md`, `memory_bank/p0-runbook.md`, `memory_bank/bestPractices.md`, `memory_bank/decisions/` (ADRs),
    `memory_bank/research/` as the task requires.
 
 Update rules:

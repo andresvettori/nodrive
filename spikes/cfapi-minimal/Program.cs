@@ -101,6 +101,7 @@ if (indexPath is not null)
     CloudProvider.UseIndex(store);
     SyncRootRegistrar.PrintEffectivePolicies(root);
     PinWatcher.Start(root);
+    _ = Task.Run(async () => { while (true) { await Task.Delay(TimeSpan.FromSeconds(10)); var l = CloudProvider.CallbackMicros.OrderBy(x => x).ToArray(); if (l.Length > 0) { Console.WriteLine($"[latency] callbacks n={l.Length} p50={l[l.Length / 2]:F0} us p99={l[(int)(l.Length * 0.99)]:F0} us max={l[^1]:F0} us"); } } });
     string? prefetchIds = Environment.GetEnvironmentVariable("NODRIVE_PREFETCH");   // comma-separated folder ids to populate in the background
     if (!string.IsNullOrWhiteSpace(prefetchIds)) { Prefetcher.Start(store, root, "F61C08DC8B03ABFF!101", prefetchIds.Split(',', StringSplitOptions.RemoveEmptyEntries), 20); }
     Console.WriteLine(ProcessStats.Sample("ready"));

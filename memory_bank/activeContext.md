@@ -2,7 +2,11 @@
 
 Updated at the end of every session. Read this file after `projectbrief.md` and before touching code.
 
-## Current focus (2026-11-13)
+## Current focus (updated 2026-11-14): P0 finished, verdict GO
+
+Read `p0-results.md` first. Next: start P1 in the order recommended there (E1 registration with Flags 1058, then the delta/index pipeline, population, hydration with watchdog). The PC is clean (no sync roots, tasks or processes); `index500k.db` and the AOT binaries stay under `C:\Users\<PC_USER>\nodrive-dev` and `nodrive-aot` for later runs.
+
+## Previous focus (2026-11-13)
 
 - Plan approved; memory bank created from the plan and the 2026-11-13 research pass and reviewed for fidelity and consistency; repository scaffolded and verified: `NoDrive.slnx` with `NoDrive.Core`, `NoDrive.Graph`, `NoDrive.Engine` (net11.0-windows10.0.26100.0, PublishAot, CsWin32 NativeMethods list) and `NoDrive.Core.Tests`; `dotnet build` is clean (0 warnings, warnings-as-errors) and `dotnet test` passes 2/2 on macOS. `CLAUDE.md`, `README.md`, `LICENSE` (MIT), `.github/workflows/windows.yml` (build, test, win-x64 AOT publish) exist. Nothing has been committed to git yet (repo initialised, all files untracked). The engine's `Main` is a stub.
 - Next milestone: **P0 spike** on the user's physical Windows 11 x64 PC (this planning session ran on macOS; Native AOT cannot cross-compile, https://learn.microsoft.com/dotnet/core/deploying/native-aot/cross-compile).

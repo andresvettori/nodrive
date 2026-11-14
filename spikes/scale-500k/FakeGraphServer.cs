@@ -60,12 +60,71 @@ internal sealed class FakeGraphServer
         {
             HttpListenerContext ctx;
             try { ctx = _listener.GetContext(); } catch { break; }
-            try { Handle(ctx); } catch (Exception ex) { Console.WriteLine("server error: " + ex.Message); try { ctx.Response.Abort(); } catch { } }
+            // One task per request so a stalled download never blocks the others.
+            _ = Task.Run(() => { try { Handle(ctx); } catch (Exception ex) { Console.WriteLine("server error: " + ex.Message); try { ctx.Response.Abort(); } catch { } } });
         }
+    }
+
+    /// <summary>Logical size of file item n (same formula as the delta JSON, revision 0).</summary>
+    public long SizeOf(int n) => 10_000 + (long)n * 37 % 50_000_000 + (n > _items ? 1 : 0);   // items added by the incremental pass carry revision 1 (+1 byte)
+
+    /// <summary>Deterministic content so a client can verify what it received: byte at offset i of item n is (byte)(i + n).</summary>
+    private static void FillContent(byte[] buffer, int count, long offset, int n)
+    {
+        for (int k = 0; k < count; k++) { buffer[k] = unchecked((byte)(offset + k + n)); }
+    }
+
+    private void HandleDownload(HttpListenerContext ctx)
+    {
+        string raw = Uri.UnescapeDataString(ctx.Request.Url!.AbsolutePath["/download/".Length..]);
+        int bang = raw.IndexOf('!');
+        if (bang < 0 || !int.TryParse(raw[(bang + 1)..], out int n) || n <= _folders || n > _items + 1000) { ctx.Response.StatusCode = 404; ctx.Response.Close(); return; }
+        string fault = ctx.Request.QueryString["fault"] ?? "none";
+        long size = SizeOf(n);
+        long start = 0, end = size - 1;
+        bool ranged = false;
+        string? rangeHeader = ctx.Request.Headers["Range"];
+        if (rangeHeader is not null && fault != "ignorerange" && rangeHeader.StartsWith("bytes=", StringComparison.Ordinal))
+        {
+            var parts = rangeHeader["bytes=".Length..].Split('-');
+            start = long.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture);
+            if (parts.Length > 1 && parts[1].Length > 0) { end = Math.Min(size - 1, long.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture)); }
+            ranged = true;
+        }
+        Console.WriteLine($"download n={n} size={size} range={(ranged ? $"{start}-{end}" : "none")} fault={fault}");
+
+        if (fault == "429")
+        {
+            ctx.Response.StatusCode = 429;
+            ctx.Response.Headers["Retry-After"] = ctx.Request.QueryString["retry"] ?? "120";
+            ctx.Response.Close();
+            return;
+        }
+        long length = end - start + 1;
+        ctx.Response.StatusCode = ranged ? 206 : 200;
+        if (ranged) { ctx.Response.Headers["Content-Range"] = $"bytes {start}-{end}/{size}"; }
+        ctx.Response.Headers["Accept-Ranges"] = "bytes";
+        ctx.Response.ContentLength64 = length;
+
+        var buf = new byte[64 * 1024];
+        long sent = 0;
+        var output = ctx.Response.OutputStream;
+        while (sent < length)
+        {
+            int chunk = (int)Math.Min(buf.Length, length - sent);
+            FillContent(buf, chunk, start + sent, n);
+            output.Write(buf, 0, chunk);
+            sent += chunk;
+            if (fault == "stall" && sent >= 64 * 1024) { Thread.Sleep(TimeSpan.FromSeconds(180)); break; }                // goes silent mid-body
+            if (fault == "reset" && sent >= 2 * 1024 * 1024) { ctx.Response.Abort(); return; }                              // connection drops mid-body
+            if (fault == "slow") { Thread.Sleep(250); }                                                                     // 256 KiB/s: slow but alive
+        }
+        ctx.Response.Close();
     }
 
     private void Handle(HttpListenerContext ctx)
     {
+        if (ctx.Request.Url!.AbsolutePath.StartsWith("/download/", StringComparison.Ordinal)) { HandleDownload(ctx); return; }
         var q = ctx.Request.QueryString;
         int page = int.TryParse(q["page"], out var pg) ? pg : 0;
         bool incremental = q["since"] is not null;
