@@ -29,9 +29,9 @@ Hand-edited `Flags` on the spike's own key, user checking Explorer (reopened win
 | 34 (what `Register` writes) | 0x20 + 0x02 | blank | generic brown box on online-only files | **absent** |
 | 2 | 0x02 | **shows** (files and folders) | gone | absent |
 | 1026 | 0x400 + 0x02 | as for 2 | as for 2 | absent |
-| 1058 (= OneDrive's value) | 0x400 + 0x20 + 0x02 | to confirm | to confirm | **PRESENT** |
+| 1058 (= OneDrive's value) | 0x400 + 0x20 + 0x02 | **shows, identical to OneDrive's** (user, 2026-11-14) | **standard cloud/check icons, identical to OneDrive's** | **PRESENT** |
 
-Conclusions: the **context-menu verbs need both 0x20 and 0x400**; with 0x20 set and no custom-state handler registered, Explorer expects a handler we lack and shows a blank Status and the brown box; with 0x20 cleared the plain built-in Status works but there are no verbs. The research inference "0x20 enables the verbs" was incomplete (0x20 alone is not enough), and "0x20 hides the menu" was wrong.
+Conclusions: **Flags=1058 alone gives the complete native experience** (verbs, Status column, standard cloud icons) without any custom COM handler or package identity; the blank Status and brown box seen with 34 are what Explorer shows when 0x20 is set but 0x400 is not. The verbs need both 0x20 and 0x400; with 0x20 cleared (Flags 2) the plain Status works but there are no verbs. The research inference "0x20 enables the verbs" was incomplete (0x20 alone is not enough), and "0x20 hides the menu" was wrong.
 
 Probe of the WinRT API (`cfapi-minimal --probe-flags`, throwaway roots): `Register` writes Flags=34 for baseline, `AllowPinning`, `ProtectionMode` (also writes a `ProtectionMode` registry value), `RecycleBinUri` (writes `RecycleBinUrl`), and item property definitions; **`ShowSiblingsAsGroup=true` adds 0x200 (Flags=546)**. **No `StorageProviderSyncRootInfo` property produces 0x400**, so getting verbs from an unpackaged app means writing `Flags` in HKLM ourselves (administrator rights: an installer step, and must survive re-registration) or finding the registration route that sets it (package identity / `windows.cloudFiles` manifest extension is the likely one).
 
