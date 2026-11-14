@@ -53,12 +53,12 @@ Fill one row per variant; all on the same PC, same OS build, Defender on, AC pow
 |---|---|---|---|---|---|---|---|---|---|
 | hello-world WinExe | AOT | | | | | | n/a | n/a | |
 | hello-world WinExe | JIT fx-dep | | | | | | n/a | n/a | |
-| tray only | AOT | | | | | | n/a | n/a | |
+| tray only | AOT | 4.3 MB | 4.3 MB (20 min) | 14.5-14.8 MB | 3-5 | 203 | n/a | n/a | 2026-11-14, user's PC, Win11 26H2 26300.9974, OneDrive.exe running; GC knobs confirmed applied (ConserveMem=6, RegionSize=1 MiB). Brief bump to 5.2 MB / 21 MB WS when the tray menu was used. |
 | tray only | JIT fx-dep | | | | | | n/a | n/a | |
 | tray + HttpClient 1 GB | AOT | | | | | | | | GC knobs as techContext |
 | tray + HttpClient 1 GB | AOT, UseWindowsThreadPool=false | | | | | | | | |
 | tray + HttpClient 1 GB | JIT fx-dep | | | | | | | | |
-| tray + cfapi connected, 0 items | AOT | | | | | | | | CldApi.dll owns a threadpool |
+| tray + cfapi connected, 200 placeholders | AOT | 10.8 MB | 10.6 MB (3 min) | 47.5 MB | 11-19 | 578 | | | 2026-11-14, `cfapi-minimal`, WinRT registration, no hydration exercised yet. WS is mostly shared WinRT/combase pages; threads = CldApi pool + 3 workers + HttpClient. |
 | tray + cfapi + 500k-item index idle | AOT | | | | | | | | must be within budget of previous row |
 | OneDrive.exe (same account, idle) | n/a | | | | | | | | reference |
 | rclone mount (same remote, idle) | n/a | | | | | | | | reference |

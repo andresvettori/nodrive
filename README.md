@@ -87,8 +87,8 @@ Expand-Archive -Force "$env:USERPROFILE\Downloads\spikes-win-x64.zip" "$env:USER
 Set-Location $env:USERPROFILE\nodrive-spikes
 Get-ChildItem -Recurse -File | Unblock-File
 .\onedrive-state.ps1                                    # what OneDrive is doing on this PC
-.\aot-baseline\aot-baseline.exe --variant tray          # idle-memory baseline; Quit from the tray icon
-.\cfapi-minimal\cfapi-minimal.exe --top 200             # sync root + placeholders + hydration; --cleanup to unregister
+.\aot-baseline\aot-baseline.exe --variant tray          # BLOCKS until you quit it (tray icon > Quit, or Ctrl+C); prints stats every 30 s
+.\cfapi-minimal\cfapi-minimal.exe --top 200             # BLOCKS and logs callbacks while you use Explorer; tray > Quit; --cleanup to unregister
 ```
 
 The full procedure, measurements and cleanup are in

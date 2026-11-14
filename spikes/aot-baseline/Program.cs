@@ -28,6 +28,7 @@ for (int i = 0; i < args.Length; i++)
 
 Console.WriteLine($"aot-baseline variant={variant} aot={IsAot()} gcServer={System.Runtime.GCSettings.IsServerGC} pid={Environment.ProcessId}");
 Console.WriteLine(ProcessStats.Sample("start"));
+Console.WriteLine("This process BLOCKS until you quit it: right-click the tray icon > Quit, press Ctrl+C here, or Stop-Process -Name aot-baseline from another window.");
 ProcessStats.PrintGcConfiguration();
 
 var quit = new CancellationTokenSource();

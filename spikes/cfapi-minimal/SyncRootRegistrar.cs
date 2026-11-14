@@ -118,6 +118,13 @@ internal static class SyncRootRegistrar
         }
     }
 
+    /// <summary>True when our own registration (from a previous run) exists in the shell's SyncRootManager key.</summary>
+    public static bool IsRegisteredByUs()
+    {
+        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager\" + SyncRootId);
+        return key is not null;
+    }
+
     /// <summary>True when <paramref name="path"/> is already inside some provider's sync root (ours or a foreign one).</summary>
     public static unsafe bool IsUnderSyncRoot(string path, out string providerName)
     {

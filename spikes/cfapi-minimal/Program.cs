@@ -38,11 +38,12 @@ if (cleanup)
 }
 
 // Safety: refuse to register inside another provider's root (e.g. the real OneDrive folder).
+bool ours = SyncRootRegistrar.IsRegisteredByUs();
 if (Directory.Exists(root) && SyncRootRegistrar.IsUnderSyncRoot(root, out string owner))
 {
-    if (owner.Contains("NoDrive", StringComparison.OrdinalIgnoreCase))
+    if (ours || owner.Contains("NoDrive", StringComparison.OrdinalIgnoreCase))
     {
-        Console.WriteLine($"root is already registered by '{owner}' (previous run); reusing the registration");
+        Console.WriteLine($"root is already registered (provider '{owner}', previous run); reusing the registration and existing placeholders");
     }
     else
     {
@@ -50,7 +51,7 @@ if (Directory.Exists(root) && SyncRootRegistrar.IsUnderSyncRoot(root, out string
         return 3;
     }
 }
-if (Directory.Exists(root) && Directory.EnumerateFileSystemEntries(root).Any() && !SyncRootRegistrar.IsUnderSyncRoot(root, out _))
+if (!ours && Directory.Exists(root) && Directory.EnumerateFileSystemEntries(root).Any() && !SyncRootRegistrar.IsUnderSyncRoot(root, out _))
 {
     Console.WriteLine($"STOP: {root} exists and is not empty. Use an empty folder for the spike.");
     return 3;
@@ -115,7 +116,9 @@ foreach (var group in byParentDir)
 {
     string dir = Path.Combine(root, group.Key);
     if (!Directory.Exists(dir)) { Console.WriteLine($"  skipping {group.Key}: parent placeholder missing"); continue; }
-    var children = group.Select(x => x.Item).OrderByDescending(i => i.IsFolder).ToList();
+    var children = group.Select(x => x.Item)
+        .Where(i => !Path.Exists(Path.Combine(dir, i.Name)))   // re-run: keep placeholders from the previous run
+        .OrderByDescending(i => i.IsFolder).ToList();
     created += PlaceholderWriter.CreateChildren(dir, children);
 }
 Console.WriteLine($"placeholders created: {created}");
@@ -123,6 +126,16 @@ Console.WriteLine(ProcessStats.Sample("ready"));
 Console.WriteLine();
 Console.WriteLine("Open the folder in Explorer, double-click an online-only file, pin a folder, rename/delete something.");
 Console.WriteLine("Quit from the tray menu (disconnects, keeps the registration). Run with --cleanup to unregister.");
+Console.WriteLine("This process now BLOCKS and waits for Explorer activity; every callback and hydration is logged below.");
+Console.WriteLine();
+_ = Task.Run(async () =>
+{
+    await Task.Delay(TimeSpan.FromMinutes(2));
+    if (CloudProvider.CallbackMicros.Count == 0)
+    {
+        Console.WriteLine("(no callbacks after 2 minutes: open Explorer at the folder above and double-click a file to trigger a hydration)");
+    }
+});
 
 TrayWindow.Create("NoDriveCfApiMinimal", "NoDrive cfapi-minimal", withIcon: true, onQuit: CloudProvider.Disconnect);
 ProcessStats.StartSampler(TimeSpan.FromSeconds(30));

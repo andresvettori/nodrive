@@ -6,6 +6,12 @@ Legend: **[ready]** code is in the repo and compiles; **[to write]** still to be
 
 All commands assume a non-elevated PowerShell 7 or Windows PowerShell session at the repo root.
 
+**Which commands block, and how to stop them** (they are servers, not scripts):
+- `aot-baseline.exe` and `cfapi-minimal.exe` run until you quit them: right-click their tray icon > **Quit**, or press **Ctrl+C** in their window, or `Stop-Process -Name aot-baseline` / `Stop-Process -Name cfapi-minimal` from another window. Start them with `Start-Process ...` (returns immediately, opens their own window) when you want to keep typing in the same window.
+- `measure.ps1` runs for exactly `-Minutes N` (default 10) and then exits by itself.
+- `graph-smoke --all` / `--largest` runs about 6 minutes and exits by itself; `--pages N` exits in seconds.
+- `onedrive-state.ps1` exits immediately.
+
 ## Fast path: run the spikes without installing any SDK or build tools
 
 Every green CI run (https://github.com/andresvettori/nodrive/actions, workflow "windows") publishes the
@@ -38,11 +44,20 @@ Start-Process .\aot-baseline\aot-baseline.exe -ArgumentList '--variant http --it
 .\measure.ps1 -ProcessName aot-baseline -Minutes 12 -IntervalSeconds 5 -Out results\aot-http-burst.csv
 Stop-Process -Name aot-baseline
 
-# F.4 Step 3 quick version: the Cloud Files provider (keep this window open; it logs every callback)
-.\cfapi-minimal\cfapi-minimal.exe --top 200
-#     In Explorer: look for the "NoDrive Spike" node, open %USERPROFILE%\NoDriveSpike, double-click a small file, rename one, delete one.
-#     Second window:
+# F.4 Step 3 quick version: the Cloud Files provider. It BLOCKS and waits for Explorer activity; the console is the log.
+Start-Process .\cfapi-minimal\cfapi-minimal.exe -ArgumentList '--top 200'      # own window; wait for "placeholders created"
 explorer.exe "$env:USERPROFILE\NoDriveSpike"
+#     Then, with the console visible, do these in Explorer and watch for [cb] / [hydrate] lines:
+#       a) Look at the navigation pane: is there a "NoDrive Spike" node? Does the folder show a Status column with cloud icons?
+#          (View > Details; right-click a column header > Status if hidden.)
+#       b) Double-click a SMALL online-only file (a .pdf/.txt/.jpg). Expect: it opens; console shows "[hydrate] ... offset=0 length=..."
+#          then "[hydrate] done"; the file's icon turns to a green check.
+#       c) Right-click a file: are "Always keep on this device" / "Free up space" there (or inside a cloud-provider flyout)? Pin one
+#          file -> expect a [hydrate] line without you opening it.
+#       d) Rename a placeholder (F2) -> expect "[cb] NOTIFY_RENAME ... -> ack 0x00000000" immediately, no Explorer wait.
+#       e) Delete a placeholder (Del) -> expect "[cb] NOTIFY_DELETE ... -> ack 0x00000000" immediately.
+#       f) Open a large file (100 MB+) if the page has one, in a media player: watch several [hydrate] ranges arrive out of order.
+#     Nothing in the spike writes to OneDrive: renames/deletes only affect the local spike folder."
 .\measure.ps1 -ProcessName cfapi-minimal -Minutes 10 -Out results\cfapi-idle.csv
 Get-WinEvent -LogName Microsoft-Windows-CloudFiles/Operational -MaxEvents 30 | Format-Table TimeCreated, Id, Message -Wrap
 #     Quit from the tray icon (prints callback latency p50/p99/max), then remove the registration:
