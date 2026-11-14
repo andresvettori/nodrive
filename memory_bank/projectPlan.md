@@ -128,6 +128,10 @@ Each epic lists acceptance criteria. "Harness" = the P0 responsiveness harness; 
 - Guards: remote deletes go to the OneDrive recycle bin only (`permanentDelete` exists on personal, https://learn.microsoft.com/en-us/graph/api/driveitem-permanentdelete?view=graph-rest-1.0, but is never used by default); mass-delete threshold (N items or X% of the index in one batch) pauses sync and asks; move-out of the root: a hydrated item is acked and journaled as a remote `Delete`; a dehydrated placeholder is denied (`ACK_RENAME` with a failure status, the tray explains how to hydrate first) because hydrating inside the ack would block Explorer's dialog, and P2 adds a CopyHook warning (see `systemPatterns.md` 3e); never dehydrate a NotInSync file.
 - Acceptance: move a folder of 10k placeholders inside the root and then out of it; the Explorer dialog completes in local-move time, remote reconciles later with zero duplicates or conflicts; delete 60% of the index in one shot and sync pauses with a prompt.
 
+### E3b. Pin / unpin handling (proven in P0)
+- A recursive attribute watcher (bounded to 2 concurrent operations) reacts to `PINNED` on an online-only file with `CfHydratePlaceholder` and to `UNPINNED` on a hydrated in-sync file with `CfDehydratePlaceholder`; never dehydrate a file that is not in sync; ignore directories; de-duplicate in-flight paths; startup sweep for pins set while the engine was not running (a pin applied before the watcher existed is not re-signalled).
+- Acceptance: pin of 1,000 files completes with bounded memory and Explorer responsive; unpin of a pinned folder dehydrates only in-sync files.
+
 ### E7a. Elevated setup and Explorer verbs (ADR-0009)
 - `--setup` (UAC): `Register` the sync root, write `Flags=1058` under our SyncRootManager key; engine start-up never calls `Register`, only `CfConnectSyncRoot`.
 - Start-up read-only check of `Flags`; tray notice and elevated repair action if it differs; sync continues regardless.

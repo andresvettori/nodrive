@@ -108,9 +108,22 @@ foreach (var id in items.Keys) { if (Resolve(id) is null) { unresolved++; } }
 Console.WriteLine($"resolvable under root: {relPath.Count}, skipped (parent not in this page): {unresolved}");
 
 // 2. Register and connect.
-string how = await SyncRootRegistrar.RegisterAsync(root, forceWin32);
-Console.WriteLine($"registered via {how}: id={SyncRootRegistrar.SyncRootId}");
+// ADR-0009: Register() resets SyncRootManager Flags to 34, so an existing registration is NOT re-registered; the engine only connects.
+if (ours)
+{
+    Console.WriteLine($"existing registration kept (not re-registered): id={SyncRootRegistrar.SyncRootId}");
+}
+else
+{
+    string how = await SyncRootRegistrar.RegisterAsync(root, forceWin32);
+    Console.WriteLine($"registered via {how}: id={SyncRootRegistrar.SyncRootId}");
+    bool applied = SyncRootRegistrar.TryApplyShellFlags(out string why);
+    Console.WriteLine($"shell flags -> {SyncRootRegistrar.ShellIntegrationFlags}: {(applied ? "applied" : "NOT applied (" + why + ")")}");
+}
+int? flags = SyncRootRegistrar.ReadShellFlags();
+Console.WriteLine($"SyncRootManager Flags = {flags} ({(flags == SyncRootRegistrar.ShellIntegrationFlags ? "native Explorer integration" : "run elevated setup: verbs/Status/icons will be limited")})");
 CloudProvider.Connect(root, graph, workers);
+PinWatcher.Start(root);
 SyncRootRegistrar.PrintEffectivePolicies(root);
 
 // 3. Create placeholders, directories first, shallow to deep.
@@ -149,6 +162,7 @@ TrayWindow.Create("NoDriveCfApiMinimal", "NoDrive cfapi-minimal", withIcon: true
 ProcessStats.StartSampler(TimeSpan.FromSeconds(30));
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; TrayWindow.RequestQuit(); };
 TrayWindow.RunMessageLoop();
+PinWatcher.Stop();
 CloudProvider.Disconnect();
 TrayWindow.Destroy();
 

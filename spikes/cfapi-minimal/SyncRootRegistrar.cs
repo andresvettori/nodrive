@@ -203,6 +203,34 @@ internal static class SyncRootRegistrar
         Console.WriteLine($"effective policies: hydration={s->HydrationPolicy.Primary}/{s->HydrationPolicy.Modifier} population={s->PopulationPolicy.Primary} insync={s->InSyncPolicy} hardlink={s->HardLinkPolicy} provider='{s->ProviderName}'");
     }
 
+    /// <summary>The SyncRootManager Flags value that gives the native OneDrive-like Explorer integration (ADR-0009).</summary>
+    public const int ShellIntegrationFlags = 1058;
+
+    /// <summary>Reads the Flags value of our SyncRootManager key (readable without elevation); null when the key is missing.</summary>
+    public static int? ReadShellFlags()
+    {
+        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager\" + SyncRootId);
+        return key?.GetValue("Flags") as int?;
+    }
+
+    /// <summary>Writes Flags=1058 on our key. Needs an elevated token (the setup step); returns false with a reason otherwise.</summary>
+    public static bool TryApplyShellFlags(out string reason)
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager\" + SyncRootId, writable: true);
+            if (key is null) { reason = "key not found"; return false; }
+            key.SetValue("Flags", ShellIntegrationFlags, Microsoft.Win32.RegistryValueKind.DWord);
+            reason = "ok";
+            return true;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            reason = "not elevated: " + ex.Message;
+            return false;
+        }
+    }
+
     /// <summary>True when our own registration (from a previous run) exists in the shell's SyncRootManager key.</summary>
     public static bool IsRegisteredByUs()
     {
