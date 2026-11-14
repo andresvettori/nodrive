@@ -6,6 +6,14 @@ Why this matters for NoDrive: OneDrive.exe reached almost 4 GB on the user's 8 G
 
 ---
 
+## Measured on the user's PC (2026-11-14, Windows 11 26H2 26300.9974, Native AOT, .NET 11, GC: workstation non-concurrent, ConserveMemory 6, RegionSize 1 MiB)
+
+- Tray process idle for 20 min: **4.3 MB private, 14.5 MB working set, 3-5 threads**, flat (one transient bump to 5.2 MB private / 21 MB WS when the tray menu was used).
+- HttpClient streaming 1 GiB (1 MiB `ArrayPool` buffer, `ResponseHeadersRead`): private **4.4 MB -> 9.0 MB peak**, gcCommitted 3.8 MB; after `GC.Collect(MaxGeneration, Aggressive)` twice, 5 s apart: **6.4 MB private, gcCommitted 1.2 MB**, stable. The release sequence returns committed GC memory (3.8 -> 1.2 MB) but the process stays about 2 MB above its idle floor (native/runtime state).
+- Cloud Files provider (Native AOT, connected, 200 placeholders): 12.7-14.6 MB private idle; during a 1.68 GB `CfHydratePlaceholder` it rose by only 2.6 MB and stayed there (+2.5 MB at +60 s); working set shrank from 30.6 to 16.2 MB; threads 18 -> 12.
+- Reference: OneDrive.exe on the same PC idle: 209 MB private, 142 MB WS, 31 threads, 1,061 handles. Explorer 151 MB private.
+- The numbers meet the target (idle < 30 MB; back within 10 MB of idle after a burst) with large margin; the open item is behaviour under the 500k-item index and many concurrent hydrations (P0 step 6/7).
+
 ## Measured in CI (2026-11-13, windows-latest, .NET SDK 11.0.100, ILCompiler 11.0.0)
 
 - Native AOT publish of `net11.0-windows10.0.26100.0` projects works: engine stub 0.78 MB; `aot-baseline` (message loop + tray + HttpClient + JsonNode) 4.41 MB; `cfapi-minimal` (adds WinRT `Windows.Storage.Provider` projection via CsWinRT and the Cloud Files callbacks) 6.06 MB. Zero IL2xxx/IL3xxx warnings from any project, so CsWinRT's projection for the .NET 11 TFM is AOT-clean in this configuration.

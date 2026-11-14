@@ -55,12 +55,12 @@ Fill one row per variant; all on the same PC, same OS build, Defender on, AC pow
 | hello-world WinExe | JIT fx-dep | | | | | | n/a | n/a | |
 | tray only | AOT | 4.3 MB | 4.3 MB (20 min) | 14.5-14.8 MB | 3-5 | 203 | n/a | n/a | 2026-11-14, user's PC, Win11 26H2 26300.9974, OneDrive.exe running; GC knobs confirmed applied (ConserveMem=6, RegionSize=1 MiB). Brief bump to 5.2 MB / 21 MB WS when the tray menu was used. |
 | tray only | JIT fx-dep | | | | | | n/a | n/a | |
-| tray + HttpClient 1 GB | AOT | | | | | | | | GC knobs as techContext |
+| tray + HttpClient 1 GB | AOT | 4.4 MB (http-ready) | n/a | 14.1 MB (start) | 8 | 203 | **9.0 MB** (1 GB streamed in 82 s, 12.5 MB/s) | **6.4 MB** right after the two-step Aggressive GC, flat afterwards (gcCommitted 3.8 -> 1.2 MB) | 2026-11-14, `aot-baseline --variant http --item <id> --limit-mb 1024`, 1 MiB pooled buffer, user's PC |
 | tray + HttpClient 1 GB | AOT, UseWindowsThreadPool=false | | | | | | | | |
 | tray + HttpClient 1 GB | JIT fx-dep | | | | | | | | |
 | tray + cfapi connected, 200 placeholders | AOT | 10.8 MB | 10.6 MB (3 min) | 47.5 MB | 11-19 | 578 | | | 2026-11-14, `cfapi-minimal`, WinRT registration, no hydration exercised yet. WS is mostly shared WinRT/combase pages; threads = CldApi pool + 3 workers + HttpClient. |
 | tray + cfapi + 500k-item index idle | AOT | | | | | | | | must be within budget of previous row |
-| OneDrive.exe (same account, idle) | n/a | | | | | | | | reference |
+| OneDrive.exe (same account, idle) | n/a | 209.4 MB | n/a | 142.1 MB | 31 | 1,061 | not measured (user reports about 4 GB under many-file load) | | 2026-11-14 snapshot, idle with Explorer open; explorer.exe was 151 MB private, SearchHost 38 MB |
 | rclone mount (same remote, idle) | n/a | | | | | | | | reference |
 
 Targets to compare against: idle Private Bytes under 30 MB with a 500k-item index; after the burst, commit returns to within 10 MB of idle inside 60 s.

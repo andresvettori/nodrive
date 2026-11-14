@@ -12,6 +12,6 @@ tell application "iTerm2"
   set w to (create window with default profile command "/bin/bash $RUN")
 end tell
 OSA
-for i in $(seq 1 120); do grep -q '^__EXIT:' "$OUT" 2>/dev/null && break; sleep 1; done
+for i in $(seq 1 ${NODRIVE_WAIT:-120}); do grep -q '^__EXIT:' "$OUT" 2>/dev/null && break; sleep 1; done
 grep -v -E "post-quantum|store now|openssh.com/pq" "$OUT" 2>/dev/null | grep -v '^$'
 rm -f "$RUN"
