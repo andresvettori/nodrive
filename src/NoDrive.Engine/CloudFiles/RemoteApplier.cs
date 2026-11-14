@@ -37,11 +37,14 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
     private void Apply(IReadOnlyList<DeltaChange> changes, Dictionary<string, Old> olds)
     {
         int created = 0, removed = 0, moved = 0, updated = 0;
+        var dirty = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var ch in changes)
         {
             try
             {
                 olds.TryGetValue(ch.Id, out var old);
+                if (old?.Path is { } oldPath && Path.GetDirectoryName(oldPath) is { } od) { dirty.Add(od); }
+                if (index.TryGet(ch.Id) is { } nw && population.IsPopulated(nw.ParentId ?? rootId) && PathOf(nw) is { } np && Path.GetDirectoryName(np) is { } nd) { dirty.Add(nd); }
                 if (ch.Item is null)
                 {
                     if (old?.Path is { } p && DeleteLocal(p)) { removed++; }
@@ -67,7 +70,14 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
             }
             catch (Exception ex) { Log.Warn($"remote apply of {ch.Id} failed: {ex.Message}"); }
         }
+        foreach (var d in dirty) { NotifyDir(d); }
         if (created + removed + moved + updated > 0) { Log.Info($"applied to disk: {created} created, {updated} updated, {moved} moved, {removed} removed"); }
+    }
+
+    /// <summary>Tells Explorer the folder listing changed so it refreshes without F5.</summary>
+    private static void NotifyDir(string dir)
+    {
+        fixed (char* p = dir) { PInvoke.SHChangeNotify(Windows.Win32.UI.Shell.SHCNE_ID.SHCNE_UPDATEDIR, Windows.Win32.UI.Shell.SHCNF_FLAGS.SHCNF_PATHW | Windows.Win32.UI.Shell.SHCNF_FLAGS.SHCNF_FLUSHNOWAIT, p, null); }
     }
 
     private string? PathOf(IndexedItem item)
