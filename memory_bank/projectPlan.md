@@ -67,6 +67,9 @@ Targets to compare against: idle Private Bytes under 30 MB with a 500k-item inde
 
 ### 2.4 Kill / go criteria
 
+Status 2026-11-13: the toolchain half is answered. CI AOT-published `cfapi-minimal` (WinRT projection + cfapi callbacks) on .NET 11 win-x64 with zero IL2xxx/IL3xxx warnings (run #5). Remaining: runtime behaviour of registration, placeholders and hydration on the user's build (step 3), and the memory numbers (step 2).
+
+
 **Kill (fall back, do not proceed with the current stack):**
 - cfapi callbacks as AOT function pointers, or the WinRT registration projection, cannot be made to work on net11.0 after reasonable effort. Fallback order: .NET 10 LTS AOT (same end of support, Nov 2028: https://devblogs.microsoft.com/dotnet/announcing-dotnet-11/), then framework-dependent trimmed JIT.
 - Unpackaged `StorageProviderSyncRootManager.Register` does not produce the nav-pane node or Status column on the target build and the `CfRegisterSyncRoot` + registry fallback does not either.
