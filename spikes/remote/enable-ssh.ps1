@@ -30,8 +30,8 @@ Start-Service sshd
 Set-Service sshd -StartupType Automatic
 
 # 2. PowerShell as the default shell (pwsh 7 if present, else Windows PowerShell)
-$shell = (Get-Command pwsh.exe -ErrorAction SilentlyContinue)?.Source
-if (-not $shell) { $shell = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" }
+$pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+$shell = if ($pwsh) { $pwsh.Source } else { "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" }
 New-Item -Path 'HKLM:\SOFTWARE\OpenSSH' -Force | Out-Null
 New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell -Value $shell -PropertyType String -Force | Out-Null
 
