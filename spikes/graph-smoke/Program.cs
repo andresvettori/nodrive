@@ -15,6 +15,9 @@ int maxPages = 3;
 int top = 1000;
 bool forceInteractive = false;
 int largest = 0;
+bool histogram = false;
+var childCounts = new Dictionary<string, int>();
+var folderNames = new Dictionary<string, string>();
 for (int i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -23,6 +26,7 @@ for (int i = 0; i < args.Length; i++)
         case "--top": top = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
         case "--interactive": forceInteractive = true; break;
         case "--all": maxPages = int.MaxValue; break;
+        case "--histogram": histogram = true; maxPages = int.MaxValue; break;
         case "--largest": largest = int.Parse(args[++i], CultureInfo.InvariantCulture); maxPages = int.MaxValue; break;
     }
 }
@@ -132,6 +136,12 @@ var biggest = new List<(long Size, string Id, string Name, string Parent)>();
         int pf = 0, pd = 0, pdel = 0;
         foreach (var it in value)
         {
+            if (histogram && it!["deleted"] is null)
+            {
+                string? pid = it["parentReference"]?["id"]?.GetValue<string>();
+                if (pid is not null) { childCounts[pid] = childCounts.GetValueOrDefault(pid) + 1; }
+                if (it["folder"] is not null) { folderNames[it["id"]!.GetValue<string>()] = (it["parentReference"]?["path"]?.GetValue<string>() ?? "") + "/" + it["name"]!.GetValue<string>(); }
+            }
             if (it!["deleted"] is not null) { pdel++; continue; }
             if (it["folder"] is not null) { pd++; }
             else if (it["file"] is not null)
@@ -160,6 +170,25 @@ var biggest = new List<(long Size, string Id, string Name, string Parent)>();
     Console.WriteLine($"  total {items} items ({folders} folders, {files} files, {deleted} deleted) over {page} page(s) in {total.ElapsedMilliseconds} ms; $top requested {top}");
     if (url is not null && page >= maxPages) { Console.WriteLine($"  stopped at --pages {maxPages}; more pages remain (use --all to enumerate everything)"); }
     Console.WriteLine();
+    if (histogram)
+    {
+        Console.WriteLine("=== children-per-folder distribution (real drive) ===");
+        var sizes = childCounts.Values.OrderByDescending(v => v).ToArray();
+        long totalItems = sizes.Sum(v => (long)v);
+        Console.WriteLine($"folders with children: {sizes.Length}; items counted: {totalItems}");
+        foreach (int th in new[] { 100, 250, 500, 1000, 2000, 5000, 10000, 30000 })
+        {
+            var over = sizes.Where(v => v >= th).ToArray();
+            Console.WriteLine($"  folders with >= {th,6} children: {over.Length,5}  holding {over.Sum(v => (long)v),8} items ({over.Sum(v => (long)v) * 100.0 / totalItems:F1}% of all) -> populate cost {over.Sum(v => (long)v) * 0.16 / 1000.0:F1} s at 160 us each");
+        }
+        Console.WriteLine("  largest folders:");
+        foreach (var kv in childCounts.OrderByDescending(k => k.Value).Take(12))
+        {
+            Console.WriteLine($"    {kv.Value,7} children  {(folderNames.TryGetValue(kv.Key, out var n) ? n : kv.Key)}");
+        }
+        Console.WriteLine($"  whole drive populated = {totalItems * 0.16 / 1000.0:F0} s of Windows time at 160 us/placeholder");
+        Console.WriteLine();
+    }
     if (largest > 0)
     {
         biggest.Sort((a, b) => b.Size.CompareTo(a.Size));
