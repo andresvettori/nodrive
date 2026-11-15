@@ -240,3 +240,9 @@ Run on the Windows PC before every release; automated where possible via the har
 - Never promote a "community-reported" or "to verify in spike" claim to a fact without recording where it was verified (spike README, OS build, date).
 - Any change to section 0 or section 6 (ground rules, acceptance tests) needs the user's explicit agreement; everything else can be updated as work progresses.
 - Re-read `projectbrief.md` before changing scope; scope changes go there first, then here.
+
+## P1.5 Activity, settings and bandwidth (proposed 2026-11-15, awaiting the user's choice of UI technology)
+- Cosmetic (done 2026-11-15): app icon (tools/make_icon.py -> Assets/nodrive.ico, embedded as ApplicationIcon, used by tray, sync root and navigation pane), Explorer navigation pane entry (HKCU CLSID with System.IsPinnedToNameSpaceTree).
+- Settings/activity screen opened from the tray. Options: (A) local web UI served by the engine on 127.0.0.1 (HttpListener, per-session token, no UI framework, AOT-clean, same UI later on macOS/Linux; recommended); (B) separate on-demand WinForms process (JIT, not AOT-compatible, Windows only, ~40 MB only while open); (C) Avalonia (AOT-capable, cross-platform, larger). The always-on engine must not load a UI framework.
+- Screen content: activity log (current and recent files with outcome), current configuration (root, account, policy, versions), editable settings (poll interval, workers, bandwidth limits, autostart, hydration policy), links to docs (install, configure, custom Entra app id).
+- Bandwidth throttling: token buckets shared by downloads (Hydrator) and uploads (UploadService), limits in config.json (KiB/s, 0 = unlimited), live-reloaded; optional schedule later.

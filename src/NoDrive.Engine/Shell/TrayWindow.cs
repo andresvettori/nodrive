@@ -84,7 +84,7 @@ internal static unsafe class TrayWindow
         var nid = BaseData();
         nid.uFlags = NOTIFY_ICON_DATA_FLAGS.NIF_MESSAGE | NOTIFY_ICON_DATA_FLAGS.NIF_ICON | NOTIFY_ICON_DATA_FLAGS.NIF_TIP;
         nid.uCallbackMessage = WmTray;
-        nid.hIcon = PInvoke.LoadIcon(HINSTANCE.Null, PInvoke.IDI_APPLICATION);
+        nid.hIcon = LoadAppIcon();
         CopyTip(ref nid);
         s_hasIcon = PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_ADD, &nid);
     }
@@ -112,6 +112,16 @@ internal static unsafe class TrayWindow
     public static void RequestQuit()
     {
         if (!s_hwnd.IsNull) { PInvoke.PostMessage(s_hwnd, PInvoke.WM_CLOSE, default, default); }
+    }
+
+    /// <summary>The NoDrive icon embedded in the exe (ApplicationIcon); falls back to the generic application icon.</summary>
+    private static HICON LoadAppIcon()
+    {
+        fixed (char* p = Environment.ProcessPath ?? "")
+        {
+            HICON icon = PInvoke.ExtractIcon(HINSTANCE.Null, new PCWSTR(p), 0);
+            return icon.IsNull ? PInvoke.LoadIcon(HINSTANCE.Null, PInvoke.IDI_APPLICATION) : icon;
+        }
     }
 
     private static void ShowMenu()

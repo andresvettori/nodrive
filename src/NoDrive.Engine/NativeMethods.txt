@@ -67,3 +67,4 @@ WM_COMMAND
 SHChangeNotify
 CfConvertToPlaceholder
 CfSetInSyncState
+ExtractIcon
