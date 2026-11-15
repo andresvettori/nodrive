@@ -84,6 +84,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         {
             try
             {
+                while (UserSettings.Paused && !ct.IsCancellationRequested) { _status = "Paused"; await Task.Delay(TimeSpan.FromSeconds(1), ct).ConfigureAwait(false); }
                 var sw = Stopwatch.StartNew();
                 var result = await ingestor.RunAsync(ct).ConfigureAwait(false);
                 bool first = !_indexReady;

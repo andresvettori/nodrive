@@ -38,7 +38,7 @@ Checkboxes mirror `projectPlan.md`. Tick here when the plan row is updated.
 - [ ] E3 Progressive hydration: bounded workers, Range with 200 fallback, pooled chunked TRANSFER_DATA, progress every 15 s, watchdog failure path, RECOVER and cancel handling
 - [ ] E4 Delta ingestion and index: streamed `$select` delta, resumable, deletes-first, duplicates, 410 resync, adaptive polling, global Retry-After gate, User-Agent, minimal CfUpdatePlaceholder with oplocks
 - [x] E5 upload of new files and folders (verified on PC)
-- [x] E6 delete/rename propagation (needs PC verification)
+- [x] E6 delete/rename propagation (verified on PC)
 - [ ] E7 Tray and lifecycle: tray menu with pause and free-up-space/keep-offline fallbacks, HKCU Run, single instance, restart-on-failure, graceful disconnect, refuse to run beside OneDrive.exe
 - [ ] E8 Recovery and uninstall: journal replay, USN cursor reconcile, RECOVER re-drive, hydrate-or-warn before Unregister
 - [ ] E9 Memory hygiene: GC knobs, HeapHardLimit, Aggressive collect after bursts, short-lived pooled connections, no idle timers

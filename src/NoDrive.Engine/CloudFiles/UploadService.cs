@@ -71,6 +71,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             {
                 try
                 {
+                    if (UserSettings.Paused) { await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false); continue; }
                     if (_rescan) { _rescan = false; await ScanPopulatedAsync(ct).ConfigureAwait(false); }
                     FlushSeen();
                     foreach (var done in _active.Where(kv => kv.Value.IsCompleted).Select(kv => kv.Key).ToList()) { _active.Remove(done); }

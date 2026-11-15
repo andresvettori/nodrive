@@ -19,6 +19,18 @@ internal static unsafe class TrayWindow
     private const nuint IdStatus = 3;
     private const nuint IdSignIn = 4;
     private const nuint IdAllowDeletes = 5;
+    private const nuint IdPause = 6;
+    private const nuint IdAutostart = 7;
+    private static Func<bool>? s_isPaused;
+    private static Action? s_onTogglePause;
+    private static Func<bool>? s_autostartOn;
+    private static Action? s_onToggleAutostart;
+
+    /// <summary>Wires the pause and autostart menu entries.</summary>
+    public static void Configure(Func<bool> isPaused, Action togglePause, Func<bool> autostartOn, Action toggleAutostart)
+    {
+        s_isPaused = isPaused; s_onTogglePause = togglePause; s_autostartOn = autostartOn; s_onToggleAutostart = toggleAutostart;
+    }
     private static Func<int>? s_heldDeletes;
     private static Action? s_onAllowDeletes;
 
@@ -114,18 +126,24 @@ internal static unsafe class TrayWindow
             fixed (char* pStatus = status)
             fixed (char* pSign = "Sign in...")
             fixed (char* pAllow = allowText)
+            fixed (char* pPause = (s_isPaused?.Invoke() == true ? "Resume syncing" : "Pause syncing"))
+            fixed (char* pAuto = "Start NoDrive with Windows")
             fixed (char* pOpen = "Open NoDrive folder")
             fixed (char* pQuit = "Quit NoDrive")
             {
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING | MENU_ITEM_FLAGS.MF_GRAYED, IdStatus, new PCWSTR(pStatus));
                 if (s_needsSignIn?.Invoke() == true) { PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdSignIn, new PCWSTR(pSign)); }
                 if ((s_heldDeletes?.Invoke() ?? 0) > 0) { PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdAllowDeletes, new PCWSTR(pAllow)); }
+                PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdPause, new PCWSTR(pPause));
+                PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING | (s_autostartOn?.Invoke() == true ? MENU_ITEM_FLAGS.MF_CHECKED : 0), IdAutostart, new PCWSTR(pAuto));
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdOpenFolder, new PCWSTR(pOpen));
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdQuit, new PCWSTR(pQuit));
             }
             uint flags = (uint)(TRACK_POPUP_MENU_FLAGS.TPM_RETURNCMD | TRACK_POPUP_MENU_FLAGS.TPM_RIGHTBUTTON | TRACK_POPUP_MENU_FLAGS.TPM_NONOTIFY);
             nuint cmd = (nuint)PInvoke.TrackPopupMenuEx(menu, flags, pt.X, pt.Y, s_hwnd, null).Value;
             if (cmd == IdOpenFolder) { s_onOpenFolder?.Invoke(); }
+            else if (cmd == IdPause) { s_onTogglePause?.Invoke(); }
+            else if (cmd == IdAutostart) { s_onToggleAutostart?.Invoke(); }
             else if (cmd == IdAllowDeletes) { s_onAllowDeletes?.Invoke(); }
             else if (cmd == IdSignIn) { s_onSignIn?.Invoke(); }
             else if (cmd == IdQuit) { PInvoke.DestroyWindow(s_hwnd); }

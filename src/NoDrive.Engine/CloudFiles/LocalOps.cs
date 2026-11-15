@@ -49,6 +49,7 @@ internal sealed class LocalOps(ItemIndex index, GraphDrive graph, string syncRoo
             try
             {
                 while (s_inbox.TryDequeue(out var op)) { index.EnqueueOp(op.Kind, op.Id, op.Target, DateTime.UtcNow.Ticks); }
+                if (UserSettings.Paused) { await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false); continue; }
                 var due = index.DueOps(DateTime.UtcNow.Ticks, 20);
                 int ran = 0;
                 foreach (var op in due)
