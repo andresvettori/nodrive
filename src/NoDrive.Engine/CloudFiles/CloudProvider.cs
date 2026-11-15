@@ -23,7 +23,12 @@ internal sealed record ProviderServices(ItemIndex Index, Hydrator Hydrator, Popu
 /// </summary>
 internal static class CloudProvider
 {
-    private sealed record DataRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, long FileSize, long Offset, long Length, long OptionalOffset, long OptionalLength, string? Process, bool Background, long EnqueuedTicks);
+    private sealed record DataRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, long FileSize, long Offset, long Length, long OptionalOffset, long OptionalLength, string? Process, bool Background, long EnqueuedTicks, string? NormPath = null);
+
+    /// <summary>Files up to this size are downloaded whole at the first read by interactive apps (Photos cancels slow partial reads and reports the image as corrupted).</summary>
+    private const long WholeFileLimit = 64L * 1024 * 1024;
+    private static string s_driveRoot = "C:";
+    private static readonly ConcurrentDictionary<string, byte> s_backfilling = new(StringComparer.Ordinal);
 
     /// <summary>Thrown when Windows refuses data BEYOND the required range (it may already have it): read-ahead stops quietly, the request itself succeeded.</summary>
     private sealed class ReadAheadStopped : Exception { }
@@ -67,6 +72,7 @@ internal static class CloudProvider
         }
         for (int i = 0; i < services.HydrationWorkers; i++) { bool backgroundOnly = i == 0; _ = Task.Run(() => DataWorkerAsync(backgroundOnly)); }   // worker 0 only serves the background lane; the others take interactive work first
         for (int i = 0; i < 2; i++) { _ = Task.Run(PopulateWorkerAsync); }
+        s_driveRoot = (Path.GetPathRoot(rootPath) ?? "C:\\").TrimEnd('\\');
         Log.Info($"connected to the sync root (key 0x{s_connection.Value:X}), {services.HydrationWorkers} hydration workers");
     }
 
@@ -88,7 +94,7 @@ internal static class CloudProvider
         long t0 = Stopwatch.GetTimestamp();
         var req = new DataRequest(info->ConnectionKey.Value, info->TransferKey, info->RequestKey, Identity(info), info->FileSize,
             parameters->FetchData.RequiredFileOffset, parameters->FetchData.RequiredLength, parameters->FetchData.OptionalFileOffset, parameters->FetchData.OptionalLength,
-            info->ProcessInfo is null ? null : info->ProcessInfo->ImagePath.ToString(), false, t0);
+            info->ProcessInfo is null ? null : info->ProcessInfo->ImagePath.ToString(), false, t0, info->NormalizedPath.ToString());
         req = req with { Background = req.Process is not null && BackgroundCallers.Contains(Path.GetFileName(req.Process)) };
         try
         {
@@ -210,12 +216,13 @@ internal static class CloudProvider
             try
             {
                 // Read-ahead (P1 finding): a player reading 40 KB at a time pays a network round trip per read; fetch a growing window beyond the required range.
-                long fetch = req.Background ? req.Length : s_svc.ReadAhead.Plan(req.ItemId, req.Offset, req.Length, req.OptionalOffset, req.OptionalLength, req.FileSize);   // thumbnails/search/AV: exactly what they asked, never ahead
+                bool whole = !req.Background && req.FileSize > 0 && req.FileSize <= WholeFileLimit;
+                long fetch = whole ? req.FileSize : req.Background ? req.Length : s_svc.ReadAhead.Plan(req.ItemId, req.Offset, req.Length, req.OptionalOffset, req.OptionalLength, req.FileSize);   // thumbnails/search/AV: exactly what they asked, never ahead
                 s_svc.Callers.RecordFetched(req.Process, fetch);
                 try
                 {
-                    await s_svc.Hydrator.StreamAsync(req.ItemId, req.Offset, fetch, req.Length,
-                        (chunk, offset) => { if (offset >= req.Offset + req.Length && (s_dataQueue.Reader.Count > 0 || s_backgroundQueue.Reader.Count > 8)) { throw new ReadAheadStopped(); } TransferData(req, chunk, offset); },
+                    await s_svc.Hydrator.StreamAsync(req.ItemId, whole ? 0 : req.Offset, fetch, whole ? 0 : req.Length,
+                        (chunk, offset) => { if (!whole && offset >= req.Offset + req.Length && (s_dataQueue.Reader.Count > 0 || s_backgroundQueue.Reader.Count > 8)) { throw new ReadAheadStopped(); } TransferData(req, chunk, offset); },
                         done => PInvoke.CfReportProviderProgress(new CF_CONNECTION_KEY(req.ConnectionKey), req.TransferKey, req.Length, Math.Min(done, req.Length)),
                         cts.Token, req.FileSize).ConfigureAwait(false);
                 }
@@ -225,6 +232,7 @@ internal static class CloudProvider
             }
             catch (OperationCanceledException)
             {
+                if (!req.Background && req.FileSize > 0 && req.FileSize <= WholeFileLimit && !s_stop.IsCancellationRequested) { Backfill(req); }
                 CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED);
             }
             catch (Exception ex)
@@ -237,6 +245,19 @@ internal static class CloudProvider
                 if (s_inFlight.TryRemove(req.RequestKey, out var c)) { c.Cts.Dispose(); }
             }
         }
+    }
+
+    /// <summary>The caller gave up on its read (Photos does): finish the whole file in the background so the retry is served from disk.</summary>
+    private static void Backfill(DataRequest req)
+    {
+        if (req.NormPath is not { Length: > 0 } rel || !s_backfilling.TryAdd(req.ItemId, 0)) { return; }
+        string full = s_driveRoot + rel;
+        _ = Task.Run(() =>
+        {
+            try { var hr = PinWatcher.Apply(full, hydrate: true); Log.Info($"background download of {Path.GetFileName(full)} after the caller cancelled: 0x{hr.Value:X8}"); }
+            catch (Exception ex) { Log.Warn($"background download failed: {ex.Message}"); }
+            finally { s_backfilling.TryRemove(req.ItemId, out _); }
+        });
     }
 
     private static void TransferData(DataRequest req, ReadOnlySpan<byte> chunk, long offset)

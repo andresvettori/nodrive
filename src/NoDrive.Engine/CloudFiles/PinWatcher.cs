@@ -104,7 +104,7 @@ internal static class PinWatcher
         fixed (char* p = path) { PInvoke.SHChangeNotify(Windows.Win32.UI.Shell.SHCNE_ID.SHCNE_UPDATEITEM, Windows.Win32.UI.Shell.SHCNF_FLAGS.SHCNF_PATHW | Windows.Win32.UI.Shell.SHCNF_FLAGS.SHCNF_FLUSHNOWAIT, p, null); }
     }
 
-    private static unsafe HRESULT Apply(string path, bool hydrate)
+    internal static unsafe HRESULT Apply(string path, bool hydrate)
     {
         HANDLE h = default;
         fixed (char* p = path)
