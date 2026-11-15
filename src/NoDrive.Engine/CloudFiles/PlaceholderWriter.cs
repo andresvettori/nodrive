@@ -64,7 +64,7 @@ internal static unsafe class PlaceholderWriter
                 : CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAGS.CF_OPERATION_TRANSFER_PLACEHOLDERS_FLAG_NONE;
             prm.TransferPlaceholders.CompletionStatus = NTSTATUS.STATUS_SUCCESS;
             prm.TransferPlaceholders.PlaceholderTotalCount = total;
-            prm.TransferPlaceholders.PlaceholderArray = entries;
+            prm.TransferPlaceholders.PlaceholderArray = items.Count == 0 ? null : entries;       // an empty folder completes with a null array and count 0
             prm.TransferPlaceholders.PlaceholderCount = (uint)items.Count;
             HRESULT hr = PInvoke.CfExecute(&op, &prm);
             if (hr.Failed) { throw new InvalidOperationException($"CfExecute(TRANSFER_PLACEHOLDERS) failed 0x{hr.Value:X8} (batch of {items.Count}, processed {prm.TransferPlaceholders.EntriesProcessed})"); }
