@@ -32,6 +32,18 @@ internal static class SyncRootRegistrar
         return key is not null;
     }
 
+    private static string? ReadMarker()
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(KeyPath);
+        return key?.GetValue("NoDriveHydration") as string ?? "progressive";
+    }
+
+    private static void WriteMarker(string value)
+    {
+        try { using var key = Registry.LocalMachine.OpenSubKey(KeyPath, writable: true); key?.SetValue("NoDriveHydration", value, RegistryValueKind.String); }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException) { Log.Warn($"could not record the hydration policy: {ex.Message}"); }
+    }
+
     public static int? ReadFlags()
     {
         using var key = Registry.LocalMachine.OpenSubKey(KeyPath);
@@ -44,7 +56,10 @@ internal static class SyncRootRegistrar
         Directory.CreateDirectory(rootPath);
         string outcome;
         bool fresh = !IsRegistered();
-        if (fresh)
+        // Experiment switch: NODRIVE_HYDRATION=full registers the Full policy (whole file on first access, like OneDrive); anything else = progressive.
+        string wanted = string.Equals(Environment.GetEnvironmentVariable("NODRIVE_HYDRATION"), "full", StringComparison.OrdinalIgnoreCase) ? "full" : "progressive";
+        bool policyChanged = !fresh && !string.Equals(ReadMarker(), wanted, StringComparison.Ordinal);
+        if (fresh || policyChanged)
         {
             var folder = await StorageFolder.GetFolderFromPathAsync(rootPath);
             var info = new StorageProviderSyncRootInfo
@@ -55,7 +70,7 @@ internal static class SyncRootRegistrar
                 IconResource = $"{Environment.ProcessPath},0",
                 Version = ProviderVersion,
                 ProviderId = ProviderId,
-                HydrationPolicy = StorageProviderHydrationPolicy.Progressive,
+                HydrationPolicy = wanted == "full" ? StorageProviderHydrationPolicy.Full : StorageProviderHydrationPolicy.Progressive,
                 HydrationPolicyModifier = StorageProviderHydrationPolicyModifier.AutoDehydrationAllowed,
                 PopulationPolicy = StorageProviderPopulationPolicy.Full,                // on demand; the engine prefetches heavy folders itself (E3c)
                 InSyncPolicy = StorageProviderInSyncPolicy.FileLastWriteTime | StorageProviderInSyncPolicy.DirectoryLastWriteTime,
@@ -65,7 +80,8 @@ internal static class SyncRootRegistrar
                 Context = CryptographicBuffer.ConvertStringToBinary(SyncRootId, BinaryStringEncoding.Utf8),
             };
             StorageProviderSyncRootManager.Register(info);
-            outcome = "registered";
+            outcome = fresh ? $"registered ({wanted})" : $"re-registered with the {wanted} hydration policy";
+            WriteMarker(wanted);
         }
         else { outcome = "already registered (not re-registered: that would reset the shell flags)"; }
 
