@@ -123,3 +123,6 @@ Undownloaded ~3.5 GB mp4 in Photos plays choppy; seeking (e.g. minute 5) fails w
 Tried: read-ahead (1 to 32 MiB), RequestKey-keyed cancellation, two request lanes (explorer/search/AV in background lane, no read-ahead). Not fixed.
 Evidence: single connection about 14 MB/s; explorer thumbnails fetched 12x requested bytes; no Photos.exe entries in caller stats.
 Next ideas when revisited: per-request timing log for Photos, parallel segment download (`--bench`), verify every request completes on cancel/ReadAheadStopped paths. Workaround: "Always keep on this device" for videos.
+
+## Status 2026-11-15
+Working on the PC: browse (lazy + prefetch), on-demand download (Full policy), keep/free, remote changes mirrored (E4b), upload of new files/folders (E5), delete/rename propagation with mass-delete guard (E6, built, not yet verified by the user), sign-in recovery. Not done: cloud thumbnails (P2), edits of existing files (P2), E7, E8, E1b. Known issue deferred: nothing blocking now (video streaming is moot under Full).
