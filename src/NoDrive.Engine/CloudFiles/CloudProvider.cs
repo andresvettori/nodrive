@@ -201,6 +201,7 @@ internal static class CloudProvider
             catch (OperationCanceledException) { return; }
             double queuedMs = Stopwatch.GetElapsedTime(req.EnqueuedTicks).TotalMilliseconds;
             if (queuedMs > 1000) { Log.Info($"request for {Path.GetFileName(req.Process ?? "?")} waited {queuedMs:F0} ms in the {(req.Background ? "background" : "interactive")} queue"); }
+            if (!req.Background) { Log.Info($"trace start {Path.GetFileName(req.Process ?? "?")} {req.ItemId} [{req.Offset}+{req.Length}] of {req.FileSize} optional [{req.OptionalOffset}+{req.OptionalLength}]"); }   // TEMPORARY
             var cts = s_inFlight.GetValueOrDefault(req.RequestKey)?.Cts ?? new CancellationTokenSource();
             var sw = Stopwatch.StartNew();
             s_svc.Callers.Record(req.Process, req.Length, req.FileSize);
@@ -268,6 +269,7 @@ internal static class CloudProvider
 
     private static unsafe void CompleteDataCore(DataRequest req, NTSTATUS status)
     {
+        Log.Warn($"trace FAIL-COMPLETE {Path.GetFileName(req.Process ?? "?")} item='{req.ItemId}' [{req.Offset}+{req.Length}] status=0x{status.Value:X8}");   // TEMPORARY diagnostics
         var op = new CF_OPERATION_INFO { StructSize = (uint)sizeof(CF_OPERATION_INFO), Type = CF_OPERATION_TYPE.CF_OPERATION_TYPE_TRANSFER_DATA, ConnectionKey = new CF_CONNECTION_KEY(req.ConnectionKey), TransferKey = req.TransferKey, RequestKey = req.RequestKey };
         var prm = new CF_OPERATION_PARAMETERS { ParamSize = (uint)sizeof(CF_OPERATION_PARAMETERS) };
         prm.TransferData.Flags = CF_OPERATION_TRANSFER_DATA_FLAGS.CF_OPERATION_TRANSFER_DATA_FLAG_NONE;
