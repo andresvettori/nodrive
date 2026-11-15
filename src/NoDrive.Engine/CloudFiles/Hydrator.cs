@@ -1,4 +1,5 @@
 using System.Buffers;
+using NoDrive.Engine.Infrastructure;
 using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using NoDrive.Core.Hydration;
@@ -39,7 +40,7 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
     }
 
     /// <param name="firstFlush">Bytes to deliver as soon as they arrive (the part a caller is blocked on); the rest streams in full chunks.</param>
-    public async Task StreamAsync(string itemId, long offset, long length, long firstFlush, ChunkSink sink, Action<long> progress, CancellationToken ct)
+    public async Task StreamAsync(string itemId, long offset, long length, long firstFlush, ChunkSink sink, Action<long> progress, CancellationToken ct, long expectedSize = -1)
     {
         if (failures.IsRecentlyFailed(itemId, out var age))
         {
@@ -49,7 +50,7 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
         watchdog.CancelAfter(policy.NoProgressTimeout);
         try
         {
-            await StreamCoreAsync(itemId, offset, length, firstFlush, sink, progress, watchdog, ct).ConfigureAwait(false);
+            await StreamCoreAsync(itemId, offset, length, firstFlush, sink, progress, expectedSize, watchdog, ct).ConfigureAwait(false);
             failures.Clear(itemId);
         }
         catch (OperationCanceledException) when (watchdog.IsCancellationRequested && !ct.IsCancellationRequested)
@@ -68,7 +69,7 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
         }
     }
 
-    private async Task StreamCoreAsync(string itemId, long offset, long length, long firstFlush, ChunkSink sink, Action<long> progress, CancellationTokenSource watchdog, CancellationToken ct)
+    private async Task StreamCoreAsync(string itemId, long offset, long length, long firstFlush, ChunkSink sink, Action<long> progress, long expectedSize, CancellationTokenSource watchdog, CancellationToken ct)
     {
         var token = watchdog.Token;
         long end = offset + length;                                                       // exclusive
@@ -102,6 +103,8 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
 
         using var response = resp;
         response.EnsureSuccessStatusCode();
+        long? actual = response.Content.Headers.ContentRange?.Length ?? (response.StatusCode == System.Net.HttpStatusCode.OK ? response.Content.Headers.ContentLength : null);
+        if (expectedSize >= 0 && actual is { } a && a != expectedSize) { Log.Warn($"SIZE MISMATCH for {itemId}: the placeholder says {expectedSize} bytes but the download is {a} bytes ({(int)response.StatusCode})"); }
         await using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
         byte[] buffer = ArrayPool<byte>.Shared.Rent(ChunkSize);
         try

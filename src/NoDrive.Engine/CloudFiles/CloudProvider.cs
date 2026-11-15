@@ -214,7 +214,7 @@ internal static class CloudProvider
                     await s_svc.Hydrator.StreamAsync(req.ItemId, req.Offset, fetch, req.Length,
                         (chunk, offset) => { if (offset >= req.Offset + req.Length && (s_dataQueue.Reader.Count > 0 || s_backgroundQueue.Reader.Count > 8)) { throw new ReadAheadStopped(); } TransferData(req, chunk, offset); },
                         done => PInvoke.CfReportProviderProgress(new CF_CONNECTION_KEY(req.ConnectionKey), req.TransferKey, req.Length, Math.Min(done, req.Length)),
-                        cts.Token).ConfigureAwait(false);
+                        cts.Token, req.FileSize).ConfigureAwait(false);
                 }
                 catch (ReadAheadStopped) { /* the required part was delivered; nothing more to do */ }
                 if (sw.ElapsedMilliseconds > 3000) { Log.Info($"hydrated {req.ItemId} [{req.Offset}+{req.Length}] for {Path.GetFileName(req.Process ?? "?")} in {sw.Elapsed.TotalSeconds:F1} s"); }
