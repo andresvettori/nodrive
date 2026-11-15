@@ -217,6 +217,7 @@ internal static class CloudProvider
                         cts.Token, req.FileSize).ConfigureAwait(false);
                 }
                 catch (ReadAheadStopped) { /* the required part was delivered; nothing more to do */ }
+                if (!req.Background) { Log.Info($"trace {Path.GetFileName(req.Process ?? "?")} {req.ItemId} [{req.Offset}+{req.Length}] of {req.FileSize} fetch={fetch} {sw.ElapsedMilliseconds} ms"); }   // TEMPORARY diagnostics
                 if (sw.ElapsedMilliseconds > 3000) { Log.Info($"hydrated {req.ItemId} [{req.Offset}+{req.Length}] for {Path.GetFileName(req.Process ?? "?")} in {sw.Elapsed.TotalSeconds:F1} s"); }
             }
             catch (OperationCanceledException)
