@@ -35,7 +35,7 @@ internal static class SyncRootRegistrar
     private static string? ReadMarker()
     {
         using var key = Registry.LocalMachine.OpenSubKey(KeyPath);
-        return key?.GetValue("NoDriveHydration") as string ?? "progressive";
+        return key?.GetValue("NoDriveHydration") as string ?? "progressive";   // registrations before ADR-0010 have no marker
     }
 
     private static void WriteMarker(string value)
@@ -56,8 +56,9 @@ internal static class SyncRootRegistrar
         Directory.CreateDirectory(rootPath);
         string outcome;
         bool fresh = !IsRegistered();
-        // Experiment switch: NODRIVE_HYDRATION=full registers the Full policy (whole file on first access, like OneDrive); anything else = progressive.
-        string wanted = string.Equals(Environment.GetEnvironmentVariable("NODRIVE_HYDRATION"), "full", StringComparison.OrdinalIgnoreCase) ? "full" : "progressive";
+        // Full (default, ADR-0010): the whole file is downloaded on first access, like OneDrive; Photos and other packaged apps cancel slow partial reads and call the file corrupted.
+        // NODRIVE_HYDRATION=progressive switches back (re-registers once).
+        string wanted = string.Equals(Environment.GetEnvironmentVariable("NODRIVE_HYDRATION"), "progressive", StringComparison.OrdinalIgnoreCase) ? "progressive" : "full";
         bool policyChanged = !fresh && !string.Equals(ReadMarker(), wanted, StringComparison.Ordinal);
         if (fresh || policyChanged)
         {
