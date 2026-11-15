@@ -106,9 +106,11 @@ internal static class CloudProvider
         try
         {
             long from = parameters->Cancel.Anonymous.FetchData.FileOffset, to = from + parameters->Cancel.Anonymous.FetchData.Length;
+            Log.Info($"trace CANCEL cb range [{from}+{to - from}] request={info->RequestKey} transfer={info->TransferKey}");   // TEMPORARY
             foreach (var e in s_inFlight.Values)
             {
                 if (e.TransferKey != info->TransferKey || e.Offset + e.Length <= from || e.Offset >= to) { continue; }   // only the cancelled range
+                Log.Info($"trace   cancelling in-flight [{e.Offset}+{e.Length}]");   // TEMPORARY
                 try { e.Cts.Cancel(); } catch (ObjectDisposedException) { /* already finished */ }
             }
         }
@@ -254,7 +256,7 @@ internal static class CloudProvider
             if (hr.Failed)
             {
                 if (offset >= req.Offset + req.Length) { throw new ReadAheadStopped(); }               // beyond the required range: not an error
-                if (hr.Value == unchecked((int)0x8007018E)) { throw new OperationCanceledException(); }  // the caller cancelled (seek): normal
+                if (hr.Value == unchecked((int)0x8007018E)) { Log.Info($"trace TRANSFER_DATA says cancelled at {offset}+{chunk.Length} for request [{req.Offset}+{req.Length}]"); throw new OperationCanceledException(); }  // the caller cancelled (seek): normal
                 throw new IOException($"CfExecute(TRANSFER_DATA) at {offset}+{chunk.Length} failed 0x{hr.Value:X8}");
             }
         }
