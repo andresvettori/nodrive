@@ -23,6 +23,9 @@ internal static class Program
         var config = EngineConfig.Load(bootPaths.ConfigPath);
         var paths = EnginePaths.Create(rootArg ?? config.SyncRoot, dataArg);
 
+        if (args.Contains("--quit")) { return Lifecycle.Quit(int.TryParse(ArgValue(args, "--wait"), out int w) ? w : 20); }
+        if (args.Contains("--pending")) { return Lifecycle.PendingExitCode(paths); }
+        if (args.Contains("--uninstall")) { return Lifecycle.Uninstall(paths, args.Contains("--force"), args.Contains("--delete-data"), args.Contains("--delete-root"), int.TryParse(ArgValue(args, "--wait"), out int w2) ? w2 : 20); }
         if (args.Contains("--status")) { return Status(paths); }
         if (args.Contains("--cleanup")) { return Cleanup(paths, args.Contains("--delete-root")); }
         return Run(config, paths);
@@ -33,6 +36,7 @@ internal static class Program
         using var mutex = new Mutex(true, @"Local\NoDrive.Engine", out bool first);
         if (!first) { Log.Warn("NoDrive is already running."); return 1; }
         if (!File.Exists(paths.ConfigPath)) { config.Save(paths.ConfigPath); }
+        Lifecycle.InstallCrashRestart(paths);
 
         using var cts = new CancellationTokenSource();
         using var service = new SyncService(config, paths);
@@ -54,6 +58,7 @@ internal static class Program
         using var web = new WebUi(service, config, paths);
         web.Start(cts.Token);
         TrayWindow.SetOpenUi(web.Open);
+        Lifecycle.ListenForQuit(TrayWindow.RequestQuit, cts.Token);
         TrayWindow.Configure(() => UserSettings.Paused, () => UserSettings.SetPaused(!UserSettings.Paused), () => UserSettings.AutostartEnabled, () => UserSettings.SetAutostart(!UserSettings.AutostartEnabled));
         TrayWindow.Create("NoDrive", onQuit: () => cts.Cancel(), onOpenFolder: () => OpenFolder(paths.SyncRoot), statusText: () => service.Status, onSignIn: service.RequestSignIn, needsSignIn: () => service.NeedsSignIn, heldDeletes: () => service.HeldDeletes, onAllowDeletes: service.AllowDeletes);
         _ = Task.Run(async () =>

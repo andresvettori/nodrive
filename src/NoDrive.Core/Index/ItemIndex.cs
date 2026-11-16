@@ -314,6 +314,14 @@ public sealed class ItemIndex : IDisposable
 
     public void RemoveOp(long seq) => ExecWrite("DELETE FROM remote_ops WHERE seq=$s", ("$s", seq));
 
+    public long CountOps()
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM remote_ops";
+        return Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     public bool HasPendingOp(string itemId)
     {
         using var c = Open(_path);

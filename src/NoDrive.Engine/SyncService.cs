@@ -57,11 +57,24 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
     public string Status => _status;
     public CallerStats Callers => _callers;
 
+    /// <summary>A damaged index file must never keep NoDrive from starting: set it aside and rebuild from the cloud (placeholders on disk are untouched).</summary>
+    private static ItemIndex OpenIndexOrRebuild(string path)
+    {
+        try { return new ItemIndex(path); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+            Log.Error($"index unreadable ({ex.Message}); moving it aside and rebuilding");
+            foreach (var suffix in new[] { "", "-wal", "-shm" }) { if (File.Exists(path + suffix)) { File.Move(path + suffix, $"{path}{suffix}.corrupt-{stamp}"); } }
+            return new ItemIndex(path);
+        }
+    }
+
     public async Task RunAsync(CancellationToken ct)
     {
         Directory.CreateDirectory(paths.DataDir);
         SQLitePCL.raw.SetProvider(new SQLitePCL.SQLite3Provider_winsqlite3());              // the system SQLite (System32\winsqlite3.dll)
-        _index = new ItemIndex(paths.IndexPath);
+        _index = OpenIndexOrRebuild(paths.IndexPath);
         _http = new HttpClient();
         _auth = new PkceAuthenticator(_http, new DpapiTokenStore(paths.TokenPath), OpenBrowser, config.ClientId, log: Log.Info);
         // Background work NEVER opens a browser: it fails fast with SignInRequiredException and the status flips. Only first launch and the tray action sign in.
