@@ -104,8 +104,7 @@ internal static class Program
 
     private static void OpenFolder(string path)
     {
-        try { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true }); }
-        catch (Exception ex) { Log.Warn($"could not open {path}: {ex.Message}"); }
+        ShellOpen.Folder(path);
     }
 
     private static string? ArgValue(string[] args, string name)

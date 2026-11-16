@@ -247,8 +247,7 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
 
     private static void OpenFolder(string folder)
     {
-        try { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true }); }
-        catch (Exception ex) { Log.Warn($"could not open {folder}: {ex.Message}"); }
+        ShellOpen.Folder(folder);
     }
 
     private static int FreePort()
