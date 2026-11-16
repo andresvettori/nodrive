@@ -30,6 +30,21 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
     /// <summary>True while the engine is waiting for the user to sign in (first run, timeout, or revoked/expired token).</summary>
     public bool NeedsSignIn => _needsSignIn;
     private LocalOps? _ops;
+    private UploadService? _uploader;
+    private long _itemCount;
+    private DateTime _itemCountAt;
+
+    /// <summary>Items in the local index (cached for ten seconds: counting is a table scan).</summary>
+    public long ItemCount
+    {
+        get
+        {
+            if (_index is not null && DateTime.UtcNow - _itemCountAt > TimeSpan.FromSeconds(10)) { _itemCount = _index.Count(); _itemCountAt = DateTime.UtcNow; }
+            return _itemCount;
+        }
+    }
+
+    public long PendingUploads => _uploader?.Pending ?? 0;
     public int HeldDeletes => _ops?.HeldDeletes ?? 0;
     public void AllowDeletes() => _ops?.AllowDeletes();
 
@@ -58,7 +73,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         _index.SetMeta("root.id", rootId);
 
         if (SyncRootRegistrar.IsInsideForeignSyncRoot(paths.SyncRoot, out string foreign)) { throw new InvalidOperationException($"{paths.SyncRoot} is inside the sync root of '{foreign}'. Choose another folder (config.json: syncRoot)."); }
-        var (fresh, outcome) = await SyncRootRegistrar.EnsureRegisteredAsync(paths.SyncRoot).ConfigureAwait(false);
+        var (fresh, outcome) = await SyncRootRegistrar.EnsureRegisteredAsync(paths.SyncRoot, config.HydrationPolicy).ConfigureAwait(false);
         Log.Info($"sync root {paths.SyncRoot}: {outcome}; shell flags {SyncRootRegistrar.ReadFlags()}");
         NavigationPane.RemoveLegacyEntry();
 
@@ -66,7 +81,10 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         if (fresh || !Directory.Exists(paths.SyncRoot)) { population.ResetAll(); }          // a new registration has no placeholders yet
         var locks = new FolderLocks();
         var policy = new HydrationPolicy();
-        var hydrator = new Hydrator(graph, policy, new FailureMemory(policy.FailureMemory));
+        var hydrator = new Hydrator(graph, policy, new FailureMemory(policy.FailureMemory)) { Limiter = ActivityLog.Download };
+        graph.UploadLimiter = ActivityLog.Upload;
+        graph.OnBytesUploaded = ActivityLog.AddUp;
+        ActivityLog.ApplyLimits(config);
 
         _indexReady = _index.GetMeta(DeltaIngestor.DeltaKey) is not null && _index.GetMeta(DeltaIngestor.NextKey) is null;
         CloudProvider.Start(paths.SyncRoot, new ProviderServices(_index, hydrator, population, locks, _callers, () => _indexReady, config.HydrationWorkers, new ReadAheadPlanner()));
@@ -79,7 +97,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         int idleSeconds = config.PollActiveSeconds;
         bool prefetchStarted = false;
         _ops = new LocalOps(_index, graph, paths.SyncRoot, rootId);
-        var uploader = new UploadService(_index, graph, population, paths.SyncRoot, rootId);
+        var uploader = _uploader = new UploadService(_index, graph, population, paths.SyncRoot, rootId);
 
         while (!ct.IsCancellationRequested)
         {
@@ -91,6 +109,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
                 bool first = !_indexReady;
                 _indexReady = true;
                 long changes = result.Upserts + result.Deletions;
+                if (changes > 0) { ActivityLog.Add("sync", "OneDrive", "ok", detail: $"{result.Upserts} changed, {result.Deletions} deleted"); }
                 if (first || changes > 0) { Log.Info($"delta: {result.Pages} pages, {result.Upserts:N0} upserts, {result.Deletions:N0} deletions in {sw.Elapsed.TotalSeconds:F1} s (index now {_index.Count():N0} items{(result.FullResync ? ", full resync" : "")})"); }
                 _status = $"Up to date: {_index.Count():N0} items";
                 idleSeconds = changes > 0 ? config.PollActiveSeconds : Math.Min(config.PollIdleMaxSeconds, idleSeconds * 2);
@@ -118,6 +137,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
             catch (Exception ex)
             {
                 _status = "Offline, will retry";
+                ActivityLog.Add("error", "OneDrive", "failed", detail: ex.Message);
                 Log.Warn($"sync round failed: {ex.Message}");
                 idleSeconds = Math.Min(config.PollIdleMaxSeconds, Math.Max(30, idleSeconds * 2));
             }

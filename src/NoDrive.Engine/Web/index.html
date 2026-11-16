@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NoDrive</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232d8cff'/%3E%3Cpath d='M20 42a9 9 0 0 1 1-18 12 12 0 0 1 23 3 8 8 0 0 1 0 15z' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--ink:#16202e;--muted:#5d6b80;--line:#e3e8f0;--brand:#2d8cff;--brand-ink:#fff;--ok:#1a9d5c;--warn:#d98a00;--bad:#d33c3c;--chip:#eaf1fc;--shadow:0 1px 2px rgba(20,35,60,.06),0 6px 20px rgba(20,35,60,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#0f141c;--card:#171e29;--ink:#e8edf5;--muted:#92a0b5;--line:#263041;--chip:#1f2a3a;--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Segoe UI Variable","Segoe UI",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.bar{max-width:1040px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px;font-weight:650;font-size:18px;letter-spacing:.2px}
+.logo svg{width:34px;height:34px}
+.spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;background:var(--chip);font-size:13px;font-weight:600}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.pill.ok .dot{background:var(--ok)}.pill.warn .dot{background:var(--warn)}.pill.bad .dot{background:var(--bad)}.pill.busy .dot{background:var(--brand);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+nav{max-width:1040px;margin:0 auto;padding:0 20px;display:flex;gap:4px}
+nav button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer}
+nav button[aria-selected=true]{color:var(--ink);border-color:var(--brand)}
+main{max-width:1040px;margin:0 auto;padding:20px}
+section[hidden]{display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:18px 20px;margin-bottom:16px}
+.card h2{margin:0 0 12px;font-size:15px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+.tile .v{font-size:24px;font-weight:650;line-height:1.2}.tile .l{color:var(--muted);font-size:13px}
+.hero{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.hero .big{font-size:22px;font-weight:650}.hero .sub{color:var(--muted)}
+button.btn{font:inherit;font-weight:600;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;cursor:pointer}
+button.btn:hover{border-color:var(--brand)}
+button.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+button.primary:hover{filter:brightness(1.08)}
+.row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.ico{flex:none;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:var(--chip);color:var(--brand)}
+.ico.failed{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.ico.cancelled,.ico.skipped{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.meta{flex:1;min-width:0}.name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.small{color:var(--muted);font-size:13px}
+.bar2{height:6px;border-radius:99px;background:var(--chip);overflow:hidden;margin-top:6px}.bar2>i{display:block;height:100%;background:var(--brand);transition:width .4s}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
+input[type=search],input[type=number],select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
+input[type=search]{margin-left:auto;min-width:180px}
+.day{margin:14px 0 2px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.empty{color:var(--muted);padding:18px 0;text-align:center}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.field{display:grid;gap:4px;margin-bottom:14px}.field label{font-weight:600}.field .hint{color:var(--muted);font-size:13px}
+.inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}dt{color:var(--muted)}dd{margin:0;word-break:break-all}
+.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+a.link{display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}a.link span{color:var(--muted);font-size:13px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:12px;box-shadow:var(--shadow);opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:1}
+.banner{background:color-mix(in srgb,var(--warn) 14%,var(--card));border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));border-radius:12px;padding:10px 14px;margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+@media (max-width:560px){.tile .v{font-size:20px}main{padding:14px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="logo">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d8cff"/><stop offset="1" stop-color="#1457d8"/></linearGradient></defs><rect width="64" height="64" rx="14" fill="url(#g)"/><path d="M18 44a10 10 0 0 1 1-20 13 13 0 0 1 25 3 8.5 8.5 0 0 1 1 17z" fill="#fff"/><path d="M29 28h6v8h5l-8 8-8-8h5z" fill="#1c6fe6"/></svg>
+      NoDrive
+    </div>
+    <span id="pill" class="pill" role="status" aria-live="polite"><i class="dot"></i><span id="pillText">…</span></span>
+    <div class="spacer"></div>
+    <button class="btn" id="pauseBtn"></button>
+    <button class="btn" id="folderBtn"></button>
+  </div>
+  <nav role="tablist">
+    <button role="tab" data-tab="activity" aria-selected="true" id="tabActivity"></button>
+    <button role="tab" data-tab="settings" aria-selected="false" id="tabSettings"></button>
+    <button role="tab" data-tab="help" aria-selected="false" id="tabHelp"></button>
+  </nav>
+</header>
+
+<main>
+  <div id="banner"></div>
+
+  <section id="activity">
+    <div class="card"><div class="hero">
+      <div style="flex:1;min-width:220px"><div class="big" id="heroTitle"></div><div class="sub" id="heroSub"></div></div>
+      <button class="btn primary" id="heroBtn" hidden></button>
+    </div></div>
+
+    <div class="tiles" style="margin-bottom:16px">
+      <div class="tile"><div class="v" id="tDown">–</div><div class="l" id="lDown"></div></div>
+      <div class="tile"><div class="v" id="tUp">–</div><div class="l" id="lUp"></div></div>
+      <div class="tile"><div class="v" id="tItems">–</div><div class="l" id="lItems"></div></div>
+      <div class="tile"><div class="v" id="tQueue">–</div><div class="l" id="lQueue"></div></div>
+    </div>
+
+    <div class="card"><h2 id="hNow"></h2><div id="now"></div></div>
+
+    <div class="card">
+      <h2 id="hRecent"></h2>
+      <div class="chips" id="chips"></div>
+      <div id="recent"></div>
+    </div>
+  </section>
+
+  <section id="settings" hidden>
+    <div class="grid2">
+      <div class="card">
+        <h2 id="hGeneral"></h2>
+        <div class="field"><label for="sLang" id="lLang"></label>
+          <select id="sLang"><option value="auto"></option><option value="en">English</option><option value="es">Español</option></select>
+          <span class="hint" id="hLang"></span></div>
+        <div class="field"><label id="lAuto"></label><div class="inline"><label><input type="checkbox" id="sAuto"> <span id="tAuto"></span></label></div></div>
+        <div class="field"><label for="sPolicy" id="lPolicy"></label>
+          <select id="sPolicy"><option value="full"></option><option value="progressive"></option></select>
+          <span class="hint" id="hPolicy"></span></div>
+      </div>
+      <div class="card">
+        <h2 id="hBandwidth"></h2>
+        <div class="field"><label for="sDown" id="lDownLimit"></label>
+          <div class="inline"><input type="number" id="sDown" min="0" step="any" style="width:120px"><select id="uDown"><option value="1">KB/s</option><option value="1024">MB/s</option></select></div></div>
+        <div class="field"><label for="sUp" id="lUpLimit"></label>
+          <div class="inline"><input type="number" id="sUp" min="0" step="any" style="width:120px"><select id="uUp"><option value="1">KB/s</option><option value="1024">MB/s</option></select></div>
+          <span class="hint" id="hLimit"></span></div>
+      </div>
+      <div class="card">
+        <h2 id="hSync"></h2>
+        <div class="field"><label for="sPoll" id="lPoll"></label><div class="inline"><input type="number" id="sPoll" min="15" max="3600" style="width:120px"><span id="uPoll"></span></div><span class="hint" id="hPoll"></span></div>
+        <div class="field"><label for="sIdle" id="lIdle"></label><div class="inline"><input type="number" id="sIdle" min="1" max="1440" style="width:120px"><span id="uIdle"></span></div></div>
+        <div class="field"><label for="sWorkers" id="lWorkers"></label><input type="number" id="sWorkers" min="2" max="16" style="width:120px"><span class="hint" id="hWorkers"></span></div>
+      </div>
+      <div class="card">
+        <h2 id="hInfo"></h2>
+        <dl id="info"></dl>
+        <div class="inline" style="margin-top:14px"><button class="btn" id="openData"></button><button class="btn" id="openRoot"></button></div>
+      </div>
+    </div>
+    <div class="inline"><button class="btn primary" id="saveBtn"></button><span class="small" id="saveNote"></span></div>
+  </section>
+
+  <section id="help" hidden>
+    <p class="small" id="helpIntro"></p>
+    <div class="links" id="helpLinks"></div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+const DOCS = "https://github.com/andresvettori/nodrive/blob/main/docs/";
+const I18N = {
+en: {
+  activity:"Activity", settings:"Settings", help:"Help", pause:"Pause syncing", resume:"Resume syncing", openFolder:"Open NoDrive folder",
+  stOk:"Up to date", stOkSub:"Everything is in sync.", stIndexing:"Reading your OneDrive", stIndexingSub:"The first scan can take a few minutes. You can keep working.",
+  stPaused:"Paused", stPausedSub:"Changes are not synced until you resume. Opening files still downloads them.",
+  stSignin:"Sign-in required", stSigninSub:"NoDrive needs you to sign in to Microsoft again.", signIn:"Sign in…",
+  stOffline:"Offline, will retry", stOfflineSub:"NoDrive keeps trying in the background.", stStopped:"Stopped", stStarting:"Starting…", stSigningIn:"Signing in…", stSigningInSub:"Finish the sign-in in the browser window.",
+  down:"Download", up:"Upload", items:"Items in OneDrive", queue:"Waiting to upload", perSec:"/s",
+  now:"Right now", nothing:"Nothing is transferring right now.", recent:"Recent activity", emptyRecent:"No activity yet. Open or add a file to see it here.",
+  fAll:"All", fTransfers:"Transfers", fChanges:"Changes", fErrors:"Problems", search:"Search by name",
+  today:"Today", yesterday:"Yesterday",
+  k_download:"Downloaded", k_upload:"Uploaded", k_create:"Added", k_update:"Updated", k_rename:"Renamed", k_delete:"Deleted", k_sync:"Checked", k_error:"Problem",
+  o_failed:"failed", o_cancelled:"cancelled", o_skipped:"skipped",
+  held:n=>`${n} deletions are on hold to protect your files.`, allow:"Allow them",
+  general:"General", language:"Language", langAuto:"Same as Windows", langHint:"Dates, times and numbers always follow your Windows regional settings.",
+  autostart:"Start with Windows", autostartText:"Start NoDrive when I sign in",
+  policy:"Downloads", policyFull:"Whole file when opened (recommended)", policyProg:"Partial reads (advanced)",
+  policyHint:"Applies after restarting NoDrive. Whole-file mode is how OneDrive works and is the most compatible with apps like Photos.",
+  bandwidth:"Bandwidth", downLimit:"Download limit", upLimit:"Upload limit", limitHint:"0 means no limit. Changes apply immediately.",
+  sync:"Synchronization", poll:"Check for changes every", pollHint:"Used while there is activity.", idle:"When idle, check at most every", sec:"seconds", min:"minutes",
+  workers:"Parallel downloads", workersHint:"Applies after restarting NoDrive.",
+  info:"About this setup", iFolder:"NoDrive folder", iData:"Data folder", iConfig:"Config file", iClient:"Sign-in app ID", iVersion:"Version", iMemory:"Memory in use", iUptime:"Running for",
+  iLang:"Windows language", iRegion:"Regional format", iZone:"Time zone",
+  openData:"Open data folder", openRoot:"Open NoDrive folder", save:"Save settings", saved:"Saved.", savedRestart:"Saved. Restart NoDrive to apply the highlighted options.", saveFail:"Could not save.",
+  helpIntro:"Guides open on GitHub. They explain installing, configuring and customizing NoDrive.",
+  h1:"Install and first run", h1d:"Get NoDrive running and sign in.", h2:"Configure NoDrive", h2d:"Folder location, limits, startup and the config file.", h3:"Use your own Entra app ID", h3d:"Register an app in Microsoft Entra to sign in with your own client ID.", h4:"Troubleshooting", h4d:"Logs, common messages and what they mean."
+},
+es: {
+  activity:"Actividad", settings:"Ajustes", help:"Ayuda", pause:"Pausar sincronización", resume:"Reanudar sincronización", openFolder:"Abrir carpeta NoDrive",
+  stOk:"Al día", stOkSub:"Todo está sincronizado.", stIndexing:"Leyendo tu OneDrive", stIndexingSub:"El primer escaneo puede tardar unos minutos. Podés seguir trabajando.",
+  stPaused:"En pausa", stPausedSub:"Los cambios no se sincronizan hasta que reanudes. Abrir archivos sigue descargándolos.",
+  stSignin:"Falta iniciar sesión", stSigninSub:"NoDrive necesita que vuelvas a iniciar sesión en Microsoft.", signIn:"Iniciar sesión…",
+  stOffline:"Sin conexión, se reintentará", stOfflineSub:"NoDrive sigue intentando en segundo plano.", stStopped:"Detenido", stStarting:"Iniciando…", stSigningIn:"Iniciando sesión…", stSigningInSub:"Terminá el inicio de sesión en la ventana del navegador.",
+  down:"Descarga", up:"Subida", items:"Elementos en OneDrive", queue:"Esperando para subir", perSec:"/s",
+  now:"En este momento", nothing:"No hay transferencias en curso.", recent:"Actividad reciente", emptyRecent:"Todavía no hay actividad. Abrí o agregá un archivo para verla acá.",
+  fAll:"Todo", fTransfers:"Transferencias", fChanges:"Cambios", fErrors:"Problemas", search:"Buscar por nombre",
+  today:"Hoy", yesterday:"Ayer",
+  k_download:"Descargado", k_upload:"Subido", k_create:"Agregado", k_update:"Actualizado", k_rename:"Renombrado", k_delete:"Eliminado", k_sync:"Revisado", k_error:"Problema",
+  o_failed:"falló", o_cancelled:"cancelado", o_skipped:"omitido",
+  held:n=>`${n} eliminaciones están en espera para proteger tus archivos.`, allow:"Permitirlas",
+  general:"General", language:"Idioma", langAuto:"Igual que Windows", langHint:"Las fechas, horas y números siempre siguen la configuración regional de Windows.",
+  autostart:"Inicio con Windows", autostartText:"Iniciar NoDrive al iniciar sesión",
+  policy:"Descargas", policyFull:"Archivo completo al abrir (recomendado)", policyProg:"Lecturas parciales (avanzado)",
+  policyHint:"Se aplica al reiniciar NoDrive. El modo de archivo completo es el de OneDrive y el más compatible con apps como Fotos.",
+  bandwidth:"Ancho de banda", downLimit:"Límite de descarga", upLimit:"Límite de subida", limitHint:"0 significa sin límite. Los cambios se aplican al instante.",
+  sync:"Sincronización", poll:"Buscar cambios cada", pollHint:"Se usa mientras hay actividad.", idle:"En reposo, buscar como máximo cada", sec:"segundos", min:"minutos",
+  workers:"Descargas en paralelo", workersHint:"Se aplica al reiniciar NoDrive.",
+  info:"Sobre esta instalación", iFolder:"Carpeta NoDrive", iData:"Carpeta de datos", iConfig:"Archivo de configuración", iClient:"ID de la app de inicio de sesión", iVersion:"Versión", iMemory:"Memoria en uso", iUptime:"En ejecución desde hace",
+  iLang:"Idioma de Windows", iRegion:"Formato regional", iZone:"Zona horaria",
+  openData:"Abrir carpeta de datos", openRoot:"Abrir carpeta NoDrive", save:"Guardar ajustes", saved:"Guardado.", savedRestart:"Guardado. Reiniciá NoDrive para aplicar las opciones resaltadas.", saveFail:"No se pudo guardar.",
+  helpIntro:"Las guías se abren en GitHub. Explican cómo instalar, configurar y personalizar NoDrive.",
+  h1:"Instalación y primer uso", h1d:"Poné NoDrive en marcha e iniciá sesión.", h2:"Configurar NoDrive", h2d:"Ubicación de la carpeta, límites, inicio y el archivo de configuración.", h3:"Usar tu propio ID de app de Entra", h3d:"Registrá una app en Microsoft Entra para iniciar sesión con tu propio ID de cliente.", h4:"Solución de problemas", h4d:"Registros, mensajes comunes y qué significan."
+}};
+
+const $ = id => document.getElementById(id);
+let S = null, lang = "en", locale = "en-US", filter = "all", query = "", entries = [], lastId = 0, last = null, dirty = false;
+
+function t(k, ...a){ const v = (I18N[lang] && I18N[lang][k]) ?? I18N.en[k] ?? k; return typeof v === "function" ? v(...a) : v; }
+function api(path, body){
+  const opt = body === undefined ? {} : { method:"POST", headers:{ "Content-Type":"application/json", "X-NoDrive":"1" }, body: JSON.stringify(body) };
+  return fetch(path, opt).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+}
+const nf = (n, o) => new Intl.NumberFormat(locale, o).format(n);
+function bytes(n){
+  if (n < 1024) return nf(n) + " B";
+  const u = ["KB","MB","GB","TB"]; let i = -1; do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
+  return nf(n, { maximumFractionDigits: n < 10 ? 1 : 0 }) + " " + u[i];
+}
+function duration(sec){
+  const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
+  return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : `${m} min`;
+}
+const timeFmt = () => new Intl.DateTimeFormat(locale, { timeStyle: "medium" });
+function dayLabel(d){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const that = new Date(d); that.setHours(0,0,0,0);
+  const diff = Math.round((today - that) / 86400000);
+  if (diff === 0) return t("today"); if (diff === 1) return t("yesterday");
+  return new Intl.DateTimeFormat(locale, { dateStyle: "full" }).format(d);
+}
+
+const ICON = { download:"↓", upload:"↑", create:"+", update:"↻", rename:"✎", delete:"×", sync:"↻", error:"!" };
+const GROUP = { transfers:["download","upload"], changes:["create","update","rename","delete","sync"], errors:["error"] };
+
+function applyStatic(){
+  document.documentElement.lang = lang;
+  const set = (id, k) => { $(id).textContent = t(k); };
+  [["tabActivity","activity"],["tabSettings","settings"],["tabHelp","help"],["folderBtn","openFolder"],["lDown","down"],["lUp","up"],["lItems","items"],["lQueue","queue"],
+   ["hNow","now"],["hRecent","recent"],["hGeneral","general"],["lLang","language"],["hLang","langHint"],["lAuto","autostart"],["tAuto","autostartText"],["lPolicy","policy"],["hPolicy","policyHint"],
+   ["hBandwidth","bandwidth"],["lDownLimit","downLimit"],["lUpLimit","upLimit"],["hLimit","limitHint"],["hSync","sync"],["lPoll","poll"],["hPoll","pollHint"],["uPoll","sec"],["lIdle","idle"],["uIdle","min"],
+   ["lWorkers","workers"],["hWorkers","workersHint"],["hInfo","info"],["openData","openData"],["openRoot","openRoot"],["saveBtn","save"],["helpIntro","helpIntro"]].forEach(([i,k]) => set(i,k));
+  $("sLang").options[0].textContent = t("langAuto");
+  $("sPolicy").options[0].textContent = t("policyFull"); $("sPolicy").options[1].textContent = t("policyProg");
+  $("helpLinks").innerHTML = [["install","h1"],["configure","h2"],["custom-app-registration","h3"],["troubleshooting","h4"]].map(([f,k]) =>
+    `<a class="link" target="_blank" rel="noopener" href="${DOCS}${f}.${lang}.md"><b>${t(k)}</b><span>${t(k + "d")}</span></a>`).join("");
+  renderChips();
+}
+
+function renderChips(){
+  const defs = [["all","fAll"],["transfers","fTransfers"],["changes","fChanges"],["errors","fErrors"]];
+  $("chips").innerHTML = defs.map(([f,k]) => `<button class="chip" data-f="${f}" aria-pressed="${filter === f}">${t(k)}</button>`).join("") +
+    `<input type="search" id="q" placeholder="${t("search")}" value="${query.replace(/"/g, "&quot;")}">`;
+  $("chips").querySelectorAll(".chip").forEach(b => b.onclick = () => { filter = b.dataset.f; renderChips(); renderRecent(); });
+  $("q").oninput = e => { query = e.target.value.toLowerCase(); renderRecent(); };
+}
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c])); }
+
+function renderRecent(){
+  const rows = entries.filter(e => (filter === "all" || GROUP[filter].includes(e.kind)) && (!query || e.name.toLowerCase().includes(query))).slice().reverse();
+  if (!rows.length){ $("recent").innerHTML = `<div class="empty">${t("emptyRecent")}</div>`; return; }
+  let html = "", day = "";
+  const tf = timeFmt();
+  for (const e of rows.slice(0, 200)){
+    const when = new Date(e.utcTime);
+    const d = dayLabel(when);
+    if (d !== day){ day = d; html += `<div class="day">${esc(d)}</div>`; }
+    const bad = e.outcome !== "ok";
+    const detail = [e.bytes ? bytes(e.bytes) : "", bad ? t("o_" + e.outcome) : "", e.detail || ""].filter(Boolean).join(" · ");
+    html += `<div class="row"><div class="ico ${bad ? e.outcome : ""}">${ICON[e.kind] || "•"}</div><div class="meta"><div class="name" title="${esc(e.name)}">${esc(e.name)}</div>` +
+            `<div class="small">${t("k_" + e.kind)}${detail ? " · " + esc(detail) : ""}</div></div><div class="small" title="${esc(when.toLocaleString(locale))}">${tf.format(when)}</div></div>`;
+  }
+  $("recent").innerHTML = html;
+}
+
+function renderNow(){
+  if (!S.active.length){ $("now").innerHTML = `<div class="empty">${t("nothing")}</div>`; return; }
+  $("now").innerHTML = S.active.map(a => {
+    const pct = a.total > 0 ? Math.min(100, Math.floor(a.done * 100 / a.total)) : 0;
+    return `<div class="row"><div class="ico">${ICON[a.kind] || "•"}</div><div class="meta"><div class="name" title="${esc(a.name)}">${esc(a.name)}</div>` +
+           `<div class="small">${t("k_" + a.kind)} · ${bytes(a.done)} / ${bytes(a.total)} · ${nf(pct)}%</div><div class="bar2"><i style="width:${pct}%"></i></div></div></div>`;
+  }).join("");
+}
+
+function hero(){
+  const st = S.status || "";
+  let cls = "busy", title = st, sub = "", btn = null;
+  if (S.needsSignIn){ cls = "warn"; title = t("stSignin"); sub = t("stSigninSub"); btn = [t("signIn"), () => api("/api/signin", {})]; }
+  else if (S.paused){ cls = "warn"; title = t("stPaused"); sub = t("stPausedSub"); }
+  else if (st.startsWith("Up to date")){ cls = "ok"; title = t("stOk"); sub = t("stOkSub"); }
+  else if (st.startsWith("Indexing")){ cls = "busy"; title = t("stIndexing"); sub = t("stIndexingSub") + " " + st.replace(/^Indexing OneDrive:\s*/, ""); }
+  else if (st.startsWith("Offline")){ cls = "bad"; title = t("stOffline"); sub = t("stOfflineSub"); }
+  else if (st.startsWith("Stopped")){ cls = "bad"; title = t("stStopped"); sub = st.replace(/^Stopped:\s*/, ""); }
+  else if (st.startsWith("Signing in")){ cls = "busy"; title = t("stSigningIn"); sub = t("stSigningInSub"); }
+  else if (st.startsWith("Starting")){ title = t("stStarting"); }
+  $("pill").className = "pill " + cls; $("pillText").textContent = title;
+  $("heroTitle").textContent = title; $("heroSub").textContent = sub;
+  const b = $("heroBtn"); b.hidden = !btn; if (btn){ b.textContent = btn[0]; b.onclick = btn[1]; }
+  $("pauseBtn").textContent = S.paused ? t("resume") : t("pause");
+  $("banner").innerHTML = S.heldDeletes > 0 ? `<div class="banner"><span>${t("held", S.heldDeletes)}</span><button class="btn" id="allowBtn">${t("allow")}</button></div>` : "";
+  if (S.heldDeletes > 0) $("allowBtn").onclick = () => api("/api/allow-deletes", {}).then(poll);
+}
+
+function tiles(){
+  const now = performance.now();
+  if (last){
+    const dt = (now - last.t) / 1000;
+    if (dt > 0.5){
+      $("tDown").textContent = bytes(Math.max(0, (S.bytesDown - last.d) / dt)) + t("perSec");
+      $("tUp").textContent = bytes(Math.max(0, (S.bytesUp - last.u) / dt)) + t("perSec");
+      last = { t: now, d: S.bytesDown, u: S.bytesUp };
+    }
+  } else { last = { t: now, d: S.bytesDown, u: S.bytesUp }; $("tDown").textContent = $("tUp").textContent = "0 B" + t("perSec"); }
+  $("tItems").textContent = nf(S.items); $("tQueue").textContent = nf(S.pendingUploads);
+}
+
+function fillSettings(){
+  if (dirty) return;
+  const s = S.settings, kb = v => v % 1024 === 0 && v > 0 ? [v / 1024, 1024] : [v, 1];
+  $("sLang").value = s.language; $("sPolicy").value = s.hydrationPolicy; $("sAuto").checked = S.autostart;
+  const d = kb(s.downloadKiBps), u = kb(s.uploadKiBps);
+  $("sDown").value = d[0]; $("uDown").value = d[1]; $("sUp").value = u[0]; $("uUp").value = u[1];
+  $("sPoll").value = s.pollActiveSeconds; $("sIdle").value = Math.round(s.pollIdleMaxSeconds / 60); $("sWorkers").value = s.hydrationWorkers;
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const rows = [["iFolder", S.rootPath], ["iData", S.dataDir], ["iConfig", S.configPath], ["iClient", S.clientId], ["iVersion", S.version],
+    ["iMemory", bytes(S.privateBytes)], ["iUptime", duration(S.uptimeSeconds)], ["iLang", S.osLanguage === "es" ? "Español" : "English"], ["iRegion", S.osCulture], ["iZone", zone]];
+  $("info").innerHTML = rows.map(([k, v]) => `<dt>${t(k)}</dt><dd>${esc(v)}</dd>`).join("");
+}
+
+function render(){
+  hero(); tiles(); renderNow(); fillSettings();
+}
+
+async function poll(){
+  try {
+    S = await api("/api/state");
+    const want = S.settings.language === "auto" ? S.osLanguage : S.settings.language;
+    if (want !== lang || locale !== S.osCulture){ lang = want in I18N ? want : "en"; locale = S.osCulture; applyStatic(); renderRecent(); }
+    const a = await api("/api/activity?after=" + lastId);
+    if (a.entries.length){ entries = entries.concat(a.entries).slice(-400); lastId = a.lastId; renderRecent(); }
+    render();
+  } catch (e) { $("pillText").textContent = "…"; }
+}
+
+function showToast(msg){ const el = $("toast"); el.textContent = msg; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 3200); }
+
+async function save(){
+  const num = (id, mul = 1) => Math.max(0, Math.round((parseFloat($(id).value) || 0) * mul));
+  const body = { language: $("sLang").value, hydrationPolicy: $("sPolicy").value,
+    downloadKiBps: num("sDown", +$("uDown").value), uploadKiBps: num("sUp", +$("uUp").value),
+    pollActiveSeconds: num("sPoll"), pollIdleMaxSeconds: num("sIdle", 60), hydrationWorkers: num("sWorkers") };
+  try {
+    const r = await api("/api/settings", body);
+    if (S.autostart !== $("sAuto").checked) await api("/api/autostart", { value: $("sAuto").checked });
+    if (!r.ok) throw new Error(r.error || "save");
+    dirty = false; showToast(r.restartRequired ? t("savedRestart") : t("saved")); $("saveNote").textContent = r.restartRequired ? t("savedRestart") : "";
+    lang = ""; await poll();
+  } catch (e) { showToast(t("saveFail")); }
+}
+
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
+  ["activity","settings","help"].forEach(id => $(id).hidden = id !== b.dataset.tab);
+});
+document.querySelectorAll("#settings input,#settings select").forEach(el => el.addEventListener("input", () => { dirty = true; }));
+$("saveBtn").onclick = save;
+$("pauseBtn").onclick = () => api("/api/pause", { value: !S.paused }).then(poll);
+$("folderBtn").onclick = $("openRoot").onclick = () => api("/api/open-folder", {});
+$("openData").onclick = () => api("/api/open-data-folder", {});
+
+applyStatic(); poll(); setInterval(poll, 2000);
+</script>
+</body>
+</html>

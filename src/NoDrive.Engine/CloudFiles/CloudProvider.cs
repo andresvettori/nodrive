@@ -210,29 +210,34 @@ internal static class CloudProvider
             var cts = s_inFlight.GetValueOrDefault(req.RequestKey)?.Cts ?? new CancellationTokenSource();
             var sw = Stopwatch.StartNew();
             s_svc.Callers.Record(req.Process, req.Length, req.FileSize);
+            ActiveTransfer? act = null;
             try
             {
                 // Read-ahead (P1 finding): a player reading 40 KB at a time pays a network round trip per read; fetch a growing window beyond the required range.
                 bool whole = !req.Background && req.FileSize > 0 && req.FileSize <= WholeFileLimit;
                 long fetch = whole ? req.FileSize : req.Background ? req.Length : s_svc.ReadAhead.Plan(req.ItemId, req.Offset, req.Length, req.OptionalOffset, req.OptionalLength, req.FileSize);   // thumbnails/search/AV: exactly what they asked, never ahead
                 s_svc.Callers.RecordFetched(req.Process, fetch);
+                if (!req.Background) { act = ActivityLog.Begin("download", Path.GetFileName(req.NormPath) is { Length: > 0 } nm ? nm : req.ItemId, whole ? req.FileSize : fetch); }
                 try
                 {
                     await s_svc.Hydrator.StreamAsync(req.ItemId, whole ? 0 : req.Offset, fetch, whole ? 0 : req.Length,
                         (chunk, offset) => { if (!whole && offset >= req.Offset + req.Length && (s_dataQueue.Reader.Count > 0 || s_backgroundQueue.Reader.Count > 8)) { throw new ReadAheadStopped(); } TransferData(req, chunk, offset); },
-                        done => PInvoke.CfReportProviderProgress(new CF_CONNECTION_KEY(req.ConnectionKey), req.TransferKey, req.Length, Math.Min(done, req.Length)),
+                        done => { if (act is not null) { act.Done = done; } PInvoke.CfReportProviderProgress(new CF_CONNECTION_KEY(req.ConnectionKey), req.TransferKey, req.Length, Math.Min(done, req.Length)); },
                         cts.Token, req.FileSize).ConfigureAwait(false);
                 }
                 catch (ReadAheadStopped) { /* the required part was delivered; nothing more to do */ }
+                if (act is not null) { ActivityLog.End(act, "ok"); act = null; }
                 if (sw.ElapsedMilliseconds > 3000) { Log.Info($"hydrated {req.ItemId} [{req.Offset}+{req.Length}] for {Path.GetFileName(req.Process ?? "?")} in {sw.Elapsed.TotalSeconds:F1} s"); }
             }
             catch (OperationCanceledException)
             {
+                if (act is not null) { ActivityLog.End(act, "cancelled", "the application stopped reading"); act = null; }
                 if (!req.Background && req.FileSize > 0 && req.FileSize <= WholeFileLimit && !s_stop.IsCancellationRequested) { Backfill(req); }
                 CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED);
             }
             catch (Exception ex)
             {
+                if (act is not null) { ActivityLog.End(act, "failed", ex.Message); act = null; }
                 Log.Warn($"hydration of {req.ItemId} failed: {ex.Message}");
                 CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE);
             }
@@ -270,6 +275,7 @@ internal static class CloudProvider
             prm.TransferData.Offset = offset;
             prm.TransferData.Length = chunk.Length;
             HRESULT hr = PInvoke.CfExecute(&op, &prm);
+            if (hr.Succeeded) { ActivityLog.AddDown(chunk.Length); }
             if (hr.Failed)
             {
                 if (offset >= req.Offset + req.Length) { throw new ReadAheadStopped(); }               // beyond the required range: not an error

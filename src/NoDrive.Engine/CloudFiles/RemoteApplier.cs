@@ -48,7 +48,7 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
                 if (index.TryGet(ch.Id) is { } nw && population.IsPopulated(nw.ParentId ?? rootId) && PathOf(nw) is { } np && Path.GetDirectoryName(np) is { } nd) { dirty.Add(nd); }
                 if (ch.Item is null)
                 {
-                    if (old?.Path is { } p && DeleteLocal(p)) { removed++; }
+                    if (old?.Path is { } p && DeleteLocal(p)) { removed++; ActivityLog.Add("delete", Path.GetFileName(p), "ok", detail: "removed in the cloud"); }
                     continue;
                 }
                 var now = index.TryGet(ch.Id);
@@ -58,16 +58,16 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
                 bool existsOld = old?.Path is { } op && Exists(op);
                 if (old is null || !existsOld)
                 {
-                    if (newPath is not null && !Exists(newPath)) { created += Create(cur); }
+                    if (newPath is not null && !Exists(newPath)) { int c = Create(cur); created += c; if (c > 0) { ActivityLog.Add("create", cur.Name, "ok", cur.Size, detail: "new in the cloud"); } }
                     continue;
                 }
                 if (old.Path != newPath)
                 {
                     if (newPath is null) { if (DeleteLocal(old.Path!)) { removed++; } }
-                    else if (MoveLocal(old.Path!, newPath)) { moved++; }
+                    else if (MoveLocal(old.Path!, newPath)) { moved++; ActivityLog.Add("rename", cur.Name, "ok", detail: "renamed in the cloud"); }
                     continue;
                 }
-                if (!cur.IsFolder && (cur.Size != old.Item.Size || cur.ModifiedUtcTicks != old.Item.ModifiedUtcTicks || cur.ETag != old.Item.ETag) && UpdateFile(newPath!, cur)) { updated++; }
+                if (!cur.IsFolder && (cur.Size != old.Item.Size || cur.ModifiedUtcTicks != old.Item.ModifiedUtcTicks || cur.ETag != old.Item.ETag) && UpdateFile(newPath!, cur)) { updated++; ActivityLog.Add("update", cur.Name, "ok", cur.Size, detail: "changed in the cloud"); }
             }
             catch (Exception ex) { Log.Warn($"remote apply of {ch.Id} failed: {ex.Message}"); }
         }

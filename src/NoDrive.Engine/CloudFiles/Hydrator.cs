@@ -24,6 +24,9 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
     private static readonly TimeSpan UrlLifetime = TimeSpan.FromMinutes(45);          // Graph URLs live about an hour
 
     private readonly HttpClient _http = CreateClient();
+
+    /// <summary>Optional download rate limit shared by all downloads.</summary>
+    public NoDrive.Core.Net.BandwidthLimiter? Limiter { get; init; }
     private readonly ConcurrentDictionary<string, (Uri Url, DateTime FetchedUtc)> _urls = new();
 
     private static HttpClient CreateClient()
@@ -128,6 +131,8 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
                     long first = (firstFlush + 4095) / 4096 * 4096;
                     want = (int)Math.Min(want, Math.Max(4096, first));
                 }
+                long rate = Limiter?.BytesPerSecond ?? 0;
+                if (rate > 0) { want = (int)Math.Min(want, Math.Max(4096, rate / 4 / 4096 * 4096)); }          // small steps so a low limit never trips the no-progress watchdog
                 int filled = 0;
                 while (filled < want)
                 {
@@ -137,6 +142,7 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
                     watchdog.CancelAfter(policy.NoProgressTimeout);
                 }
                 if (filled == 0) { throw new IOException($"stream ended at {position}, expected {end}"); }
+                if (Limiter is not null) { await Limiter.WaitAsync(filled, token).ConfigureAwait(false); watchdog.CancelAfter(policy.NoProgressTimeout); }
                 sink(buffer.AsSpan(0, filled), position);
                 position += filled;
                 progress(position - offset);

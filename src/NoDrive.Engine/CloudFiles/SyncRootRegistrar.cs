@@ -51,14 +51,14 @@ internal static class SyncRootRegistrar
     }
 
     /// <summary>Registers (only when not yet registered) and makes sure Flags are 1058. Returns a short human-readable outcome.</summary>
-    public static async Task<(bool Fresh, string Outcome)> EnsureRegisteredAsync(string rootPath)
+    public static async Task<(bool Fresh, string Outcome)> EnsureRegisteredAsync(string rootPath, string configuredPolicy = "full")
     {
         Directory.CreateDirectory(rootPath);
         string outcome;
         bool fresh = !IsRegistered();
         // Full (default, ADR-0010): the whole file is downloaded on first access, like OneDrive; Photos and other packaged apps cancel slow partial reads and call the file corrupted.
         // NODRIVE_HYDRATION=progressive switches back (re-registers once).
-        string wanted = string.Equals(Environment.GetEnvironmentVariable("NODRIVE_HYDRATION"), "progressive", StringComparison.OrdinalIgnoreCase) ? "progressive" : "full";
+        string wanted = string.Equals(Environment.GetEnvironmentVariable("NODRIVE_HYDRATION") ?? configuredPolicy, "progressive", StringComparison.OrdinalIgnoreCase) ? "progressive" : "full";
         bool policyChanged = !fresh && !string.Equals(ReadMarker(), wanted, StringComparison.Ordinal);
         if (fresh || policyChanged)
         {

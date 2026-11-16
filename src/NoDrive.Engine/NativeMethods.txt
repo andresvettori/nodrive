@@ -68,3 +68,5 @@ SHChangeNotify
 CfConvertToPlaceholder
 CfSetInSyncState
 ExtractIcon
+GetUserDefaultLocaleName
+GetUserDefaultUILanguage

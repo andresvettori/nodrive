@@ -33,6 +33,12 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
 {
     private const string SelectFields = "id,name,size,lastModifiedDateTime,folder,file,root,parentReference,deleted,cTag,eTag";
     private readonly GraphOptions _options = options ?? new GraphOptions();
+
+    /// <summary>Optional upload rate limit shared by all uploads.</summary>
+    public NoDrive.Core.Net.BandwidthLimiter? UploadLimiter { get; set; }
+
+    /// <summary>Reports the bytes that went out, for the activity counters.</summary>
+    public Action<long>? OnBytesUploaded { get; set; }
     private readonly ThrottleGate _gate = gate ?? new ThrottleGate();
 
     /// <summary>The id of the drive root (parent of the top-level items in delta), needed by the engine to anchor the tree.</summary>
@@ -104,6 +110,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
         long size = new FileInfo(localPath).Length;
         if (size <= SimpleUploadLimit)
         {
+            if (UploadLimiter is not null) { await UploadLimiter.WaitAsync(size, ct).ConfigureAwait(false); }
             using var resp = await SendAsync(() =>
             {
                 var req = new HttpRequestMessage(HttpMethod.Put, ChildUrl(parentId, name, "/content?@microsoft.graph.conflictBehavior=fail"));
@@ -111,6 +118,8 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
                 req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
                 return req;
             }, ct).ConfigureAwait(false);
+            OnBytesUploaded?.Invoke(size);
+            progress?.Invoke(size, size);
             return await ReadItemAsync(resp, ct).ConfigureAwait(false);
         }
 
@@ -135,6 +144,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
             while (sent < size)
             {
                 int n = await fs.ReadAtLeastAsync(buffer.AsMemory(0, (int)Math.Min(ChunkSize, size - sent)), (int)Math.Min(ChunkSize, size - sent), throwOnEndOfStream: true, ct).ConfigureAwait(false);
+                if (UploadLimiter is not null) { await UploadLimiter.WaitAsync(n, ct).ConfigureAwait(false); }
                 for (int attempt = 1; ; attempt++)
                 {
                     // Fragment PUTs carry no Authorization header (the URL is pre-authenticated).
@@ -153,6 +163,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
                         }
                         resp.EnsureSuccessStatusCode();
                         sent += n;
+                        OnBytesUploaded?.Invoke(n);
                         progress?.Invoke(sent, size);
                         if (sent >= size) { return await ReadItemAsync(resp, ct).ConfigureAwait(false); }
                         break;

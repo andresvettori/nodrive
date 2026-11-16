@@ -2,6 +2,7 @@ using System.Diagnostics;
 using NoDrive.Engine.CloudFiles;
 using NoDrive.Engine.Infrastructure;
 using NoDrive.Engine.Shell;
+using NoDrive.Engine.Web;
 
 namespace NoDrive.Engine;
 
@@ -48,6 +49,9 @@ internal static class Program
         });
 
         UserSettings.Init(paths.DataDir);
+        using var web = new WebUi(service, config, paths);
+        web.Start(cts.Token);
+        TrayWindow.SetOpenUi(web.Open);
         TrayWindow.Configure(() => UserSettings.Paused, () => UserSettings.SetPaused(!UserSettings.Paused), () => UserSettings.AutostartEnabled, () => UserSettings.SetAutostart(!UserSettings.AutostartEnabled));
         TrayWindow.Create("NoDrive", onQuit: () => cts.Cancel(), onOpenFolder: () => OpenFolder(paths.SyncRoot), statusText: () => service.Status, onSignIn: service.RequestSignIn, needsSignIn: () => service.NeedsSignIn, heldDeletes: () => service.HeldDeletes, onAllowDeletes: service.AllowDeletes);
         _ = Task.Run(async () =>

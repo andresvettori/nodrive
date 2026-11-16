@@ -26,6 +26,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Web\index.html" LogicalName="index.html" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
     <!-- The system SQLite (System32\winsqlite3.dll): no native payload shipped. -->
     <PackageReference Include="SQLitePCLRaw.provider.winsqlite3" />

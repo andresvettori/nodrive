@@ -21,6 +21,11 @@ internal static unsafe class TrayWindow
     private const nuint IdAllowDeletes = 5;
     private const nuint IdPause = 6;
     private const nuint IdAutostart = 7;
+    private const nuint IdOpenUi = 8;
+    private static Action? s_onOpenUi;
+
+    /// <summary>Opens the local settings and activity page (also the left-click and double-click action).</summary>
+    public static void SetOpenUi(Action onOpenUi) => s_onOpenUi = onOpenUi;
     private static Func<bool>? s_isPaused;
     private static Action? s_onTogglePause;
     private static Func<bool>? s_autostartOn;
@@ -138,12 +143,14 @@ internal static unsafe class TrayWindow
             fixed (char* pAllow = allowText)
             fixed (char* pPause = (s_isPaused?.Invoke() == true ? "Resume syncing" : "Pause syncing"))
             fixed (char* pAuto = "Start NoDrive with Windows")
+            fixed (char* pUi = "Open NoDrive...")
             fixed (char* pOpen = "Open NoDrive folder")
             fixed (char* pQuit = "Quit NoDrive")
             {
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING | MENU_ITEM_FLAGS.MF_GRAYED, IdStatus, new PCWSTR(pStatus));
                 if (s_needsSignIn?.Invoke() == true) { PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdSignIn, new PCWSTR(pSign)); }
                 if ((s_heldDeletes?.Invoke() ?? 0) > 0) { PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdAllowDeletes, new PCWSTR(pAllow)); }
+                PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdOpenUi, new PCWSTR(pUi));
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdPause, new PCWSTR(pPause));
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING | (s_autostartOn?.Invoke() == true ? MENU_ITEM_FLAGS.MF_CHECKED : 0), IdAutostart, new PCWSTR(pAuto));
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdOpenFolder, new PCWSTR(pOpen));
@@ -152,6 +159,7 @@ internal static unsafe class TrayWindow
             uint flags = (uint)(TRACK_POPUP_MENU_FLAGS.TPM_RETURNCMD | TRACK_POPUP_MENU_FLAGS.TPM_RIGHTBUTTON | TRACK_POPUP_MENU_FLAGS.TPM_NONOTIFY);
             nuint cmd = (nuint)PInvoke.TrackPopupMenuEx(menu, flags, pt.X, pt.Y, s_hwnd, null).Value;
             if (cmd == IdOpenFolder) { s_onOpenFolder?.Invoke(); }
+            else if (cmd == IdOpenUi) { s_onOpenUi?.Invoke(); }
             else if (cmd == IdPause) { s_onTogglePause?.Invoke(); }
             else if (cmd == IdAutostart) { s_onToggleAutostart?.Invoke(); }
             else if (cmd == IdAllowDeletes) { s_onAllowDeletes?.Invoke(); }
@@ -168,7 +176,8 @@ internal static unsafe class TrayWindow
         {
             case WmTray:
                 uint mouse = (uint)(lParam.Value & 0xFFFF);
-                if (mouse is PInvoke.WM_RBUTTONUP or PInvoke.WM_CONTEXTMENU or PInvoke.WM_LBUTTONUP) { ShowMenu(); }
+                if (mouse == 0x0203) { s_onOpenUi?.Invoke(); }
+                else if (mouse is PInvoke.WM_RBUTTONUP or PInvoke.WM_CONTEXTMENU or PInvoke.WM_LBUTTONUP) { ShowMenu(); }
                 return new LRESULT(0);
             case PInvoke.WM_CLOSE:
                 PInvoke.DestroyWindow(hwnd);

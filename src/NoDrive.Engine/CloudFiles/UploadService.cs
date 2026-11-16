@@ -147,6 +147,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
 
     private async Task ProcessAsync(string path, int attempts, CancellationToken ct)
     {
+        ActiveTransfer? act = null;
         try
         {
             bool isDir = Directory.Exists(path);
@@ -168,22 +169,25 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             {
                 try { using var probe = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
                 catch (IOException) { Defer(path, attempts, TimeSpan.FromSeconds(10), bump: false); return; }          // still being written
-                try { item = await graph.UploadNewFileAsync(parentId, name, path, ct, ProgressLogger(name)).ConfigureAwait(false); }
+                act = ActivityLog.Begin("upload", name, new FileInfo(path).Length);
+                try { item = await graph.UploadNewFileAsync(parentId, name, path, ct, ProgressLogger(name, act)).ConfigureAwait(false); }
                 catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
                 {
                     string copy = ConflictName(name);
-                    item = await graph.UploadNewFileAsync(parentId, copy, path, ct, ProgressLogger(copy)).ConfigureAwait(false);
+                    item = await graph.UploadNewFileAsync(parentId, copy, path, ct, ProgressLogger(copy, act)).ConfigureAwait(false);
                     finalPath = Path.Combine(Path.GetDirectoryName(path)!, copy);
                     File.Move(path, finalPath);
                     Log.Warn($"name clash for '{name}': uploaded as '{copy}'");
                 }
-                if (File.Exists(finalPath) && File.GetLastWriteTimeUtc(finalPath) != stamp) { Log.Warn($"{name} changed while uploading; the uploaded copy is the earlier version and the file stays a plain local file"); index.RemoveUpload(path); return; }
+                if (File.Exists(finalPath) && File.GetLastWriteTimeUtc(finalPath) != stamp) { Log.Warn($"{name} changed while uploading; the uploaded copy is the earlier version and the file stays a plain local file"); index.RemoveUpload(path); ActivityLog.End(act!, "skipped", "changed while uploading"); act = null; return; }
             }
 
             index.ApplyPage([DeltaChange.Upsert(item)], "upload.last", item.Id, index.Generation);
             bool converted = ConvertToPlaceholder(finalPath, item.Id);
             if (isDir) { population.Set(item.Id, true); QueueChildren(finalPath); }
             index.RemoveUpload(path);
+            if (act is not null) { ActivityLog.End(act, "ok", finalPath != path ? "conflict copy" : null); act = null; }
+            else { ActivityLog.Add(isDir ? "create" : "upload", Path.GetFileName(finalPath), "ok", 0, sw.ElapsedMilliseconds); }
             PinWatcher.NotifyShell(finalPath);
             if (Path.GetDirectoryName(finalPath) is { } parentDir) { RemoteApplier.NotifyDir(parentDir); }
             Log.Info($"uploaded {(isDir ? "folder" : "file")} '{Path.GetFileName(finalPath)}' in {sw.ElapsedMilliseconds} ms{(converted ? "" : " (placeholder conversion failed, will show as local until the next sync)")}");
@@ -191,23 +195,26 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Forbidden or HttpStatusCode.InsufficientStorage or HttpStatusCode.NotFound)
         {
+            if (act is not null) { ActivityLog.End(act, "failed", ex.Message); act = null; } else { ActivityLog.Add("error", Path.GetFileName(path), "failed", detail: ex.Message); }
             Log.Warn($"upload of '{Path.GetFileName(path)}' refused ({ex.Message}); retrying in 6 h");
             Defer(path, attempts, TimeSpan.FromHours(6), bump: true);
         }
         catch (Exception ex)
         {
             var wait = Backoff[Math.Min(attempts, Backoff.Length - 1)];
+            if (act is not null) { ActivityLog.End(act, "failed", ex.Message); act = null; } else { ActivityLog.Add("error", Path.GetFileName(path), "failed", detail: ex.Message); }
             Log.Warn($"upload of '{Path.GetFileName(path)}' failed ({ex.Message}); retry in {wait.TotalSeconds:F0} s");
             Defer(path, attempts, wait, bump: true);
         }
     }
 
     /// <summary>Logs large uploads about every 10%; small files stay silent.</summary>
-    private static Action<long, long> ProgressLogger(string name)
+    private static Action<long, long> ProgressLogger(string name, ActiveTransfer? act)
     {
         int last = 0;
         return (sent, total) =>
         {
+            if (act is not null) { act.Done = sent; }
             if (total < 20 * 1024 * 1024) { return; }
             int pct = (int)(sent * 100 / total) / 10 * 10;
             if (pct > last && pct < 100) { last = pct; Log.Info($"uploading '{name}': {pct}% ({sent / 1048576} of {total / 1048576} MiB)"); }

@@ -86,6 +86,7 @@ internal sealed class LocalOps(ItemIndex index, GraphDrive graph, string syncRoo
                 }
                 index.ApplyPage([DeltaChange.Delete(op.ItemId)], "ops.last", op.ItemId, index.Generation);
                 index.RemoveOp(op.Seq);
+                ActivityLog.Add("delete", it.Name, "ok", detail: "recycle bin");
                 Log.Info($"deleted '{it.Name}' in the cloud (recycle bin)");
                 return true;
             }
@@ -112,6 +113,7 @@ internal sealed class LocalOps(ItemIndex index, GraphDrive graph, string syncRoo
             RemoteApplier.MarkInSync(localPath);
             PinWatcher.NotifyShell(localPath);
             index.RemoveOp(op.Seq);
+            ActivityLog.Add("rename", moved.Name, "ok", detail: it.Name);
             Log.Info($"renamed/moved '{it.Name}' to '{moved.Name}' in the cloud");
             return true;
         }
@@ -126,6 +128,7 @@ internal sealed class LocalOps(ItemIndex index, GraphDrive graph, string syncRoo
         catch (Exception ex)
         {
             var wait = Backoff[Math.Min(op.Attempts, Backoff.Length - 1)];
+            ActivityLog.Add("error", index.TryGet(op.ItemId)?.Name ?? op.ItemId, "failed", detail: $"{op.Kind}: {ex.Message}");
             Log.Warn($"{op.Kind} of {op.ItemId} failed ({ex.Message}); retry in {wait.TotalSeconds:F0} s");
             Defer(op, wait, bump: true);
             return false;

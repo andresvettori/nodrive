@@ -14,6 +14,15 @@ internal sealed class EngineConfig
     [JsonPropertyName("populationBudget")] public long PopulationBudget { get; set; } = 150_000;
     [JsonPropertyName("pollActiveSeconds")] public int PollActiveSeconds { get; set; } = 60;
     [JsonPropertyName("pollIdleMaxSeconds")] public int PollIdleMaxSeconds { get; set; } = 900;
+    /// <summary>Screen language: "auto" (follow Windows), "en" or "es".</summary>
+    [JsonPropertyName("language")] public string Language { get; set; } = "auto";
+    /// <summary>Download and upload limits in KiB/s; 0 means unlimited. Applied live.</summary>
+    [JsonPropertyName("downloadKiBps")] public int DownloadKiBps { get; set; }
+    [JsonPropertyName("uploadKiBps")] public int UploadKiBps { get; set; }
+    /// <summary>"full" (whole file on first access, like OneDrive; default) or "progressive". Applied at the next start.</summary>
+    [JsonPropertyName("hydrationPolicy")] public string HydrationPolicy { get; set; } = "full";
+    /// <summary>Port of the local settings page; 0 picks the default (47653) or a free one.</summary>
+    [JsonPropertyName("webPort")] public int WebPort { get; set; }
 
     public PopulationOptions ToPopulationOptions() => new() { PlaceholderBudget = PopulationBudget };
 
