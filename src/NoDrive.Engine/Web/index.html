@@ -48,7 +48,10 @@ button.primary:hover{filter:brightness(1.08)}
 .chip[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
 input[type=search],input[type=number],select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
 input[type=search]{margin-left:auto;min-width:180px}
-.field select{width:100%;max-width:100%}
+.field{grid-template-columns:minmax(0,1fr)}
+.card{min-width:0}
+.field select,.field input[type=number]{min-width:0}
+.field select{width:100%;max-width:100%;text-overflow:ellipsis}
 .card.wide{grid-column:1/-1}
 dl{grid-template-columns:minmax(120px,max-content) 1fr}dd{overflow-wrap:anywhere;word-break:normal}
 .savebar{display:none;border-top:1px solid var(--line);background:var(--card)}
