@@ -77,6 +77,19 @@ jobs:
           "--- IL2xxx/IL3xxx warnings in spike publishes (none expected from our code) ---"
           Get-ChildItem artifacts/spikes -Filter *-publish.log -ErrorAction SilentlyContinue | Select-String -Pattern 'IL2\d{3}|IL3\d{3}|error' | ForEach-Object { $_.Line } | Sort-Object -Unique
 
+      # Per-user MSI (WiX v5, pinned to stay on the MS-RL licence). A failure here must not hide the other artifacts: the log is published too.
+      - name: Build MSI installer (WiX 5)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts/installer | Out-Null
+          $log = 'artifacts/installer/msi-build.log'
+          dotnet tool install --global wix --version 5.0.2 2>&1 | Tee-Object $log
+          $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
+          wix extension add -g WixToolset.UI.wixext/5.0.2 2>&1 | Tee-Object -Append $log
+          wix build installer/NoDrive.wxs -ext WixToolset.UI.wixext -arch x64 -d EnginePath=artifacts/engine-win-x64 -d Version=0.1.${{ github.run_number }} -o artifacts/installer/NoDrive-x64.msi 2>&1 | Tee-Object -Append $log
+          if ($LASTEXITCODE -ne 0) { throw 'wix build failed' }
+
       # Publish the freshly built binaries to an orphan branch so they can be fetched with plain git over SSH
       # (private repo: artifact downloads need a browser login). The branch is force-pushed on every push to main.
       - name: Publish binaries to the ci-binaries branch
@@ -88,6 +101,8 @@ jobs:
           Copy-Item -Recurse -Force artifacts/spikes/* $dir
           New-Item -ItemType Directory -Force "$dir/engine" | Out-Null
           Copy-Item -Recurse -Force artifacts/engine-win-x64/* "$dir/engine" -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force "$dir/installer" | Out-Null
+          Copy-Item -Recurse -Force artifacts/installer/* "$dir/installer" -ErrorAction SilentlyContinue
           "$env:GITHUB_SHA built $(Get-Date -AsUTC -Format o)" | Set-Content "$dir/BUILD.txt"
           Set-Location $dir
           git init -q -b ci-binaries
