@@ -49,6 +49,8 @@ internal static class Program
         });
 
         UserSettings.Init(paths.DataDir);
+        ActivityLog.Load(paths.DataDir);
+        ActivityLog.Add("sync", "NoDrive", "ok", detail: "started");
         using var web = new WebUi(service, config, paths);
         web.Start(cts.Token);
         TrayWindow.SetOpenUi(web.Open);

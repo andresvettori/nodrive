@@ -48,12 +48,21 @@ button.primary:hover{filter:brightness(1.08)}
 .chip[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
 input[type=search],input[type=number],select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
 input[type=search]{margin-left:auto;min-width:180px}
+.field select{width:100%;max-width:100%}
+.card.wide{grid-column:1/-1}
+dl{grid-template-columns:minmax(120px,max-content) 1fr}dd{overflow-wrap:anywhere;word-break:normal}
+.savebar{position:fixed;left:0;right:0;bottom:0;z-index:9;transform:translateY(110%);transition:transform .25s;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -8px 28px rgba(20,35,60,.18)}
+.savebar.show{transform:none}
+.savebar>div{max-width:1040px;margin:0 auto;padding:12px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.savebar b{flex:1;min-width:200px}
+body.pad{padding-bottom:84px}
+.badge{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn);margin-left:6px;vertical-align:middle}
 .day{margin:14px 0 2px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
 .empty{color:var(--muted);padding:18px 0;text-align:center}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
 .field{display:grid;gap:4px;margin-bottom:14px}.field label{font-weight:600}.field .hint{color:var(--muted);font-size:13px}
 .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}dt{color:var(--muted)}dd{margin:0;word-break:break-all}
+dl{display:grid;gap:6px 16px;margin:0}dt{color:var(--muted)}dd{margin:0}
 .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
 a.link{display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
 a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}a.link span{color:var(--muted);font-size:13px}
@@ -133,13 +142,13 @@ a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}
         <div class="field"><label for="sIdle" id="lIdle"></label><div class="inline"><input type="number" id="sIdle" min="1" max="1440" style="width:120px"><span id="uIdle"></span></div></div>
         <div class="field"><label for="sWorkers" id="lWorkers"></label><input type="number" id="sWorkers" min="2" max="16" style="width:120px"><span class="hint" id="hWorkers"></span></div>
       </div>
-      <div class="card">
+      <div class="card wide">
         <h2 id="hInfo"></h2>
         <dl id="info"></dl>
         <div class="inline" style="margin-top:14px"><button class="btn" id="openData"></button><button class="btn" id="openRoot"></button></div>
       </div>
     </div>
-    <div class="inline"><button class="btn primary" id="saveBtn"></button><span class="small" id="saveNote"></span></div>
+    <div class="small" id="saveNote"></div>
   </section>
 
   <section id="help" hidden>
@@ -147,6 +156,7 @@ a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}
     <div class="links" id="helpLinks"></div>
   </section>
 </main>
+<div class="savebar" id="savebar" role="region"><div><b id="dirtyMsg"></b><button class="btn" id="discardBtn"></button><button class="btn primary" id="saveBtn"></button></div></div>
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -175,7 +185,7 @@ en: {
   workers:"Parallel downloads", workersHint:"Applies after restarting NoDrive.",
   info:"About this setup", iFolder:"NoDrive folder", iData:"Data folder", iConfig:"Config file", iClient:"Sign-in app ID", iVersion:"Version", iMemory:"Memory in use", iUptime:"Running for",
   iLang:"Windows language", iRegion:"Regional format", iZone:"Time zone",
-  openData:"Open data folder", openRoot:"Open NoDrive folder", save:"Save settings", saved:"Saved.", savedRestart:"Saved. Restart NoDrive to apply the highlighted options.", saveFail:"Could not save.",
+  openData:"Open data folder", openRoot:"Open NoDrive folder", save:"Save settings", discard:"Discard", unsaved:"You have unsaved changes.", saved:"Saved.", savedRestart:"Saved. Restart NoDrive to apply the highlighted options.", saveFail:"Could not save.",
   helpIntro:"Guides open on GitHub. They explain installing, configuring and customizing NoDrive.",
   h1:"Install and first run", h1d:"Get NoDrive running and sign in.", h2:"Configure NoDrive", h2d:"Folder location, limits, startup and the config file.", h3:"Use your own Entra app ID", h3d:"Register an app in Microsoft Entra to sign in with your own client ID.", h4:"Troubleshooting", h4d:"Logs, common messages and what they mean."
 },
@@ -201,7 +211,7 @@ es: {
   workers:"Descargas en paralelo", workersHint:"Se aplica al reiniciar NoDrive.",
   info:"Sobre esta instalación", iFolder:"Carpeta NoDrive", iData:"Carpeta de datos", iConfig:"Archivo de configuración", iClient:"ID de la app de inicio de sesión", iVersion:"Versión", iMemory:"Memoria en uso", iUptime:"En ejecución desde hace",
   iLang:"Idioma de Windows", iRegion:"Formato regional", iZone:"Zona horaria",
-  openData:"Abrir carpeta de datos", openRoot:"Abrir carpeta NoDrive", save:"Guardar ajustes", saved:"Guardado.", savedRestart:"Guardado. Reiniciá NoDrive para aplicar las opciones resaltadas.", saveFail:"No se pudo guardar.",
+  openData:"Abrir carpeta de datos", openRoot:"Abrir carpeta NoDrive", save:"Guardar ajustes", discard:"Descartar", unsaved:"Tenés cambios sin guardar.", saved:"Guardado.", savedRestart:"Guardado. Reiniciá NoDrive para aplicar las opciones resaltadas.", saveFail:"No se pudo guardar.",
   helpIntro:"Las guías se abren en GitHub. Explican cómo instalar, configurar y personalizar NoDrive.",
   h1:"Instalación y primer uso", h1d:"Poné NoDrive en marcha e iniciá sesión.", h2:"Configurar NoDrive", h2d:"Ubicación de la carpeta, límites, inicio y el archivo de configuración.", h3:"Usar tu propio ID de app de Entra", h3d:"Registrá una app en Microsoft Entra para iniciar sesión con tu propio ID de cliente.", h4:"Solución de problemas", h4d:"Registros, mensajes comunes y qué significan."
 }};
@@ -242,7 +252,7 @@ function applyStatic(){
   [["tabActivity","activity"],["tabSettings","settings"],["tabHelp","help"],["folderBtn","openFolder"],["lDown","down"],["lUp","up"],["lItems","items"],["lQueue","queue"],
    ["hNow","now"],["hRecent","recent"],["hGeneral","general"],["lLang","language"],["hLang","langHint"],["lAuto","autostart"],["tAuto","autostartText"],["lPolicy","policy"],["hPolicy","policyHint"],
    ["hBandwidth","bandwidth"],["lDownLimit","downLimit"],["lUpLimit","upLimit"],["hLimit","limitHint"],["hSync","sync"],["lPoll","poll"],["hPoll","pollHint"],["uPoll","sec"],["lIdle","idle"],["uIdle","min"],
-   ["lWorkers","workers"],["hWorkers","workersHint"],["hInfo","info"],["openData","openData"],["openRoot","openRoot"],["saveBtn","save"],["helpIntro","helpIntro"]].forEach(([i,k]) => set(i,k));
+   ["lWorkers","workers"],["hWorkers","workersHint"],["hInfo","info"],["openData","openData"],["openRoot","openRoot"],["saveBtn","save"],["discardBtn","discard"],["dirtyMsg","unsaved"],["helpIntro","helpIntro"]].forEach(([i,k]) => set(i,k));
   $("sLang").options[0].textContent = t("langAuto");
   $("sPolicy").options[0].textContent = t("policyFull"); $("sPolicy").options[1].textContent = t("policyProg");
   $("helpLinks").innerHTML = [["install","h1"],["configure","h2"],["custom-app-registration","h3"],["troubleshooting","h4"]].map(([f,k]) =>
@@ -259,6 +269,7 @@ function renderChips(){
 }
 
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c])); }
+function setDirty(v){ dirty = v; $("savebar").classList.toggle("show", v); document.body.classList.toggle("pad", v); $("tabSettings").innerHTML = t("settings") + (v ? '<i class="badge"></i>' : ""); }
 
 function renderRecent(){
   const rows = entries.filter(e => (filter === "all" || GROUP[filter].includes(e.kind)) && (!query || e.name.toLowerCase().includes(query))).slice().reverse();
@@ -328,7 +339,7 @@ function fillSettings(){
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const rows = [["iFolder", S.rootPath], ["iData", S.dataDir], ["iConfig", S.configPath], ["iClient", S.clientId], ["iVersion", S.version],
     ["iMemory", bytes(S.privateBytes)], ["iUptime", duration(S.uptimeSeconds)], ["iLang", S.osLanguage === "es" ? "Español" : "English"], ["iRegion", S.osCulture], ["iZone", zone]];
-  $("info").innerHTML = rows.map(([k, v]) => `<dt>${t(k)}</dt><dd>${esc(v)}</dd>`).join("");
+  $("info").innerHTML = rows.map(([k, v]) => `<dt>${t(k)}</dt><dd>${esc(v).replace(/\\/g, "\\<wbr>")}</dd>`).join("");
 }
 
 function render(){
@@ -357,7 +368,7 @@ async function save(){
     const r = await api("/api/settings", body);
     if (S.autostart !== $("sAuto").checked) await api("/api/autostart", { value: $("sAuto").checked });
     if (!r.ok) throw new Error(r.error || "save");
-    dirty = false; showToast(r.restartRequired ? t("savedRestart") : t("saved")); $("saveNote").textContent = r.restartRequired ? t("savedRestart") : "";
+    setDirty(false); showToast(r.restartRequired ? t("savedRestart") : t("saved")); $("saveNote").textContent = r.restartRequired ? t("savedRestart") : "";
     lang = ""; await poll();
   } catch (e) { showToast(t("saveFail")); }
 }
@@ -366,7 +377,8 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
   ["activity","settings","help"].forEach(id => $(id).hidden = id !== b.dataset.tab);
 });
-document.querySelectorAll("#settings input,#settings select").forEach(el => el.addEventListener("input", () => { dirty = true; }));
+document.querySelectorAll("#settings input,#settings select").forEach(el => el.addEventListener("input", () => setDirty(true)));
+$("discardBtn").onclick = () => { setDirty(false); fillSettings(); };
 $("saveBtn").onclick = save;
 $("pauseBtn").onclick = () => api("/api/pause", { value: !S.paused }).then(poll);
 $("folderBtn").onclick = $("openRoot").onclick = () => api("/api/open-folder", {});

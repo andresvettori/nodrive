@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using NoDrive.Core.Net;
 
 namespace NoDrive.Engine.Infrastructure;
@@ -30,6 +32,29 @@ internal static class ActivityLog
     private static readonly Dictionary<long, ActiveTransfer> Active = [];
     private static long s_nextId, s_bytesDown, s_bytesUp;
 
+    private static string? s_file;
+
+    /// <summary>Loads the last entries from the journal file (one JSON object per line) and keeps appending to it. The file is trimmed on every start.</summary>
+    public static void Load(string dataDir)
+    {
+        s_file = Path.Combine(dataDir, "activity.jsonl");
+        try
+        {
+            if (!File.Exists(s_file)) { return; }
+            var lines = File.ReadLines(s_file).TakeLast(MaxEntries).ToList();
+            lock (Gate)
+            {
+                foreach (var line in lines)
+                {
+                    var e = JsonSerializer.Deserialize(line, ActivityJson.Default.ActivityEntry);
+                    if (e is not null) { Entries.AddLast(e with { Id = ++s_nextId }); }
+                }
+            }
+            File.WriteAllLines(s_file, lines);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { Log.Warn($"activity journal ignored: {ex.Message}"); }
+    }
+
     public static readonly BandwidthLimiter Download = new();
     public static readonly BandwidthLimiter Upload = new();
 
@@ -42,9 +67,18 @@ internal static class ActivityLog
     {
         lock (Gate)
         {
-            Entries.AddLast(new ActivityEntry(++s_nextId, DateTime.UtcNow, kind, name, outcome, bytes, ms, detail));
+            var entry = new ActivityEntry(++s_nextId, DateTime.UtcNow, kind, name, outcome, bytes, ms, detail);
+            Entries.AddLast(entry);
             while (Entries.Count > MaxEntries) { Entries.RemoveFirst(); }
+            Persist(entry);
         }
+    }
+
+    private static void Persist(ActivityEntry e)
+    {
+        if (s_file is null) { return; }
+        try { File.AppendAllText(s_file, JsonSerializer.Serialize(e, ActivityJson.Default.ActivityEntry) + "\n"); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* the journal is a convenience, never a failure */ }
     }
 
     public static ActiveTransfer Begin(string kind, string name, long total)
@@ -72,3 +106,7 @@ internal static class ActivityLog
         Upload.BytesPerSecond = Math.Max(0, c.UploadKiBps) * 1024L;
     }
 }
+
+[JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(ActivityEntry))]
+internal sealed partial class ActivityJson : JsonSerializerContext { }
