@@ -217,7 +217,7 @@ internal static class CloudProvider
                 bool whole = !req.Background && req.FileSize > 0 && req.FileSize <= WholeFileLimit;
                 long fetch = whole ? req.FileSize : req.Background ? req.Length : s_svc.ReadAhead.Plan(req.ItemId, req.Offset, req.Length, req.OptionalOffset, req.OptionalLength, req.FileSize);   // thumbnails/search/AV: exactly what they asked, never ahead
                 s_svc.Callers.RecordFetched(req.Process, fetch);
-                if (!req.Background) { act = ActivityLog.Begin("download", Path.GetFileName(req.NormPath) is { Length: > 0 } nm ? nm : req.ItemId, whole ? req.FileSize : fetch); }
+                if (!req.Background || req.Length >= 256 * 1024) { act = ActivityLog.Begin("download", Path.GetFileName(req.NormPath) is { Length: > 0 } nm ? nm : req.ItemId, whole ? req.FileSize : fetch); }
                 try
                 {
                     await s_svc.Hydrator.StreamAsync(req.ItemId, whole ? 0 : req.Offset, fetch, whole ? 0 : req.Length,
