@@ -33,7 +33,7 @@ Checkboxes mirror `projectPlan.md`. Tick here when the plan row is updated.
 
 ### P1: v1 (2-3 months)
 - [ ] E1 Registration and placeholders (PARTIAL population, PROGRESSIVE hydration, crawl scope, overlap check, never unregister on exit)
-- [~] E1b OneDrive coexistence: detection card + guide done; adoption assistant deliberately deferred
+- [~] E1b OneDrive coexistence: detection card + guide done; switch assistant in progress
 - [ ] E2 Lazy enumeration from the index only, batched and paginated; unsupported items excluded and listed
 - [ ] E3 Progressive hydration: bounded workers, Range with 200 fallback, pooled chunked TRANSFER_DATA, progress every 15 s, watchdog failure path, RECOVER and cancel handling
 - [ ] E4 Delta ingestion and index: streamed `$select` delta, resumable, deletes-first, duplicates, 410 resync, adaptive polling, global Retry-After gate, User-Agent, minimal CfUpdatePlaceholder with oplocks
