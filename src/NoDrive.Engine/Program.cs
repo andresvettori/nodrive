@@ -87,7 +87,6 @@ internal static class Program
     private static int Cleanup(EnginePaths paths, bool deleteRoot)
     {
         SyncRootRegistrar.Unregister();
-        NavigationPane.Remove();
         Console.WriteLine("sync root unregistered (placeholders that were never opened are deleted by Windows; opened files stay as ordinary files).");
         if (deleteRoot && Directory.Exists(paths.SyncRoot))
         {

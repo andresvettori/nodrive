@@ -183,3 +183,6 @@ These map one-to-one onto the user's OneDrive.exe symptoms and are hard rules (s
 9. Legacy AUMID toast route on current Windows 11: still functional for an unpackaged exe? (P2, only if NoDrive toasts are wanted without the Windows App SDK runtime.)
 10. Idle Private Bytes / Working Set of the headless AOT engine with one live `CfConnectSyncRoot` connection, with and without Windows App SDK bootstrapped, and of an Avalonia 12 vs WinUI 3 Settings window: no trustworthy published numbers; measure on the PC (P0 step 2).
 11. Does the user keep photos in OneDrive? Decides whether the ThumbnailProvider moves from v2 to late v1.
+
+## Navigation pane placement (measured 2026-11-15, Windows 11 PC)
+Windows creates the sidebar entry itself from the sync root (value NamespaceCLSID under SyncRootManager; SortOrderIndex 66, icon from IconResource). OneDrive has the same SortOrderIndex but sits in the top group (Home, Gallery, OneDrive) because its CLSID carries TargetKnownFolder={a52bba46-e9e1-435f-b3d9-28daa648c0f6} (the OneDrive known folder). A third party cannot use it without taking over that Windows folder, so NoDrive stays in the lower group. A custom CLSID of our own only creates a duplicate entry (tested, removed).

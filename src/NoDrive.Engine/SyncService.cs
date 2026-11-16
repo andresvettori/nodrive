@@ -60,7 +60,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         if (SyncRootRegistrar.IsInsideForeignSyncRoot(paths.SyncRoot, out string foreign)) { throw new InvalidOperationException($"{paths.SyncRoot} is inside the sync root of '{foreign}'. Choose another folder (config.json: syncRoot)."); }
         var (fresh, outcome) = await SyncRootRegistrar.EnsureRegisteredAsync(paths.SyncRoot).ConfigureAwait(false);
         Log.Info($"sync root {paths.SyncRoot}: {outcome}; shell flags {SyncRootRegistrar.ReadFlags()}");
-        NavigationPane.Ensure(paths.SyncRoot, Environment.ProcessPath);
+        NavigationPane.RemoveLegacyEntry();
 
         var population = new PopulationState(_index, rootId);
         if (fresh || !Directory.Exists(paths.SyncRoot)) { population.ResetAll(); }          // a new registration has no placeholders yet
