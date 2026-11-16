@@ -51,11 +51,13 @@ input[type=search]{margin-left:auto;min-width:180px}
 .field select{width:100%;max-width:100%}
 .card.wide{grid-column:1/-1}
 dl{grid-template-columns:minmax(120px,max-content) 1fr}dd{overflow-wrap:anywhere;word-break:normal}
-.savebar{position:fixed;left:0;right:0;bottom:0;z-index:9;transform:translateY(110%);transition:transform .25s;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -8px 28px rgba(20,35,60,.18)}
-.savebar.show{transform:none}
-.savebar>div{max-width:1040px;margin:0 auto;padding:12px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.savebar b{flex:1;min-width:200px}
-body.pad{padding-bottom:84px}
+.savebar{display:none;border-top:1px solid var(--line);background:var(--card)}
+.savebar.on{display:block}
+.savebar>div{max-width:1040px;margin:0 auto;padding:10px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.savebar b{flex:1;min-width:200px;font-weight:600;color:var(--muted)}
+.savebar.dirty{background:var(--brand)}.savebar.dirty b{color:#fff}
+.savebar.dirty .btn.primary{background:#fff;color:#1457d8;border-color:#fff}
+.savebar .btn:disabled{opacity:.45;cursor:default}
 .badge{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn);margin-left:6px;vertical-align:middle}
 .day{margin:14px 0 2px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
 .empty{color:var(--muted);padding:18px 0;text-align:center}
@@ -89,6 +91,7 @@ a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}
     <button role="tab" data-tab="settings" aria-selected="false" id="tabSettings"></button>
     <button role="tab" data-tab="help" aria-selected="false" id="tabHelp"></button>
   </nav>
+  <div class="savebar" id="savebar" role="region"><div><b id="dirtyMsg"></b><button class="btn" id="discardBtn"></button><button class="btn primary" id="saveBtn"></button></div></div>
 </header>
 
 <main>
@@ -156,7 +159,6 @@ a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}
     <div class="links" id="helpLinks"></div>
   </section>
 </main>
-<div class="savebar" id="savebar" role="region"><div><b id="dirtyMsg"></b><button class="btn" id="discardBtn"></button><button class="btn primary" id="saveBtn"></button></div></div>
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -185,7 +187,7 @@ en: {
   workers:"Parallel downloads", workersHint:"Applies after restarting NoDrive.",
   info:"About this setup", iFolder:"NoDrive folder", iData:"Data folder", iConfig:"Config file", iClient:"Sign-in app ID", iVersion:"Version", iMemory:"Memory in use", iUptime:"Running for",
   iLang:"Windows language", iRegion:"Regional format", iZone:"Time zone",
-  openData:"Open data folder", openRoot:"Open NoDrive folder", save:"Save settings", discard:"Discard", unsaved:"You have unsaved changes.", saved:"Saved.", savedRestart:"Saved. Restart NoDrive to apply the highlighted options.", saveFail:"Could not save.",
+  openData:"Open data folder", openRoot:"Open NoDrive folder", save:"Save settings", discard:"Discard", unsaved:"You have unsaved changes.", noChanges:"All changes saved.", saved:"Saved.", savedRestart:"Saved. Restart NoDrive to apply the highlighted options.", saveFail:"Could not save.",
   helpIntro:"Guides open on GitHub. They explain installing, configuring and customizing NoDrive.",
   h1:"Install and first run", h1d:"Get NoDrive running and sign in.", h2:"Configure NoDrive", h2d:"Folder location, limits, startup and the config file.", h3:"Use your own Entra app ID", h3d:"Register an app in Microsoft Entra to sign in with your own client ID.", h4:"Troubleshooting", h4d:"Logs, common messages and what they mean."
 },
@@ -211,7 +213,7 @@ es: {
   workers:"Descargas en paralelo", workersHint:"Se aplica al reiniciar NoDrive.",
   info:"Sobre esta instalación", iFolder:"Carpeta NoDrive", iData:"Carpeta de datos", iConfig:"Archivo de configuración", iClient:"ID de la app de inicio de sesión", iVersion:"Versión", iMemory:"Memoria en uso", iUptime:"En ejecución desde hace",
   iLang:"Idioma de Windows", iRegion:"Formato regional", iZone:"Zona horaria",
-  openData:"Abrir carpeta de datos", openRoot:"Abrir carpeta NoDrive", save:"Guardar ajustes", discard:"Descartar", unsaved:"Tenés cambios sin guardar.", saved:"Guardado.", savedRestart:"Guardado. Reiniciá NoDrive para aplicar las opciones resaltadas.", saveFail:"No se pudo guardar.",
+  openData:"Abrir carpeta de datos", openRoot:"Abrir carpeta NoDrive", save:"Guardar ajustes", discard:"Descartar", unsaved:"Tenés cambios sin guardar.", noChanges:"Todos los cambios están guardados.", saved:"Guardado.", savedRestart:"Guardado. Reiniciá NoDrive para aplicar las opciones resaltadas.", saveFail:"No se pudo guardar.",
   helpIntro:"Las guías se abren en GitHub. Explican cómo instalar, configurar y personalizar NoDrive.",
   h1:"Instalación y primer uso", h1d:"Poné NoDrive en marcha e iniciá sesión.", h2:"Configurar NoDrive", h2d:"Ubicación de la carpeta, límites, inicio y el archivo de configuración.", h3:"Usar tu propio ID de app de Entra", h3d:"Registrá una app en Microsoft Entra para iniciar sesión con tu propio ID de cliente.", h4:"Solución de problemas", h4d:"Registros, mensajes comunes y qué significan."
 }};
@@ -269,7 +271,8 @@ function renderChips(){
 }
 
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c])); }
-function setDirty(v){ dirty = v; $("savebar").classList.toggle("show", v); document.body.classList.toggle("pad", v); $("tabSettings").innerHTML = t("settings") + (v ? '<i class="badge"></i>' : ""); }
+function updateBar(){ const on = !$("settings").hidden; const bar = $("savebar"); bar.classList.toggle("on", on); bar.classList.toggle("dirty", dirty); $("dirtyMsg").textContent = dirty ? t("unsaved") : t("noChanges"); $("saveBtn").disabled = !dirty; $("discardBtn").disabled = !dirty; }
+function setDirty(v){ dirty = v; $("tabSettings").innerHTML = t("settings") + (v ? '<i class="badge"></i>' : ""); updateBar(); }
 
 function renderRecent(){
   const rows = entries.filter(e => (filter === "all" || GROUP[filter].includes(e.kind)) && (!query || e.name.toLowerCase().includes(query))).slice().reverse();
@@ -376,6 +379,7 @@ async function save(){
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
   ["activity","settings","help"].forEach(id => $(id).hidden = id !== b.dataset.tab);
+  updateBar();
 });
 document.querySelectorAll("#settings input,#settings select").forEach(el => el.addEventListener("input", () => setDirty(true)));
 $("discardBtn").onclick = () => { setDirty(false); fillSettings(); };
@@ -384,7 +388,7 @@ $("pauseBtn").onclick = () => api("/api/pause", { value: !S.paused }).then(poll)
 $("folderBtn").onclick = $("openRoot").onclick = () => api("/api/open-folder", {});
 $("openData").onclick = () => api("/api/open-data-folder", {});
 
-applyStatic(); poll(); setInterval(poll, 2000);
+applyStatic(); updateBar(); poll(); setInterval(poll, 2000);
 </script>
 </body>
 </html>
