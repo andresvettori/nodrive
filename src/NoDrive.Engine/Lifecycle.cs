@@ -15,8 +15,10 @@ namespace NoDrive.Engine;
 /// </summary>
 internal static class Lifecycle
 {
-    public const string QuitEventName = @"Local\NoDrive.Engine.Quit";
-    public const string MutexName = @"Local\NoDrive.Engine";
+    // Per-user names in the Global namespace: they work across Windows sessions (installer, scheduled task, terminal) and never collide between users.
+    private static readonly string Sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "user";
+    public static readonly string QuitEventName = $@"Global\NoDrive.Engine.Quit.{Sid}";
+    public static readonly string MutexName = $@"Global\NoDrive.Engine.{Sid}";
 
     /// <summary>Called by the running engine: waits for <c>--quit</c> from another process and then closes the tray loop.</summary>
     public static void ListenForQuit(Action quit, CancellationToken ct)

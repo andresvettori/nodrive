@@ -33,7 +33,7 @@ internal static class Program
 
     private static int Run(EngineConfig config, EnginePaths paths)
     {
-        using var mutex = new Mutex(true, @"Local\NoDrive.Engine", out bool first);
+        using var mutex = new Mutex(true, Lifecycle.MutexName, out bool first);
         if (!first) { Log.Warn("NoDrive is already running."); return 1; }
         if (!File.Exists(paths.ConfigPath)) { config.Save(paths.ConfigPath); }
         Lifecycle.InstallCrashRestart(paths);
