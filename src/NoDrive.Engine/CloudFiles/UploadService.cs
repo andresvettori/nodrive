@@ -157,18 +157,31 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
 
             string name = Path.GetFileName(path);
             RemoteItem item;
+            bool adopted = false;                      // the cloud already has this exact item: link, do not upload
             string finalPath = path;
             DateTime stamp = isDir ? default : File.GetLastWriteTimeUtc(path);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             if (isDir)
             {
-                if (index.FindChild(parentId, name) is not null) { Defer(path, attempts, TimeSpan.FromMinutes(1), bump: true); return; }   // a remote folder of that name exists: wait for its delta, never merge blindly
-                item = await graph.CreateFolderAsync(parentId, name, ct).ConfigureAwait(false);
+                if (index.FindChild(parentId, name) is { } existing)
+                {
+                    if (!existing.IsFolder) { Defer(path, attempts, TimeSpan.FromMinutes(1), bump: true); return; }        // a cloud FILE has this name: never merge a folder into it
+                    item = ToRemote(existing);             // same folder in the cloud (for example after a reinstall): link it and let its files be matched one by one
+                    adopted = true;
+                }
+                else { item = await graph.CreateFolderAsync(parentId, name, ct).ConfigureAwait(false); }
             }
             else
             {
                 try { using var probe = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
                 catch (IOException) { Defer(path, attempts, TimeSpan.FromSeconds(10), bump: false); return; }          // still being written
+                if (index.FindChild(parentId, name) is { IsFolder: false } same && SameFile(same, path))
+                {
+                    item = ToRemote(same);                 // already in the cloud with the same size and modified time (a file NoDrive downloaded earlier, or one OneDrive synced): link it
+                    adopted = true;
+                }
+                else
+                {
                 act = ActivityLog.Begin("upload", name, new FileInfo(path).Length);
                 try { item = await graph.UploadNewFileAsync(parentId, name, path, ct, ProgressLogger(name, act)).ConfigureAwait(false); }
                 catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
@@ -180,17 +193,19 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                     Log.Warn($"name clash for '{name}': uploaded as '{copy}'");
                 }
                 if (File.Exists(finalPath) && File.GetLastWriteTimeUtc(finalPath) != stamp) { Log.Warn($"{name} changed while uploading; the uploaded copy is the earlier version and the file stays a plain local file"); index.RemoveUpload(path); ActivityLog.End(act!, "skipped", "changed while uploading"); act = null; return; }
+                }
             }
 
-            index.ApplyPage([DeltaChange.Upsert(item)], "upload.last", item.Id, index.Generation);
+            if (!adopted) { index.ApplyPage([DeltaChange.Upsert(item)], "upload.last", item.Id, index.Generation); }
             bool converted = ConvertToPlaceholder(finalPath, item.Id);
-            if (isDir) { population.Set(item.Id, true); QueueChildren(finalPath); }
+            if (isDir) { if (!adopted) { population.Set(item.Id, true); } QueueChildren(finalPath); }
             index.RemoveUpload(path);
             if (act is not null) { ActivityLog.End(act, "ok", finalPath != path ? "conflict copy" : null); act = null; }
+            else if (adopted) { ActivityLog.Add("sync", Path.GetFileName(finalPath), "ok", detail: "already in the cloud: linked"); }
             else { ActivityLog.Add(isDir ? "create" : "upload", Path.GetFileName(finalPath), "ok", 0, sw.ElapsedMilliseconds); }
             PinWatcher.NotifyShell(finalPath);
             if (Path.GetDirectoryName(finalPath) is { } parentDir) { RemoteApplier.NotifyDir(parentDir); }
-            Log.Info($"uploaded {(isDir ? "folder" : "file")} '{Path.GetFileName(finalPath)}' in {sw.ElapsedMilliseconds} ms{(converted ? "" : " (placeholder conversion failed, will show as local until the next sync)")}");
+            Log.Info($"{(adopted ? "linked" : "uploaded")} {(isDir ? "folder" : "file")} '{Path.GetFileName(finalPath)}' in {sw.ElapsedMilliseconds} ms{(converted ? "" : " (placeholder conversion failed, will show as local until the next sync)")}");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Forbidden or HttpStatusCode.InsufficientStorage or HttpStatusCode.NotFound)
@@ -222,6 +237,15 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
     }
 
     private void Defer(string path, int attempts, TimeSpan wait, bool bump) => index.RescheduleUpload(path, bump ? attempts + 1 : attempts, DateTime.UtcNow.Add(wait).Ticks);
+
+    private static RemoteItem ToRemote(IndexedItem i) => new(i.Id, i.ParentId, i.Name, i.Size, new DateTimeOffset(i.ModifiedUtcTicks, TimeSpan.Zero), i.IsFolder, i.ETag, i.CTag, i.QuickXorHash);
+
+    /// <summary>Same name, size and modified time (within 2 s): downloaded files keep the cloud's modified time, so this is the same file, not an edit.</summary>
+    private static bool SameFile(IndexedItem remote, string path)
+    {
+        try { return remote.Size == new FileInfo(path).Length && Math.Abs(remote.ModifiedUtcTicks - File.GetLastWriteTimeUtc(path).Ticks) <= 2 * TimeSpan.TicksPerSecond; }
+        catch (IOException) { return false; }
+    }
 
     private static string ConflictName(string name)
     {
