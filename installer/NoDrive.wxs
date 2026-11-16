@@ -23,17 +23,17 @@
     </StandardDirectory>
 
     <Feature Id="Main" Title="NoDrive" Level="1">
-      <Component Id="EngineExe" Directory="INSTALLFOLDER" Guid="*">
+      <Component Id="EngineExe" Directory="INSTALLFOLDER" Guid="c2d33f82-32c9-53ec-b497-3fea81597af7">
         <File Id="EngineExe" Source="$(EnginePath)\NoDrive.Engine.exe" />
         <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
         <RegistryValue Root="HKCU" Key="Software\NoDrive" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
-      <Component Id="MenuShortcut" Directory="AppMenuFolder" Guid="*">
+      <Component Id="MenuShortcut" Directory="AppMenuFolder" Guid="aee176bb-00a9-5b4b-b8c1-efc41c3bea96">
         <Shortcut Id="NoDriveShortcut" Name="NoDrive" Description="OneDrive without the weight" Target="[INSTALLFOLDER]NoDrive.Engine.exe" WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="RemoveMenuFolder" Directory="AppMenuFolder" On="uninstall" />
         <RegistryValue Root="HKCU" Key="Software\NoDrive" Name="Shortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
-      <Component Id="AutostartEntry" Directory="INSTALLFOLDER" Guid="*" Condition="AUTOSTART=1">
+      <Component Id="AutostartEntry" Directory="INSTALLFOLDER" Guid="2f469b22-dc38-5f65-b36b-c7c245b80118" Condition="AUTOSTART=1">
         <RegistryValue Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="NoDrive" Type="string" Value="&quot;[INSTALLFOLDER]NoDrive.Engine.exe&quot;" KeyPath="yes" />
       </Component>
     </Feature>
