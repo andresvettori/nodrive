@@ -22,8 +22,10 @@ internal sealed class SettingsDto
     public int HydrationWorkers { get; set; }
     public string HydrationPolicy { get; set; } = "full";
 }
+internal sealed class CoexistenceDto { public bool OneDriveRunning { get; set; } public string? Email { get; set; } public string? Folder { get; set; } public List<string> BackedUp { get; set; } = []; public bool Inside { get; set; } }
 internal sealed class StateDto
 {
+    public CoexistenceDto Coexistence { get; set; } = new();
     public string Version { get; set; } = "";
     public string Status { get; set; } = "";
     public bool Paused { get; set; }
@@ -183,12 +185,15 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
             UptimeSeconds = (long)(now - _started).TotalSeconds,
             BytesDown = ActivityLog.BytesDown,
             BytesUp = ActivityLog.BytesUp,
+            Coexistence = ToDto(Infrastructure.Coexistence.Detect(paths.SyncRoot)),
             OsLanguage = OsLanguage(),
             OsCulture = OsCulture(),
             Settings = new SettingsDto { Language = config.Language, DownloadKiBps = config.DownloadKiBps, UploadKiBps = config.UploadKiBps, PollActiveSeconds = config.PollActiveSeconds, PollIdleMaxSeconds = config.PollIdleMaxSeconds, HydrationWorkers = config.HydrationWorkers, HydrationPolicy = config.HydrationPolicy },
             Active = [.. active.Select(a => new ActiveDto { Id = a.Id, Kind = a.Kind, Name = a.Name, Total = a.Total, Done = a.Done, ElapsedMs = (long)(now - a.StartedUtc).TotalMilliseconds })],
         };
     }
+
+    private static CoexistenceDto ToDto(CoexistenceInfo c) => new() { OneDriveRunning = c.OneDriveRunning, Email = c.Email, Folder = c.Folder, BackedUp = [.. c.BackedUpFolders], Inside = c.NoDriveInsideOneDrive };
 
     private SaveResultDto SaveSettings(SettingsDto? s)
     {
