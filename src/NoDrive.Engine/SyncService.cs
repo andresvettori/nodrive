@@ -31,6 +31,11 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
     public bool NeedsSignIn => _needsSignIn;
     private LocalOps? _ops;
     private UploadService? _uploader;
+    public Switching.SwitchAssistant? Assistant { get; private set; }
+    public bool IndexReady => _indexReady;
+    public long PendingOps => _index?.CountOps() ?? 0;
+    /// <summary>True while files in a newly adopted folder are being linked; folders are not populated meanwhile (it would collide with the existing files).</summary>
+    public bool Adopting => _index?.GetMeta("adopt.pending") == "1";
     private long _itemCount;
     private DateTime _itemCountAt;
 
@@ -90,6 +95,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         Log.Info($"sync root {paths.SyncRoot}: {outcome}; shell flags {SyncRootRegistrar.ReadFlags()}");
         NavigationPane.RemoveLegacyEntry();
 
+        Assistant = new Switching.SwitchAssistant(_index, rootId, paths, config);
         var population = new PopulationState(_index, rootId);
         if (fresh || !Directory.Exists(paths.SyncRoot)) { population.ResetAll(); }          // a new registration has no placeholders yet
         var locks = new FolderLocks();
@@ -100,7 +106,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         ActivityLog.ApplyLimits(config);
 
         _indexReady = _index.GetMeta(DeltaIngestor.DeltaKey) is not null && _index.GetMeta(DeltaIngestor.NextKey) is null;
-        CloudProvider.Start(paths.SyncRoot, new ProviderServices(_index, hydrator, population, locks, _callers, () => _indexReady, config.HydrationWorkers, new ReadAheadPlanner()));
+        CloudProvider.Start(paths.SyncRoot, new ProviderServices(_index, hydrator, population, locks, _callers, () => _indexReady && !Adopting, config.HydrationWorkers, new ReadAheadPlanner()));
         PinWatcher.Start(paths.SyncRoot);
         _ = Task.Run(() => ReportLoopAsync(ct), CancellationToken.None);
 

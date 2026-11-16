@@ -7,6 +7,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using NoDrive.Engine.CloudFiles;
 using NoDrive.Engine.Infrastructure;
+using NoDrive.Engine.Shell;
+using NoDrive.Engine.Switching;
 using Windows.Win32;
 
 namespace NoDrive.Engine.Web;
@@ -47,6 +49,21 @@ internal sealed class StateDto
     public SettingsDto Settings { get; set; } = new();
     public List<ActiveDto> Active { get; set; } = [];
 }
+internal sealed class FolderDto { public string Folder { get; set; } = ""; }
+internal sealed class SwitchDto
+{
+    public string Folder { get; set; } = "";
+    public string? Email { get; set; }
+    public bool OneDriveRunning { get; set; }
+    public bool OneDriveLinked { get; set; }
+    public List<string> BackedUp { get; set; } = [];
+    public bool IndexReady { get; set; }
+    public long PendingUploads { get; set; }
+    public long PendingOps { get; set; }
+    public bool Adopting { get; set; }
+    public List<string> Blockers { get; set; } = [];
+    public ScanResult Scan { get; set; } = new();
+}
 internal sealed class ActivityDto { public long LastId { get; set; } public List<ActivityEntry> Entries { get; set; } = []; }
 internal sealed class SaveResultDto { public bool Ok { get; set; } public bool RestartRequired { get; set; } public string? Error { get; set; } }
 internal sealed class FlagDto { public bool Value { get; set; } }
@@ -57,6 +74,8 @@ internal sealed class FlagDto { public bool Value { get; set; } }
 [JsonSerializable(typeof(SettingsDto))]
 [JsonSerializable(typeof(SaveResultDto))]
 [JsonSerializable(typeof(FlagDto))]
+[JsonSerializable(typeof(FolderDto))]
+[JsonSerializable(typeof(SwitchDto))]
 internal sealed partial class WebJson : JsonSerializerContext { }
 
 /// <summary>
@@ -146,6 +165,24 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
                 case ("POST", "/api/settings"): Json(ctx, SaveSettings(await ReadAsync(ctx, WebJson.Default.SettingsDto).ConfigureAwait(false)), WebJson.Default.SaveResultDto); break;
                 case ("POST", "/api/pause"): UserSettings.SetPaused((await ReadAsync(ctx, WebJson.Default.FlagDto).ConfigureAwait(false))?.Value ?? false); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
                 case ("POST", "/api/autostart"): UserSettings.SetAutostart((await ReadAsync(ctx, WebJson.Default.FlagDto).ConfigureAwait(false))?.Value ?? false); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
+                case ("GET", "/api/switch"): Json(ctx, BuildSwitch(req.QueryString["folder"]), WebJson.Default.SwitchDto); break;
+                case ("POST", "/api/switch/scan"):
+                    {
+                        string f = (await ReadAsync(ctx, WebJson.Default.FolderDto).ConfigureAwait(false))?.Folder ?? "";
+                        string? err = null;
+                        bool ok = service.Assistant is { } a && a.StartScan(f, out err);
+                        Json(ctx, new SaveResultDto { Ok = ok, Error = err }, WebJson.Default.SaveResultDto);
+                        break;
+                    }
+                case ("POST", "/api/switch/takeover"):
+                    {
+                        string f = (await ReadAsync(ctx, WebJson.Default.FolderDto).ConfigureAwait(false))?.Folder ?? "";
+                        string? err = null;
+                        bool ok = service.Assistant is { } a && a.TakeOver(f, out err);
+                        Json(ctx, new SaveResultDto { Ok = ok, Error = err }, WebJson.Default.SaveResultDto);
+                        if (ok) { SwitchAssistant.RestartEngine(); _ = Task.Delay(800).ContinueWith(_ => TrayWindow.RequestQuit(), TaskScheduler.Default); }
+                        break;
+                    }
                 case ("POST", "/api/signin"): service.RequestSignIn(); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
                 case ("POST", "/api/allow-deletes"): service.AllowDeletes(); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
                 case ("POST", "/api/open-folder"): OpenFolder(paths.SyncRoot); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
@@ -190,6 +227,21 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
             OsCulture = OsCulture(),
             Settings = new SettingsDto { Language = config.Language, DownloadKiBps = config.DownloadKiBps, UploadKiBps = config.UploadKiBps, PollActiveSeconds = config.PollActiveSeconds, PollIdleMaxSeconds = config.PollIdleMaxSeconds, HydrationWorkers = config.HydrationWorkers, HydrationPolicy = config.HydrationPolicy },
             Active = [.. active.Select(a => new ActiveDto { Id = a.Id, Kind = a.Kind, Name = a.Name, Total = a.Total, Done = a.Done, ElapsedMs = (long)(now - a.StartedUtc).TotalMilliseconds })],
+        };
+    }
+
+    private SwitchDto BuildSwitch(string? folderParam)
+    {
+        var co = Infrastructure.Coexistence.Detect(paths.SyncRoot);
+        string folder = !string.IsNullOrWhiteSpace(folderParam) ? folderParam! : co.Folder ?? "";
+        bool linked = !string.IsNullOrEmpty(folder) && Directory.Exists(folder) && SyncRootRegistrar.IsInsideForeignSyncRoot(folder, out _);
+        var a = service.Assistant;
+        return new SwitchDto
+        {
+            Folder = folder, Email = co.Email, OneDriveRunning = co.OneDriveRunning, OneDriveLinked = linked, BackedUp = [.. co.BackedUpFolders],
+            IndexReady = service.IndexReady, PendingUploads = service.PendingUploads, PendingOps = service.PendingOps, Adopting = service.Adopting,
+            Blockers = a?.Blockers(folder, service.PendingUploads, service.PendingOps, service.IndexReady) ?? ["index-not-ready"],
+            Scan = a?.Snapshot() ?? new ScanResult(),
         };
     }
 

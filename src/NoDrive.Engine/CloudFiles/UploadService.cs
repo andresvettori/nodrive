@@ -72,6 +72,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                 try
                 {
                     if (UserSettings.Paused) { await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false); continue; }
+                    if (index.GetMeta("adopt.pending") == "1" && index.CountUploads() == 0 && _active.Count == 0) { index.SetMeta("adopt.pending", null); ActivityLog.Add("sync", "NoDrive", "ok", detail: "folder linked"); Log.Info("adoption finished"); }
                     if (_rescan) { _rescan = false; await ScanPopulatedAsync(ct).ConfigureAwait(false); }
                     FlushSeen();
                     foreach (var done in _active.Where(kv => kv.Value.IsCompleted).Select(kv => kv.Key).ToList()) { _active.Remove(done); }
@@ -105,6 +106,13 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
     private async Task ScanPopulatedAsync(CancellationToken ct)
     {
         int n = 0, queued = 0;
+        if (index.GetMeta("adopt.pending") == "1")
+        {
+            // Switching to an existing folder: queue what is already in the root; folders are linked first and then queue their own children.
+            var first = Directory.EnumerateFileSystemEntries(syncRoot).Where(e => !Ignored(e) && IsRealLocal(e)).ToList();
+            if (first.Count > 0) { index.EnqueueUploads(first, DateTime.UtcNow.Ticks); queued += first.Count; }
+            Log.Info($"adoption: {first.Count} entries in the new folder queued for linking");
+        }
         foreach (var id in population.PopulatedSet())
         {
             ct.ThrowIfCancellationRequested();

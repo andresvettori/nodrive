@@ -44,6 +44,13 @@ internal static class SyncRootRegistrar
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException) { Log.Warn($"could not record the hydration policy: {ex.Message}"); }
     }
 
+    /// <summary>The folder the current registration points at, or null when unavailable.</summary>
+    public static string? RegisteredPath()
+    {
+        try { return StorageProviderSyncRootManager.GetSyncRootInformationForId(SyncRootId).Path.Path; }
+        catch (Exception) { return null; }
+    }
+
     public static int? ReadFlags()
     {
         using var key = Registry.LocalMachine.OpenSubKey(KeyPath);
@@ -55,6 +62,11 @@ internal static class SyncRootRegistrar
     {
         Directory.CreateDirectory(rootPath);
         string outcome;
+        if (IsRegistered() && RegisteredPath() is { } oldPath && !string.Equals(oldPath.TrimEnd('\\'), rootPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+        {
+            Log.Info($"sync root moves from {oldPath} to {rootPath}: replacing the registration");
+            Unregister();                                                // placeholders never opened are removed by Windows; downloaded files stay
+        }
         bool fresh = !IsRegistered();
         // Full (default, ADR-0010): the whole file is downloaded on first access, like OneDrive; Photos and other packaged apps cancel slow partial reads and call the file corrupted.
         // NODRIVE_HYDRATION=progressive switches back (re-registers once).

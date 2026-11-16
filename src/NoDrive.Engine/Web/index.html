@@ -74,6 +74,8 @@ dl{grid-template-columns:minmax(120px,max-content) 1fr}dd{overflow-wrap:anywhere
 .kvi code{display:block;margin-top:2px;font:13px/1.45 ui-monospace,"Cascadia Mono",Consolas,monospace;overflow-wrap:anywhere}
 .kvi .btn{padding:5px 12px;font-size:13px}
 .coex p{margin:6px 0}.tag{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--chip);font-weight:600;font-size:13px;margin-right:6px}.tag.warn{background:color-mix(in srgb,var(--warn) 22%,transparent)}
+.res{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:10px 0}.res .tile .l{font-size:12.5px}
+details{margin:6px 0}summary{cursor:pointer;color:var(--muted)}details code{display:block;font:12.5px ui-monospace,Consolas,monospace;overflow-wrap:anywhere;padding:2px 0}
 .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
 .stat{padding:8px 14px;border-radius:12px;background:var(--chip);font-weight:600}
 .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
@@ -100,6 +102,7 @@ a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}
   <nav role="tablist">
     <button role="tab" data-tab="activity" aria-selected="true" id="tabActivity"></button>
     <button role="tab" data-tab="settings" aria-selected="false" id="tabSettings"></button>
+    <button role="tab" data-tab="switch" aria-selected="false" id="tabSwitch"></button>
     <button role="tab" data-tab="help" aria-selected="false" id="tabHelp"></button>
   </nav>
   <div class="savebar" id="savebar" role="region"><div><b id="dirtyMsg"></b><button class="btn" id="discardBtn"></button><button class="btn primary" id="saveBtn"></button></div></div>
@@ -165,6 +168,16 @@ a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}
     <div class="small" id="saveNote"></div>
   </section>
 
+  <section id="switch" hidden>
+    <p class="small" id="swIntro"></p>
+    <div class="card"><h2 id="swH1"></h2><div id="swChecks"></div></div>
+    <div class="card"><h2 id="swH2"></h2>
+      <div class="field"><label for="swFolder" id="swFolderL"></label><div class="inline"><input type="search" id="swFolder" style="flex:1;min-width:240px;margin-left:0"><button class="btn primary" id="swScan"></button></div></div>
+      <div id="swScanOut"></div></div>
+    <div class="card"><h2 id="swH3"></h2><ol id="swSteps" style="margin:0 0 10px 20px;padding:0"></ol><div id="swLinked"></div></div>
+    <div class="card"><h2 id="swH4"></h2><div id="swBlock"></div><div class="inline"><button class="btn primary" id="swTake"></button></div></div>
+  </section>
+
   <section id="help" hidden>
     <p class="small" id="helpIntro"></p>
     <div class="links" id="helpLinks"></div>
@@ -198,7 +211,13 @@ en: {
   workers:"Parallel downloads", workersHint:"Applies after restarting NoDrive.",
   info:"About this setup", iFolder:"NoDrive folder", iData:"Data folder", iConfig:"Config file", iClient:"Sign-in app ID", iVersion:"Version", iMemory:"Memory in use", iUptime:"Running for",
   iLang:"Windows language", iRegion:"Regional format", iZone:"Time zone",
-  open:"Open", coexTitle:"OneDrive on this PC", coexNone:"The official OneDrive app is not running.", coexRun:e=>`The official OneDrive app is running${e?" for "+e:""}.`, coexInfo:"NoDrive and OneDrive can work side by side, like two computers on the same account: changes made in one show up in the other. They use different folders, so keep the NoDrive folder outside the OneDrive folder.", coexKfm:f=>`OneDrive is backing up your ${f}. Those folders live inside the OneDrive folder, so NoDrive shows them in its own folder as well. Stop the backup in OneDrive settings if you want NoDrive to take over.`, coexInside:"The NoDrive folder is inside the OneDrive folder. Move it, or both apps will compete for the same files.", h5:"Using NoDrive with OneDrive", h5d:"Side by side, folder backup and how to switch over.", stale:"This page is out of date because NoDrive restarted. Open it again from the NoDrive tray icon.", reload:"Reload", save:"Save settings", discard:"Discard", unsaved:"You have unsaved changes.", noChanges:"All changes saved.", saved:"Saved.", savedRestart:"Saved. Restart NoDrive to apply the highlighted options.", saveFail:"Could not save.",
+  open:"Open", swTab:"Switch from OneDrive", swIntro:"Optional. NoDrive already works side by side with OneDrive. Use this guide only if you want NoDrive to take over the folder OneDrive uses today. Nothing changes until the last step, and no file is deleted or overwritten.",
+  swH1:"1. Where you are now", swKfmOn:f=>`Folder Backup is on for ${f}.`, swKfmOff:"Folder Backup is off for Desktop, Documents and Pictures.", swSynced:"NoDrive has nothing waiting to sync.", swNotSynced:"NoDrive still has changes waiting to sync. Let it finish first.",
+  swH2:"2. Compare your folder with the cloud", swFolder:"Folder to take over", swScan:"Scan (read-only)", swScanning:n=>`Scanning… ${n} items so far`, swSame:"Identical to the cloud: linked, not copied again", swCloudOnly:"Online-only: stay online", swDiffers:"Different from the cloud: kept, uploaded as conflict copies", swLocalOnly:"Only on this PC: uploaded", swExamples:"Show examples",
+  swH3:"3. In OneDrive (you do this)", swStep1:"Stop Folder Backup: OneDrive icon > Settings > Sync and backup > Manage backup. Turn off each folder and choose to keep the files in their original folders.", swStep2:"Unlink this PC: OneDrive Settings > Account > Unlink this PC. OneDrive keeps the files it downloaded.", swStep3:"Come back here and scan again.", swLinked:"OneDrive still manages this folder.", swUnlinked:"OneDrive no longer manages this folder.",
+  swH4:"4. Let NoDrive take over", swTake:"Take over this folder", swConfirm:"NoDrive will restart and use this folder. Your files stay where they are. Continue?", swRestarting:"NoDrive is restarting. Open this page again from the tray icon in a few seconds.", swAdopting:"NoDrive is linking your existing files. Some folders may show as unavailable until it finishes.", swNeedScan:"Run the scan first.",
+  blk_folder_missing:"The folder does not exist.", blk_same_folder:"This is already the NoDrive folder.", blk_nested:"The folder is inside, or contains, the current NoDrive folder.", blk_onedrive_linked:"OneDrive still manages this folder: unlink it first (step 3).", blk_pending_work:"NoDrive still has changes to sync. Let it finish.", blk_index_not_ready:"NoDrive is still reading your OneDrive.",
+  coexTitle:"OneDrive on this PC", coexNone:"The official OneDrive app is not running.", coexRun:e=>`The official OneDrive app is running${e?" for "+e:""}.`, coexInfo:"NoDrive and OneDrive can work side by side, like two computers on the same account: changes made in one show up in the other. They use different folders, so keep the NoDrive folder outside the OneDrive folder.", coexKfm:f=>`OneDrive is backing up your ${f}. Those folders live inside the OneDrive folder, so NoDrive shows them in its own folder as well. Stop the backup in OneDrive settings if you want NoDrive to take over.`, coexInside:"The NoDrive folder is inside the OneDrive folder. Move it, or both apps will compete for the same files.", h5:"Using NoDrive with OneDrive", h5d:"Side by side, folder backup and how to switch over.", stale:"This page is out of date because NoDrive restarted. Open it again from the NoDrive tray icon.", reload:"Reload", save:"Save settings", discard:"Discard", unsaved:"You have unsaved changes.", noChanges:"All changes saved.", saved:"Saved.", savedRestart:"Saved. Restart NoDrive to apply the highlighted options.", saveFail:"Could not save.",
   helpIntro:"Guides open on GitHub. They explain installing, configuring and customizing NoDrive.",
   h1:"Install and first run", h1d:"Get NoDrive running and sign in.", h2:"Configure NoDrive", h2d:"Folder location, limits, startup and the config file.", h3:"Use your own Entra app ID", h3d:"Register an app in Microsoft Entra to sign in with your own client ID.", h4:"Troubleshooting", h4d:"Logs, common messages and what they mean."
 },
@@ -224,7 +243,13 @@ es: {
   workers:"Descargas en paralelo", workersHint:"Se aplica al reiniciar NoDrive.",
   info:"Sobre esta instalación", iFolder:"Carpeta NoDrive", iData:"Carpeta de datos", iConfig:"Archivo de configuración", iClient:"ID de la app de inicio de sesión", iVersion:"Versión", iMemory:"Memoria en uso", iUptime:"En ejecución desde hace",
   iLang:"Idioma de Windows", iRegion:"Formato regional", iZone:"Zona horaria",
-  open:"Abrir", coexTitle:"OneDrive en esta PC", coexNone:"La aplicación oficial de OneDrive no se está ejecutando.", coexRun:e=>`La aplicación oficial de OneDrive se está ejecutando${e?" para "+e:""}.`, coexInfo:"NoDrive y OneDrive pueden trabajar en paralelo, como dos computadoras con la misma cuenta: los cambios hechos en uno aparecen en el otro. Usan carpetas distintas, así que mantené la carpeta de NoDrive fuera de la carpeta de OneDrive.", coexKfm:f=>`OneDrive está respaldando tus carpetas ${f}. Esas carpetas viven dentro de la carpeta de OneDrive, así que NoDrive también las muestra en su propia carpeta. Detené el respaldo en los ajustes de OneDrive si querés que NoDrive tome el control.`, coexInside:"La carpeta de NoDrive está dentro de la carpeta de OneDrive. Movela, o ambas aplicaciones competirán por los mismos archivos.", h5:"Usar NoDrive junto con OneDrive", h5d:"En paralelo, respaldo de carpetas y cómo pasarte a NoDrive.", stale:"Esta página quedó desactualizada porque NoDrive se reinició. Abrila de nuevo desde el icono de NoDrive en la bandeja.", reload:"Recargar", save:"Guardar ajustes", discard:"Descartar", unsaved:"Tenés cambios sin guardar.", noChanges:"Todos los cambios están guardados.", saved:"Guardado.", savedRestart:"Guardado. Reiniciá NoDrive para aplicar las opciones resaltadas.", saveFail:"No se pudo guardar.",
+  open:"Abrir", swTab:"Pasarse desde OneDrive", swIntro:"Opcional. NoDrive ya funciona en paralelo con OneDrive. Usá esta guía solo si querés que NoDrive tome la carpeta que hoy usa OneDrive. No cambia nada hasta el último paso y no se borra ni se sobrescribe ningún archivo.",
+  swH1:"1. Dónde estás ahora", swKfmOn:f=>`La copia de seguridad de carpetas está activa para ${f}.`, swKfmOff:"La copia de seguridad de carpetas está desactivada para Escritorio, Documentos e Imágenes.", swSynced:"NoDrive no tiene nada pendiente de sincronizar.", swNotSynced:"NoDrive todavía tiene cambios pendientes. Dejá que termine primero.",
+  swH2:"2. Comparar tu carpeta con la nube", swFolder:"Carpeta a tomar", swScan:"Escanear (solo lectura)", swScanning:n=>`Escaneando… ${n} elementos hasta ahora`, swSame:"Idéntico a la nube: se vincula, no se copia de nuevo", swCloudOnly:"Solo en línea: sigue en línea", swDiffers:"Distinto a la nube: se conserva y se sube como copia en conflicto", swLocalOnly:"Solo en esta PC: se sube", swExamples:"Ver ejemplos",
+  swH3:"3. En OneDrive (lo hacés vos)", swStep1:"Detené la copia de seguridad de carpetas: icono de OneDrive > Configuración > Sincronización y copia de seguridad > Administrar copia de seguridad. Desactivá cada carpeta y elegí conservar los archivos en sus carpetas originales.", swStep2:"Desvinculá esta PC: Configuración de OneDrive > Cuenta > Desvincular esta PC. OneDrive conserva los archivos que descargó.", swStep3:"Volvé acá y escaneá de nuevo.", swLinked:"OneDrive todavía administra esta carpeta.", swUnlinked:"OneDrive ya no administra esta carpeta.",
+  swH4:"4. Dejar que NoDrive la tome", swTake:"Tomar esta carpeta", swConfirm:"NoDrive se reiniciará y usará esta carpeta. Tus archivos quedan donde están. ¿Continuar?", swRestarting:"NoDrive se está reiniciando. Abrí esta página de nuevo desde el icono de la bandeja en unos segundos.", swAdopting:"NoDrive está vinculando tus archivos existentes. Algunas carpetas pueden verse no disponibles hasta que termine.", swNeedScan:"Primero ejecutá el escaneo.",
+  blk_folder_missing:"La carpeta no existe.", blk_same_folder:"Esta ya es la carpeta de NoDrive.", blk_nested:"La carpeta está dentro de la carpeta actual de NoDrive, o la contiene.", blk_onedrive_linked:"OneDrive todavía administra esta carpeta: desvinculala primero (paso 3).", blk_pending_work:"NoDrive todavía tiene cambios por sincronizar. Dejá que termine.", blk_index_not_ready:"NoDrive todavía está leyendo tu OneDrive.",
+  coexTitle:"OneDrive en esta PC", coexNone:"La aplicación oficial de OneDrive no se está ejecutando.", coexRun:e=>`La aplicación oficial de OneDrive se está ejecutando${e?" para "+e:""}.`, coexInfo:"NoDrive y OneDrive pueden trabajar en paralelo, como dos computadoras con la misma cuenta: los cambios hechos en uno aparecen en el otro. Usan carpetas distintas, así que mantené la carpeta de NoDrive fuera de la carpeta de OneDrive.", coexKfm:f=>`OneDrive está respaldando tus carpetas ${f}. Esas carpetas viven dentro de la carpeta de OneDrive, así que NoDrive también las muestra en su propia carpeta. Detené el respaldo en los ajustes de OneDrive si querés que NoDrive tome el control.`, coexInside:"La carpeta de NoDrive está dentro de la carpeta de OneDrive. Movela, o ambas aplicaciones competirán por los mismos archivos.", h5:"Usar NoDrive junto con OneDrive", h5d:"En paralelo, respaldo de carpetas y cómo pasarte a NoDrive.", stale:"Esta página quedó desactualizada porque NoDrive se reinició. Abrila de nuevo desde el icono de NoDrive en la bandeja.", reload:"Recargar", save:"Guardar ajustes", discard:"Descartar", unsaved:"Tenés cambios sin guardar.", noChanges:"Todos los cambios están guardados.", saved:"Guardado.", savedRestart:"Guardado. Reiniciá NoDrive para aplicar las opciones resaltadas.", saveFail:"No se pudo guardar.",
   helpIntro:"Las guías se abren en GitHub. Explican cómo instalar, configurar y personalizar NoDrive.",
   h1:"Instalación y primer uso", h1d:"Poné NoDrive en marcha e iniciá sesión.", h2:"Configurar NoDrive", h2d:"Ubicación de la carpeta, límites, inicio y el archivo de configuración.", h3:"Usar tu propio ID de app de Entra", h3d:"Registrá una app en Microsoft Entra para iniciar sesión con tu propio ID de cliente.", h4:"Solución de problemas", h4d:"Registros, mensajes comunes y qué significan."
 }};
@@ -265,7 +290,7 @@ function applyStatic(){
   document.documentElement.lang = lang;
   const set = (id, k) => { $(id).textContent = t(k); };
   [["tabActivity","activity"],["tabSettings","settings"],["tabHelp","help"],["folderBtn","openFolder"],["lDown","down"],["lUp","up"],["lItems","items"],["lQueue","queue"],
-   ["hNow","now"],["hRecent","recent"],["hGeneral","general"],["hCoex","coexTitle"],["lLang","language"],["hLang","langHint"],["lAuto","autostart"],["tAuto","autostartText"],["lPolicy","policy"],["hPolicy","policyHint"],
+   ["hNow","now"],["hRecent","recent"],["hGeneral","general"],["tabSwitch","swTab"],["swIntro","swIntro"],["swH1","swH1"],["swH2","swH2"],["swH3","swH3"],["swH4","swH4"],["swFolderL","swFolder"],["swScan","swScan"],["swTake","swTake"],["hCoex","coexTitle"],["lLang","language"],["hLang","langHint"],["lAuto","autostart"],["tAuto","autostartText"],["lPolicy","policy"],["hPolicy","policyHint"],
    ["hBandwidth","bandwidth"],["lDownLimit","downLimit"],["lUpLimit","upLimit"],["hLimit","limitHint"],["hSync","sync"],["lPoll","poll"],["hPoll","pollHint"],["uPoll","sec"],["lIdle","idle"],["uIdle","min"],
    ["lWorkers","workers"],["hWorkers","workersHint"],["hInfo","info"],["saveBtn","save"],["discardBtn","discard"],["dirtyMsg","unsaved"],["helpIntro","helpIntro"]].forEach(([i,k]) => set(i,k));
   $("sLang").options[0].textContent = t("langAuto");
@@ -372,6 +397,40 @@ function coex(){
   $("coex").innerHTML = h;
 }
 
+
+let SW = null;
+async function pollSwitch(){
+  const f = $("swFolder");
+  SW = await api("/api/switch" + (document.activeElement === f && f.value ? "?folder=" + encodeURIComponent(f.value) : ""));
+  renderSwitch();
+}
+function renderSwitch(){
+  const s = SW, sc = s.scan, f = $("swFolder");
+  if (document.activeElement !== f && !f.value) f.value = s.folder;
+  const row = (ok, txt) => `<div class="row"><div class="ico ${ok ? "" : "cancelled"}">${ok ? "✓" : "!"}</div><div class="meta">${txt}</div></div>`;
+  const idle = s.indexReady && s.pendingUploads + s.pendingOps === 0;
+  $("swChecks").innerHTML = row(true, esc(s.oneDriveRunning ? t("coexRun", s.email) : t("coexNone"))) +
+    row(!s.backedUp.length, esc(s.backedUp.length ? t("swKfmOn", s.backedUp.join(", ")) : t("swKfmOff"))) + row(idle, esc(idle ? t("swSynced") : t("swNotSynced"))) +
+    (s.adopting ? row(false, esc(t("swAdopting"))) : "");
+  $("swScan").disabled = sc.running;
+  let out = "";
+  if (sc.running) out = `<p class="small">${esc(t("swScanning", nf(sc.scanned)))}</p>`;
+  if (sc.error) out += `<p class="small">${esc(sc.error)}</p>`;
+  if (sc.done || sc.scanned) {
+    const tile = (v, k) => `<div class="tile"><div class="v">${nf(v)}</div><div class="l">${esc(t(k))}</div></div>`;
+    out += `<div class="res">${tile(sc.same, "swSame")}${tile(sc.cloudOnly, "swCloudOnly")}${tile(sc.differs, "swDiffers")}${tile(sc.localOnly, "swLocalOnly")}</div>`;
+    const ex = (list, k) => list.length ? `<details><summary>${esc(t("swExamples"))}: ${esc(t(k))}</summary>${list.map(p => `<code>${esc(p)}</code>`).join("")}</details>` : "";
+    out += ex(sc.differsSample, "swDiffers") + ex(sc.localOnlySample, "swLocalOnly");
+  }
+  $("swScanOut").innerHTML = out;
+  $("swSteps").innerHTML = ["swStep1", "swStep2", "swStep3"].map(k => `<li>${esc(t(k))}</li>`).join("");
+  $("swLinked").innerHTML = row(!s.oneDriveLinked, esc(s.oneDriveLinked ? t("swLinked") : t("swUnlinked")));
+  const blockers = s.blockers.map(b => "blk_" + b.replace(/-/g, "_")).filter(k => I18N.en[k]);
+  const needScan = !(sc.done && sc.folder.toLowerCase() === f.value.trim().toLowerCase());
+  $("swBlock").innerHTML = blockers.concat(needScan ? ["swNeedScan"] : []).map(k => row(false, esc(t(k)))).join("");
+  $("swTake").disabled = blockers.length > 0 || needScan;
+}
+
 function render(){
   hero(); coex(); tiles(); renderNow(); fillSettings();
 }
@@ -384,6 +443,7 @@ async function poll(){
     const a = await api("/api/activity?after=" + lastId);
     if (a.entries.length){ entries = entries.concat(a.entries).slice(-400); lastId = a.lastId; renderRecent(); }
     render();
+    if (!$("switch").hidden) { await pollSwitch(); }
   } catch (e) {
     $("pillText").textContent = "…";
     if (String(e.message) === "403") { $("banner").innerHTML = `<div class="banner"><span>${t("stale")}</span><button class="btn" onclick="location.reload()">${t("reload")}</button></div>`; }
@@ -408,12 +468,15 @@ async function save(){
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
-  ["activity","settings","help"].forEach(id => $(id).hidden = id !== b.dataset.tab);
+  ["activity","settings","switch","help"].forEach(id => $(id).hidden = id !== b.dataset.tab);
+  if (b.dataset.tab === "switch") pollSwitch();
   updateBar();
 });
 document.querySelectorAll("#settings input,#settings select").forEach(el => el.addEventListener("input", () => setDirty(true)));
 $("discardBtn").onclick = () => { setDirty(false); fillSettings(); };
 $("saveBtn").onclick = save;
+$("swScan").onclick = () => api("/api/switch/scan", { folder: $("swFolder").value.trim() }).then(r => { if (!r.ok) showToast(t("blk_" + String(r.error).replace(/-/g, "_"))); pollSwitch(); });
+$("swTake").onclick = () => { if (!confirm(t("swConfirm"))) return; api("/api/switch/takeover", { folder: $("swFolder").value.trim() }).then(r => { if (r.ok) { showToast(t("swRestarting")); } else { showToast(String(r.error)); } }); };
 $("pauseBtn").onclick = () => api("/api/pause", { value: !S.paused }).then(poll);
 $("folderBtn").onclick = () => api("/api/open-folder", {});
 
