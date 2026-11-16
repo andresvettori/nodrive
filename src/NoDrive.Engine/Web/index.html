@@ -182,7 +182,7 @@ en: {
   stOffline:"Offline, will retry", stOfflineSub:"NoDrive keeps trying in the background.", stStopped:"Stopped", stStarting:"Starting…", stSigningIn:"Signing in…", stSigningInSub:"Finish the sign-in in the browser window.",
   down:"Download", up:"Upload", items:"Items in OneDrive", queue:"Waiting to upload", perSec:"/s",
   now:"Right now", nothing:"Nothing is transferring right now.", recent:"Recent activity", emptyRecent:"No activity yet. Open or add a file to see it here.",
-  fAll:"All", fTransfers:"Transfers", fChanges:"Changes", fErrors:"Problems", search:"Search by name",
+  showLast:"Show last", fAll:"All", fTransfers:"Transfers", fChanges:"Changes", fErrors:"Problems", search:"Search by name",
   today:"Today", yesterday:"Yesterday",
   k_download:"Downloaded", k_upload:"Uploaded", k_create:"Added", k_update:"Updated", k_rename:"Renamed", k_delete:"Deleted", k_sync:"Checked", k_error:"Problem",
   o_failed:"failed", o_cancelled:"cancelled", o_skipped:"skipped",
@@ -208,7 +208,7 @@ es: {
   stOffline:"Sin conexión, se reintentará", stOfflineSub:"NoDrive sigue intentando en segundo plano.", stStopped:"Detenido", stStarting:"Iniciando…", stSigningIn:"Iniciando sesión…", stSigningInSub:"Terminá el inicio de sesión en la ventana del navegador.",
   down:"Descarga", up:"Subida", items:"Elementos en OneDrive", queue:"Esperando para subir", perSec:"/s",
   now:"En este momento", nothing:"No hay transferencias en curso.", recent:"Actividad reciente", emptyRecent:"Todavía no hay actividad. Abrí o agregá un archivo para verla acá.",
-  fAll:"Todo", fTransfers:"Transferencias", fChanges:"Cambios", fErrors:"Problemas", search:"Buscar por nombre",
+  showLast:"Mostrar últimos", fAll:"Todo", fTransfers:"Transferencias", fChanges:"Cambios", fErrors:"Problemas", search:"Buscar por nombre",
   today:"Hoy", yesterday:"Ayer",
   k_download:"Descargado", k_upload:"Subido", k_create:"Agregado", k_update:"Actualizado", k_rename:"Renombrado", k_delete:"Eliminado", k_sync:"Revisado", k_error:"Problema",
   o_failed:"falló", o_cancelled:"cancelado", o_skipped:"omitido",
@@ -228,6 +228,8 @@ es: {
 }};
 
 const $ = id => document.getElementById(id);
+const LIMITS = [25, 50, 100, 200, 400];
+let limit = 50; try { const v = +localStorage.getItem("nd.limit"); if (LIMITS.includes(v)) limit = v; } catch (e) { /* storage unavailable: keep the default */ }
 let S = null, lang = "en", locale = "en-US", filter = "all", query = "", entries = [], lastId = 0, last = null, dirty = false;
 
 function t(k, ...a){ const v = (I18N[lang] && I18N[lang][k]) ?? I18N.en[k] ?? k; return typeof v === "function" ? v(...a) : v; }
@@ -274,8 +276,10 @@ function applyStatic(){
 function renderChips(){
   const defs = [["all","fAll"],["transfers","fTransfers"],["changes","fChanges"],["errors","fErrors"]];
   $("chips").innerHTML = defs.map(([f,k]) => `<button class="chip" data-f="${f}" aria-pressed="${filter === f}">${t(k)}</button>`).join("") +
+    `<label class="small">${t("showLast")} <select id="lim">${LIMITS.map(n => `<option value="${n}"${n === limit ? " selected" : ""}>${n}</option>`).join("")}</select></label>` +
     `<input type="search" id="q" placeholder="${t("search")}" value="${query.replace(/"/g, "&quot;")}">`;
   $("chips").querySelectorAll(".chip").forEach(b => b.onclick = () => { filter = b.dataset.f; renderChips(); renderRecent(); });
+  $("lim").onchange = e => { limit = +e.target.value; try { localStorage.setItem("nd.limit", String(limit)); } catch (x) { /* optional */ } renderRecent(); };
   $("q").oninput = e => { query = e.target.value.toLowerCase(); renderRecent(); };
 }
 
@@ -288,7 +292,7 @@ function renderRecent(){
   if (!rows.length){ $("recent").innerHTML = `<div class="empty">${t("emptyRecent")}</div>`; return; }
   let html = "", day = "";
   const tf = timeFmt();
-  for (const e of rows.slice(0, 200)){
+  for (const e of rows.slice(0, limit)){
     const when = new Date(e.utcTime);
     const d = dayLabel(when);
     if (d !== day){ day = d; html += `<div class="day">${esc(d)}</div>`; }
