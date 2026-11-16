@@ -123,6 +123,12 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
+          name: NoDrive-installer-win-x64
+          if-no-files-found: warn
+          path: artifacts/installer
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
           name: spikes-win-x64
           if-no-files-found: warn
           path: artifacts/spikes
