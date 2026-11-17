@@ -31,7 +31,37 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
     public bool NeedsSignIn => _needsSignIn;
     private LocalOps? _ops;
     private UploadService? _uploader;
+    private readonly SemaphoreSlim _wake = new(0);
+    private ThrottleGate? _gate;
+    private volatile bool _woke;
+    private long _lastWake;
+
+    /// <summary>The PC woke up or the network came back: look for changes now, drop stale back-off and rate pauses, and re-check what changed on disk meanwhile. Debounced (network flaps).</summary>
+    public void Wake()
+    {
+        long now = Environment.TickCount64;
+        if (now - Interlocked.Exchange(ref _lastWake, now) < 3000) { return; }
+        _woke = true;
+        _gate?.Reset();
+        try { _index?.ReleaseBackoff(DateTime.UtcNow.Ticks); } catch (Exception) { /* index may be closing */ }
+        Reconciler?.RequestRun();
+        Log.Info("woke up or network changed: checking now");
+        try { _wake.Release(); } catch (ObjectDisposedException) { }
+    }
+
+    private async Task WaitOrWakeAsync(TimeSpan delay, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var timer = Task.Delay(delay, linked.Token);
+        var wake = _wake.WaitAsync(linked.Token);
+        await Task.WhenAny(timer, wake).ConfigureAwait(false);
+        linked.Cancel();
+        try { await Task.WhenAll(timer, wake).ConfigureAwait(false); } catch (OperationCanceledException) { /* the loser of the race */ }
+        ct.ThrowIfCancellationRequested();
+    }
+
     public Switching.SwitchAssistant? Assistant { get; private set; }
+    public OfflineReconciler? Reconciler { get; private set; }
     public bool IndexReady => _indexReady;
     public long PendingOps => _index?.CountOps() ?? 0;
     /// <summary>True while files in a newly adopted folder are being linked; folders are not populated meanwhile (it would collide with the existing files).</summary>
@@ -65,7 +95,12 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
     /// <summary>A damaged index file must never keep NoDrive from starting: set it aside and rebuild from the cloud (placeholders on disk are untouched).</summary>
     private static ItemIndex OpenIndexOrRebuild(string path)
     {
-        try { return new ItemIndex(path); }
+        try
+        {
+            var idx = new ItemIndex(path);
+            if (idx.QuickCheck() is { } problem) { idx.Dispose(); throw new InvalidDataException($"integrity check failed: {problem}"); }
+            return idx;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
@@ -83,7 +118,8 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         _http = new HttpClient();
         _auth = new PkceAuthenticator(_http, new DpapiTokenStore(paths.TokenPath), OpenBrowser, config.ClientId, log: Log.Info);
         // Background work NEVER opens a browser: it fails fast with SignInRequiredException and the status flips. Only first launch and the tray action sign in.
-        var graph = new GraphDrive(_http, tokenCt => _auth.GetAccessTokenAsync(tokenCt, allowInteractive: false), new ThrottleGate(), new GraphOptions());
+        _gate = new ThrottleGate();
+        var graph = new GraphDrive(_http, tokenCt => _auth.GetAccessTokenAsync(tokenCt, allowInteractive: false), _gate, new GraphOptions());
 
         await EnsureSignedInAsync(autoPrompt: true, ct).ConfigureAwait(false);
 
@@ -138,6 +174,8 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
                 {
                     prefetchStarted = true;
                     uploader.Start(ct);
+                    Reconciler = new OfflineReconciler(_index, population, paths.SyncRoot);
+                    _ = Task.Run(() => Reconciler.LoopAsync(ct), CancellationToken.None);
                     _ops.Start(ct);
                     _ = Task.Run(async () =>
                     {
@@ -161,7 +199,8 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
                 Log.Warn($"sync round failed: {ex.Message}");
                 idleSeconds = Math.Min(config.PollIdleMaxSeconds, Math.Max(30, idleSeconds * 2));
             }
-            try { await Task.Delay(TimeSpan.FromSeconds(idleSeconds), ct).ConfigureAwait(false); }
+            if (_woke) { _woke = false; idleSeconds = config.PollActiveSeconds; }
+            try { await WaitOrWakeAsync(TimeSpan.FromSeconds(idleSeconds), ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
         }
     }
@@ -239,6 +278,8 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
     public void Dispose()
     {
         Shutdown();
+        Reconciler?.Dispose();
+        _wake.Dispose();
         _auth?.Dispose();
         _http?.Dispose();
         _index?.Dispose();

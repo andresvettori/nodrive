@@ -23,6 +23,10 @@ internal static unsafe class TrayWindow
     private const nuint IdAutostart = 7;
     private const nuint IdOpenUi = 8;
     private static Action? s_onOpenUi;
+    private static Action? s_onResume;
+
+    /// <summary>Called when the PC wakes from sleep or hibernation.</summary>
+    public static void SetOnResume(Action onResume) => s_onResume = onResume;
 
     /// <summary>Opens the local settings and activity page (also the left-click and double-click action).</summary>
     public static void SetOpenUi(Action onOpenUi) => s_onOpenUi = onOpenUi;
@@ -182,6 +186,9 @@ internal static unsafe class TrayWindow
             case PInvoke.WM_CLOSE:
                 PInvoke.DestroyWindow(hwnd);
                 return new LRESULT(0);
+            case 0x0218:                                                   // WM_POWERBROADCAST
+                if ((nuint)wParam is 0x12 or 0x7) { s_onResume?.Invoke(); }   // PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND
+                return new LRESULT(1);
             case PInvoke.WM_QUERYENDSESSION:
                 return new LRESULT(1);
             case PInvoke.WM_ENDSESSION:

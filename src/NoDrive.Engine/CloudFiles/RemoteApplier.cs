@@ -48,7 +48,7 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
                 if (index.TryGet(ch.Id) is { } nw && population.IsPopulated(nw.ParentId ?? rootId) && PathOf(nw) is { } np && Path.GetDirectoryName(np) is { } nd) { dirty.Add(nd); }
                 if (ch.Item is null)
                 {
-                    if (old?.Path is { } p && DeleteLocal(p)) { removed++; ActivityLog.Add("delete", Path.GetFileName(p), "ok", detail: "removed in the cloud"); }
+                    if (old?.Path is { } p && !EditedLocally(p, old.Item) && DeleteLocal(p)) { removed++; ActivityLog.Add("delete", Path.GetFileName(p), "ok", detail: "removed in the cloud"); }
                     continue;
                 }
                 var now = index.TryGet(ch.Id);
@@ -90,16 +90,32 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
         return Path.Combine(parts);
     }
 
+    /// <summary>A hydrated placeholder whose size or time no longer match what the cloud had: the user edited it. Never delete or overwrite such a file because the cloud removed or changed it.</summary>
+    private static bool EditedLocally(string path, IndexedItem known)
+    {
+        try
+        {
+            if (known.IsFolder || !File.Exists(path)) { return false; }
+            var fi = new FileInfo(path);
+            if ((fi.Attributes & (FileAttributes.Offline | (FileAttributes)0x400000)) != 0) { return false; }          // not downloaded: cannot have local edits
+            bool edited = fi.Length != known.Size || Math.Abs(fi.LastWriteTimeUtc.Ticks - known.ModifiedUtcTicks) > 2 * TimeSpan.TicksPerSecond;
+            if (edited) { ActivityLog.Add("error", fi.Name, "skipped", detail: "you edited this file; it was not removed because it changed or was deleted in the cloud"); Log.Warn($"kept locally edited file {path}"); }
+            return edited;
+        }
+        catch (IOException) { return false; }
+    }
+
     private static bool Exists(string path) => File.Exists(path) || Directory.Exists(path);
 
     private int Create(IndexedItem item)
     {
+        if (NoDrive.Core.Names.WindowsNames.Problem(item.Name) is { } why) { ActivityLog.Add("error", item.Name, "skipped", detail: $"cannot exist on Windows ({why})"); return 0; }
         string parentId = item.ParentId ?? rootId;
         string? dir = Path.GetDirectoryName(PathOf(item));
         if (dir is null || !Directory.Exists(dir)) { return 0; }
         var gate = locks.For(parentId);
         gate.Wait();
-        try { return PlaceholderWriter.CreateChildren(dir, [item]); }
+        try { int n = PlaceholderWriter.CreateChildren(dir, [item]); if (n > 0 || Exists(Path.Combine(dir, item.Name))) { index.MarkLocal(item.Id); } return n; }
         finally { gate.Release(); }
     }
 
@@ -138,6 +154,13 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log.Warn($"remote move {from} -> {to} failed: {ex.Message}"); return false; }
+    }
+
+    /// <summary>After a version conflict: make the file show the cloud's version (forced in sync, content dropped); the user's own version was saved as a conflict copy first.</summary>
+    internal static bool ForceCloudVersion(string path, RemoteItem cloud)
+    {
+        MarkInSync(path);
+        return UpdateFile(path, new IndexedItem(cloud.Id, cloud.ParentId, cloud.Name, cloud.Size, cloud.ModifiedUtc.UtcTicks, false, cloud.ETag, cloud.CTag, cloud.QuickXorHash, false));
     }
 
     internal static void MarkInSync(string path)

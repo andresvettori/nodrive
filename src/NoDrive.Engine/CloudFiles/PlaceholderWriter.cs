@@ -125,6 +125,33 @@ internal static unsafe class PlaceholderWriter
     }
 
     /// <summary>
+    /// After our own upload of an edit: give the placeholder the cloud's new size, time and identity and mark it in sync, without dropping its content. This is what stops
+    /// the edit detector from seeing the same change again (the cloud stamps its own modified time on upload).
+    /// </summary>
+    public static bool RefreshInSync(string path, RemoteItem item)
+    {
+        HANDLE h = default;
+        fixed (char* p = path)
+        {
+            HRESULT open = PInvoke.CfOpenFileWithOplock(new PCWSTR(p), CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_WRITE_ACCESS, &h);
+            if (open.Failed) { Log.Warn($"refresh: open {path} -> 0x{open.Value:X8}"); return false; }
+        }
+        try
+        {
+            long when = item.ModifiedUtc.UtcDateTime.ToFileTimeUtc();
+            var meta = new CF_FS_METADATA { FileSize = item.Size, BasicInfo = new FILE_BASIC_INFO { CreationTime = when, LastWriteTime = when, LastAccessTime = when, ChangeTime = when, FileAttributes = (uint)FILE_FLAGS_AND_ATTRIBUTES.FILE_ATTRIBUTE_NORMAL } };
+            byte[] id = Encoding.UTF8.GetBytes(item.Id);
+            fixed (byte* pid = id)
+            {
+                HRESULT hr = PInvoke.CfUpdatePlaceholder(h, &meta, pid, (uint)id.Length, null, 0, CF_UPDATE_FLAGS.CF_UPDATE_FLAG_MARK_IN_SYNC, null, null);
+                if (hr.Failed) { Log.Warn($"refresh of {path} -> 0x{hr.Value:X8}"); }
+                return hr.Succeeded;
+            }
+        }
+        finally { PInvoke.CfCloseHandle(h); }
+    }
+
+    /// <summary>
     /// Tells Windows a materialised directory still has cloud children to add (it will call FETCH_PLACEHOLDERS for it). A directory converted from a
     /// plain folder is otherwise considered complete, which leaves the cloud files that were never downloaded missing from Explorer.
     /// </summary>

@@ -135,6 +135,12 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
             uploadUrl = s?.UploadUrl ?? throw new InvalidOperationException("No upload URL returned.");
         }
 
+        return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Sends a file to an upload session in 5 MiB fragments (no Authorization header on fragments), resending a fragment after a dropped connection or 5xx.</summary>
+    private async Task<RemoteItem> UploadSessionAsync(string uploadUrl, string localPath, long size, Action<long, long>? progress, CancellationToken ct)
+    {
         var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(ChunkSize);
         try
         {
@@ -177,6 +183,51 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
             throw new InvalidOperationException("Upload ended without a final response.");
         }
         finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
+    }
+
+    /// <summary>The current state of one item (used to refresh a stale index entry after a version conflict).</summary>
+    public async Task<RemoteItem> GetItemAsync(string itemId, CancellationToken ct)
+    {
+        using var resp = await SendAsync(HttpMethod.Get, $"{_options.BaseUrl}/me/drive/items/{Uri.EscapeDataString(itemId)}", ct).ConfigureAwait(false);
+        return await ReadItemAsync(resp, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Replaces the content of an EXISTING item. If-Match carries the eTag we last knew: when the cloud changed meanwhile the server answers 412 (PreconditionFailed) and
+    /// nothing is overwritten; the caller makes a conflict copy. OneDrive keeps the replaced content in the version history.
+    /// </summary>
+    public async Task<RemoteItem> UpdateFileAsync(string itemId, string? etag, string localPath, CancellationToken ct, Action<long, long>? progress = null)
+    {
+        long size = new FileInfo(localPath).Length;
+        string id = Uri.EscapeDataString(itemId);
+        if (size <= SimpleUploadLimit)
+        {
+            if (UploadLimiter is not null) { await UploadLimiter.WaitAsync(size, ct).ConfigureAwait(false); }
+            using var resp = await SendAsync(() =>
+            {
+                var req = new HttpRequestMessage(HttpMethod.Put, $"{_options.BaseUrl}/me/drive/items/{id}/content");
+                if (!string.IsNullOrEmpty(etag)) { req.Headers.TryAddWithoutValidation("If-Match", etag); }
+                req.Content = new StreamContent(new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan));
+                req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                return req;
+            }, ct).ConfigureAwait(false);
+            OnBytesUploaded?.Invoke(size);
+            progress?.Invoke(size, size);
+            return await ReadItemAsync(resp, ct).ConfigureAwait(false);
+        }
+        string uploadUrl;
+        using (var resp = await SendAsync(() =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/me/drive/items/{id}/createUploadSession");
+            if (!string.IsNullOrEmpty(etag)) { req.Headers.TryAddWithoutValidation("If-Match", etag); }
+            req.Content = new StringContent("{\"item\":{\"@microsoft.graph.conflictBehavior\":\"replace\"}}", System.Text.Encoding.UTF8, "application/json");
+            return req;
+        }, ct).ConfigureAwait(false))
+        {
+            var s = await resp.Content.ReadFromJsonAsync(GraphJsonContext.Default.UploadSessionDto, ct).ConfigureAwait(false);
+            uploadUrl = s?.UploadUrl ?? throw new InvalidOperationException("No upload URL returned.");
+        }
+        return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct).ConfigureAwait(false);
     }
 
     /// <summary>Creates a folder; an existing name fails with Conflict (never merged or renamed by the server).</summary>

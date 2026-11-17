@@ -59,6 +59,9 @@ internal static class Program
         web.Start(cts.Token);
         TrayWindow.SetOpenUi(web.Open);
         Lifecycle.ListenForQuit(TrayWindow.RequestQuit, cts.Token);
+        Supervisor.Start(cts.Token);
+        TrayWindow.SetOnResume(service.Wake);
+        System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += (_, e) => { if (e.IsAvailable) { service.Wake(); } };
         TrayWindow.Configure(() => UserSettings.Paused, () => UserSettings.SetPaused(!UserSettings.Paused), () => UserSettings.AutostartEnabled, () => UserSettings.SetAutostart(!UserSettings.AutostartEnabled));
         TrayWindow.Create("NoDrive", onQuit: () => cts.Cancel(), onOpenFolder: () => OpenFolder(paths.SyncRoot), statusText: () => service.Status, onSignIn: service.RequestSignIn, needsSignIn: () => service.NeedsSignIn, heldDeletes: () => service.HeldDeletes, onAllowDeletes: service.AllowDeletes);
         _ = Task.Run(async () =>

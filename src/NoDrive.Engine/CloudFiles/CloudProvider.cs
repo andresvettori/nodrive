@@ -27,7 +27,14 @@ internal static class CloudProvider
 
     /// <summary>Files up to this size are downloaded whole at the first read by interactive apps (Photos cancels slow partial reads and reports the image as corrupted).</summary>
     private const long WholeFileLimit = 64L * 1024 * 1024;
+    private const long MinFreeBytes = 256L * 1024 * 1024;
     private static string s_driveRoot = "C:";
+
+    private static long? FreeBytes()
+    {
+        try { return new DriveInfo(s_driveRoot).AvailableFreeSpace; }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException) { return null; }
+    }
     private static string s_syncRoot = "";
     private static readonly ConcurrentDictionary<string, byte> s_backfilling = new(StringComparer.Ordinal);
 
@@ -43,12 +50,36 @@ internal static class CloudProvider
     private static readonly HashSet<string> BackgroundCallers = new(StringComparer.OrdinalIgnoreCase) { "explorer.exe", "SearchProtocolHost.exe", "SearchFilterHost.exe", "SearchIndexer.exe", "MsMpEng.exe", "dllhost.exe", "prevhost.exe" };
     private static readonly Channel<PopulateRequest> s_populateQueue = Channel.CreateBounded<PopulateRequest>(new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.Wait });
     // Keyed by RequestKey (unique per request). TransferKey is shared by all requests on one open file, so it must never own a cancellation handle.
-    private sealed record InFlight(long TransferKey, long Offset, long Length, CancellationTokenSource Cts);
+    private sealed record InFlight(long TransferKey, long Offset, long Length, CancellationTokenSource Cts, long StartedTicks, DataRequest Req);
+    private static readonly ConcurrentDictionary<long, (PopulateRequest Req, long StartedTicks)> s_populateInFlight = new();
     private static readonly ConcurrentDictionary<long, InFlight> s_inFlight = new();
     private static readonly ConcurrentBag<double> s_callbackMicros = [];
     private static readonly CancellationTokenSource s_stop = new();
 
     public static IReadOnlyCollection<double> CallbackMicros => s_callbackMicros;
+    /// <summary>
+    /// Watchdog: any request still pending after <paramref name="limit"/> is completed with a failure (a stuck worker must never leave Explorer or an application waiting for the platform's
+    /// 60 s deadline). Returns how many were failed.
+    /// </summary>
+    public static int SweepStuck(TimeSpan limit)
+    {
+        int failed = 0;
+        long now = Stopwatch.GetTimestamp();
+        foreach (var (key, f) in s_inFlight)
+        {
+            if (Stopwatch.GetElapsedTime(f.StartedTicks, now) < limit) { continue; }
+            try { f.Cts.Cancel(); } catch (ObjectDisposedException) { }
+            if (s_inFlight.TryRemove(key, out _)) { CompleteData(f.Req, NTSTATUS.STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE); failed++; Log.Warn($"watchdog: a download request for {f.Req.ItemId} was pending for {limit.TotalSeconds:F0} s and was failed"); }
+        }
+        foreach (var (key, v) in s_populateInFlight)
+        {
+            if (Stopwatch.GetElapsedTime(v.StartedTicks, now) < limit) { continue; }
+            if (s_populateInFlight.TryRemove(key, out _)) { CompletePopulate(v.Req, NTSTATUS.STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE); failed++; Log.Warn($"watchdog: opening folder {v.Req.FolderId} was pending for {limit.TotalSeconds:F0} s and was failed"); }
+        }
+        if (failed > 0) { ActivityLog.Add("error", "NoDrive", "failed", detail: $"{failed} request(s) were stuck and were failed so Explorer does not wait"); }
+        return failed;
+    }
+
     public static int Pending => s_dataQueue.Reader.Count + s_backgroundQueue.Reader.Count + s_populateQueue.Reader.Count;
 
     public static unsafe void Start(string rootPath, ProviderServices services)
@@ -100,7 +131,7 @@ internal static class CloudProvider
         req = req with { Background = req.Process is not null && BackgroundCallers.Contains(Path.GetFileName(req.Process)) };
         try
         {
-            s_inFlight[req.RequestKey] = new InFlight(req.TransferKey, req.Offset, req.Length, CancellationTokenSource.CreateLinkedTokenSource(s_stop.Token));
+            s_inFlight[req.RequestKey] = new InFlight(req.TransferKey, req.Offset, req.Length, CancellationTokenSource.CreateLinkedTokenSource(s_stop.Token), Stopwatch.GetTimestamp(), req);
             if (req.ItemId.Length == 0 || !(req.Background ? s_backgroundQueue : s_dataQueue).Writer.TryWrite(req)) { CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
         }
         catch (Exception ex) { Log.Error($"FETCH_DATA callback: {ex.Message}"); }
@@ -131,7 +162,8 @@ internal static class CloudProvider
         // The sync root itself carries no FileIdentity; every other folder carries the Graph id stored when its placeholder was created.
         string folderId = info->FileIdentityLength == 0 ? s_svc.Population.RootId : Identity(info);
         var req = new PopulateRequest(info->ConnectionKey.Value, info->TransferKey, info->RequestKey, folderId, t0);
-        if (!s_populateQueue.Writer.TryWrite(req)) { CompletePopulate(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
+        s_populateInFlight[req.RequestKey] = (req, Stopwatch.GetTimestamp());
+        if (!s_populateQueue.Writer.TryWrite(req)) { s_populateInFlight.TryRemove(req.RequestKey, out _); CompletePopulate(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
         Record(t0);
     }
 
@@ -213,6 +245,15 @@ internal static class CloudProvider
             var sw = Stopwatch.StartNew();
             s_svc.Callers.Record(req.Process, req.Length, req.FileSize);
             ActiveTransfer? act = null;
+            if (FreeBytes() is { } free && free < req.FileSize + MinFreeBytes && !req.Background)
+            {
+                string shown = s_svc.Index.GetName(req.ItemId) ?? req.ItemId;
+                ActivityLog.Add("error", shown, "failed", detail: $"not enough free disk space ({free / 1048576:N0} MB free, {req.FileSize / 1048576:N0} MB needed)");
+                Log.Warn($"download of {shown} refused: only {free / 1048576:N0} MB free");
+                if (s_inFlight.TryRemove(req.RequestKey, out var done)) { done.Cts.Dispose(); }
+                CompleteData(req, new NTSTATUS(unchecked((int)0xC000007F)));      // STATUS_DISK_FULL
+                continue;
+            }
             try
             {
                 // Read-ahead (P1 finding): a player reading 40 KB at a time pays a network round trip per read; fetch a growing window beyond the required range.
@@ -314,6 +355,7 @@ internal static class CloudProvider
         {
             if (!s_svc.IndexReady())
             {
+                s_populateInFlight.TryRemove(req.RequestKey, out _);
                 Log.Warn($"folder {req.FolderId} opened before the first sync finished; answering with an error (Explorer will show provider unavailable)");
                 CompletePopulate(req, NTSTATUS.STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE);
                 continue;
@@ -324,7 +366,7 @@ internal static class CloudProvider
             try
             {
                 bool already = s_svc.Population.IsPopulated(req.FolderId);              // a background prefetch got there first: complete with nothing to add
-                long total = already ? 0 : s_svc.Index.CountChildren(req.FolderId);
+                long total = already ? 0 : ChildFilter.Valid(s_svc.Index.EnumerateChildren(req.FolderId)).LongCount();
                 long sent;
                 string? dir = already ? null : s_svc.Population.PathOfFolder(req.FolderId, s_syncRoot);
                 if (dir is not null && Directory.Exists(dir) && Directory.EnumerateFileSystemEntries(dir).Any())
@@ -332,7 +374,7 @@ internal static class CloudProvider
                     // A folder that already holds local entries (adopted after a reinstall or a switch): create only the missing placeholders, tolerating names that exist, then complete the request empty.
                     var batch = new List<NoDrive.Core.Model.IndexedItem>(PlaceholderWriter.DefaultBatch);
                     sent = 0;
-                    foreach (var child in s_svc.Index.EnumerateChildren(req.FolderId))
+                    foreach (var child in ChildFilter.Valid(s_svc.Index.EnumerateChildren(req.FolderId)))
                     {
                         batch.Add(child);
                         if (batch.Count >= PlaceholderWriter.DefaultBatch) { sent += PlaceholderWriter.CreateChildren(dir, batch); batch.Clear(); }
@@ -340,7 +382,7 @@ internal static class CloudProvider
                     if (batch.Count > 0) { sent += PlaceholderWriter.CreateChildren(dir, batch); }
                     PlaceholderWriter.Transfer(req.ConnectionKey, req.TransferKey, req.RequestKey, [], 0);
                 }
-                else { sent = PlaceholderWriter.Transfer(req.ConnectionKey, req.TransferKey, req.RequestKey, already ? [] : s_svc.Index.EnumerateChildren(req.FolderId), total); }
+                else { sent = PlaceholderWriter.Transfer(req.ConnectionKey, req.TransferKey, req.RequestKey, already ? [] : ChildFilter.Valid(s_svc.Index.EnumerateChildren(req.FolderId)), total); }
                 s_svc.Population.Set(req.FolderId, true);
                 if (sw.ElapsedMilliseconds > 500 || total > 1000) { Log.Info($"populated {req.FolderId} on demand: {sent} placeholders in {sw.ElapsedMilliseconds} ms{(already ? " (already populated by prefetch)" : "")}"); }
             }
@@ -349,7 +391,7 @@ internal static class CloudProvider
                 Log.Warn($"populate {req.FolderId} failed: {ex.Message}");
                 CompletePopulate(req, NTSTATUS.STATUS_CLOUD_FILE_NETWORK_UNAVAILABLE);
             }
-            finally { gate.Release(); }
+            finally { gate.Release(); s_populateInFlight.TryRemove(req.RequestKey, out _); }
         }
     }
 

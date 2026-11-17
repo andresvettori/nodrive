@@ -34,7 +34,7 @@ internal sealed class Prefetcher(ItemIndex index, PopulationState state, FolderL
                 var stepSw = Stopwatch.StartNew();
                 var batch = new List<IndexedItem>(PlaceholderWriter.DefaultBatch);
                 int created = 0;
-                foreach (var child in index.EnumerateChildren(step.FolderId))
+                foreach (var child in ChildFilter.Valid(index.EnumerateChildren(step.FolderId)))
                 {
                     batch.Add(child);
                     if (batch.Count < PlaceholderWriter.DefaultBatch) { continue; }

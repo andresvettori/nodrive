@@ -34,15 +34,21 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
 
     public void Start(CancellationToken ct)
     {
-        _watcher = new FileSystemWatcher(syncRoot) { IncludeSubdirectories = true, NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName, InternalBufferSize = 64 * 1024 };
+        _watcher = new FileSystemWatcher(syncRoot) { IncludeSubdirectories = true, NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size, InternalBufferSize = 64 * 1024 };
         _watcher.Created += (_, e) => Note(e.FullPath);
         _watcher.Renamed += (_, e) => Note(e.FullPath);
+        _watcher.Changed += (_, e) => NoteChange(e.FullPath);          // edits of downloaded files (the predicate runs later in FlushSeen, not on the event thread)
         _watcher.Error += (_, e) => { Log.Warn($"upload watcher overflow: {e.GetException().Message}; rescanning populated folders"); _rescan = true; };
         _watcher.EnableRaisingEvents = true;
         _ = Task.Run(() => LoopAsync(ct), CancellationToken.None);
     }
 
     public void Dispose() => _watcher?.Dispose();
+
+    private void NoteChange(string path)
+    {
+        if (_seen.Count < MaxWatched && !Ignored(path) && !_seen.ContainsKey(path)) { _seen.TryAdd(path, 0); }
+    }
 
     private void Note(string path)
     {
@@ -101,7 +107,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
     {
         if (_seen.IsEmpty) { return; }
         var batch = new List<string>();
-        foreach (var k in _seen.Keys) { if (_seen.TryRemove(k, out _) && IsRealLocal(k)) { batch.Add(k); } }
+        foreach (var k in _seen.Keys) { if (_seen.TryRemove(k, out _) && (IsRealLocal(k) || IsEditedPlaceholder(k))) { batch.Add(k); } }
         if (batch.Count > 0) { index.EnqueueUploads(batch, DateTime.UtcNow.Add(Quiet).Ticks); }
     }
 
@@ -199,7 +205,8 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
         try
         {
             bool isDir = Directory.Exists(path);
-            if ((!isDir && !File.Exists(path)) || !IsRealLocal(path)) { index.RemoveUpload(path); return; }     // gone, or already a placeholder
+            if (!isDir && !File.Exists(path)) { index.RemoveUpload(path); return; }                                 // gone
+            if (!IsRealLocal(path)) { if (isDir) { index.RemoveUpload(path); } else { await ProcessEditAsync(path, attempts, ct).ConfigureAwait(false); } return; }     // a placeholder: only an edit matters
             string? parentId = ResolveParent(path);
             if (parentId is null) { Defer(path, attempts, TimeSpan.FromSeconds(15), bump: false); return; }       // the parent folder is still queued: wait for it
 
@@ -223,17 +230,31 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             {
                 try { using var probe = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
                 catch (IOException) { Defer(path, attempts, TimeSpan.FromSeconds(10), bump: false); return; }          // still being written
-                if (index.FindChild(parentId, name) is { IsFolder: false } same && SameFile(same, path))
+                IndexedItem? twin = index.FindChild(parentId, name) is { IsFolder: false } f ? f : null;
+                if (twin is { } same && SameFile(same, path))
                 {
                     item = ToRemote(same);                 // already in the cloud with the same size and modified time (a file NoDrive downloaded earlier, or one OneDrive synced): link it
                     adopted = true;
                 }
                 else
                 {
-                act = ActivityLog.Begin("upload", name, new FileInfo(path).Length);
-                try { item = await graph.UploadNewFileAsync(parentId, name, path, ct, ProgressLogger(name, act)).ConfigureAwait(false); }
-                catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+                // A plain file whose name exists in the cloud is a replace: a safe-save (the delete of the original is still waiting) or a copy that is newer than the cloud version.
+                bool replaceExisting = twin is { } t0 && (index.HasPendingOp(t0.Id, "delete") || File.GetLastWriteTimeUtc(path).Ticks > t0.ModifiedUtcTicks + 2 * TimeSpan.TicksPerSecond);
+                act = ActivityLog.Begin(replaceExisting ? "update" : "upload", name, new FileInfo(path).Length);
+                try
                 {
+                    if (replaceExisting)
+                    {
+                        item = await graph.UpdateFileAsync(twin!.Value.Id, twin.Value.ETag, path, ct, ProgressLogger(name, act)).ConfigureAwait(false);
+                        index.RemoveOps(twin.Value.Id, "delete");
+                        File.SetLastWriteTimeUtc(path, item.ModifiedUtc.UtcDateTime);
+                        stamp = File.GetLastWriteTimeUtc(path);
+                    }
+                    else { item = await graph.UploadNewFileAsync(parentId, name, path, ct, ProgressLogger(name, act)).ConfigureAwait(false); }
+                }
+                catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed)
+                {
+                    if (twin is { } t1) { index.RemoveOps(t1.Id, "delete"); }       // keep the cloud original when the replace cannot be done safely
                     string copy = ConflictName(name);
                     item = await graph.UploadNewFileAsync(parentId, copy, path, ct, ProgressLogger(copy, act)).ConfigureAwait(false);
                     finalPath = Path.Combine(Path.GetDirectoryName(path)!, copy);
@@ -253,6 +274,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                 Defer(path, attempts, TimeSpan.FromSeconds(30), bump: true);
                 return;
             }
+            index.MarkLocal(item.Id);
             if (isDir) { if (!adopted) { population.Set(item.Id, true); } QueueChildren(finalPath); }
             index.RemoveUpload(path);
             if (act is not null) { ActivityLog.End(act, "ok", finalPath != path ? "conflict copy" : null); act = null; }
@@ -292,6 +314,92 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
     }
 
     private void Defer(string path, int attempts, TimeSpan wait, bool bump) => index.RescheduleUpload(path, bump ? attempts + 1 : attempts, DateTime.UtcNow.Add(wait).Ticks);
+
+    private static bool IsEdited(IndexedItem item, FileInfo fi) =>
+        item.Size != fi.Length || Math.Abs(item.ModifiedUtcTicks - fi.LastWriteTimeUtc.Ticks) > 2 * TimeSpan.TicksPerSecond;
+
+    /// <summary>A downloaded placeholder file whose size or modified time no longer match the cloud version we know: the user edited it.</summary>
+    private bool IsEditedPlaceholder(string path)
+    {
+        try
+        {
+            var fi = new FileInfo(path);
+            if (!fi.Exists || (fi.Attributes & FileAttributes.ReparsePoint) == 0 || (fi.Attributes & (FileAttributes.Offline | RecallOnDataAccess)) != 0) { return false; }
+            string? parentId = ResolveParent(path);
+            return parentId is not null && index.FindChild(parentId, fi.Name) is { IsFolder: false } cur && IsEdited(cur, fi);
+        }
+        catch (IOException) { return false; }
+    }
+
+    /// <summary>
+    /// Uploads the edit of a downloaded file: If-Match with the eTag we know; on a version conflict (412) the user's version becomes a conflict copy and the original shows the cloud version,
+    /// so nothing is lost on either side. Afterwards the placeholder takes the cloud's new time and size so the edit is not seen twice.
+    /// </summary>
+    private async Task ProcessEditAsync(string path, int attempts, CancellationToken ct)
+    {
+        ActiveTransfer? act = null;
+        try
+        {
+            var fi = new FileInfo(path);
+            string? parentId = ResolveParent(path);
+            if (parentId is null || index.FindChild(parentId, fi.Name) is not { IsFolder: false } cur || (fi.Attributes & (FileAttributes.Offline | RecallOnDataAccess)) != 0 || !IsEdited(cur, fi)) { index.RemoveUpload(path); return; }
+            try { using var probe = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
+            catch (IOException) { Defer(path, attempts, TimeSpan.FromSeconds(10), bump: false); return; }          // still open for writing (Office keeps it open while editing)
+
+            long lengthBefore = fi.Length;
+            var stampBefore = fi.LastWriteTimeUtc;
+            act = ActivityLog.Begin("update", fi.Name, lengthBefore);
+            RemoteItem item;
+            try { item = await graph.UpdateFileAsync(cur.Id, cur.ETag, path, ct, ProgressLogger(fi.Name, act)).ConfigureAwait(false); }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+            {
+                string copyPath = Path.Combine(Path.GetDirectoryName(path)!, ConflictName(fi.Name));
+                File.Copy(path, copyPath);                                                   // the user's version, as a plain new file: uploaded like any new file
+                var cloud = await graph.GetItemAsync(cur.Id, ct).ConfigureAwait(false);
+                index.ApplyPage([DeltaChange.Upsert(cloud)], "upload.last", cloud.Id, index.Generation);
+                RemoteApplier.ForceCloudVersion(path, cloud);
+                index.RemoveUpload(path);
+                index.EnqueueUploads([copyPath], DateTime.UtcNow.Ticks);
+                ActivityLog.End(act, "ok", "the cloud changed first: your version was saved as a conflict copy"); act = null;
+                Log.Warn($"edit conflict on '{fi.Name}': your version kept as '{Path.GetFileName(copyPath)}'");
+                return;
+            }
+            index.ApplyPage([DeltaChange.Upsert(item)], "upload.last", item.Id, index.Generation);
+            var after = new FileInfo(path);
+            if (after.Length != lengthBefore || after.LastWriteTimeUtc != stampBefore)
+            {
+                ActivityLog.End(act, "ok", "uploaded; the file changed again, uploading the newer version"); act = null;
+                Defer(path, attempts, TimeSpan.FromSeconds(5), bump: false);                  // the index now holds the new eTag, so the next round is an ordinary edit
+                return;
+            }
+            PlaceholderWriter.RefreshInSync(path, item);
+            index.RemoveUpload(path);
+            ActivityLog.End(act, "ok"); act = null;
+            PinWatcher.NotifyShell(path);
+            Log.Info($"updated '{fi.Name}' in the cloud ({lengthBefore:N0} bytes)");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            // The item no longer exists in the cloud: keep the edited content as a new file instead of losing it.
+            try
+            {
+                string copyPath = Path.Combine(Path.GetDirectoryName(path)!, ConflictName(Path.GetFileName(path)));
+                File.Copy(path, copyPath);
+                index.EnqueueUploads([copyPath], DateTime.UtcNow.Ticks);
+                if (act is not null) { ActivityLog.End(act, "ok", "deleted in the cloud: your edit was kept as a new file"); act = null; }
+            }
+            catch (IOException) { /* will be retried */ }
+            index.RemoveUpload(path);
+        }
+        catch (Exception ex)
+        {
+            var wait = Backoff[Math.Min(attempts, Backoff.Length - 1)];
+            if (act is not null) { ActivityLog.End(act, "failed", ex.Message); act = null; } else { ActivityLog.Add("error", Path.GetFileName(path), "failed", detail: ex.Message); }
+            Log.Warn($"edit upload of '{Path.GetFileName(path)}' failed ({ex.Message}); retry in {wait.TotalSeconds:F0} s");
+            Defer(path, attempts, wait, bump: true);
+        }
+    }
 
     private static RemoteItem ToRemote(IndexedItem i) => new(i.Id, i.ParentId, i.Name, i.Size, new DateTimeOffset(i.ModifiedUtcTicks, TimeSpan.Zero), i.IsFolder, i.ETag, i.CTag, i.QuickXorHash);
 

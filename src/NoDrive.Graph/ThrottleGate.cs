@@ -18,6 +18,9 @@ public sealed class ThrottleGate(TimeProvider? clock = null)
         while (Interlocked.CompareExchange(ref _pausedUntilTicks, until, current) != current);
     }
 
+    /// <summary>Clears any pause (the PC woke up or the network came back: a Retry-After from before is stale).</summary>
+    public void Reset() => Interlocked.Exchange(ref _pausedUntilTicks, 0);
+
     /// <summary>The remaining pause, or zero.</summary>
     public TimeSpan Remaining
     {

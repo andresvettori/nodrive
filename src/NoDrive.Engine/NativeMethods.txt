@@ -72,3 +72,5 @@ GetUserDefaultLocaleName
 GetUserDefaultUILanguage
 CreateFile
 CloseHandle
+CfGetPlaceholderInfo
+CF_PLACEHOLDER_BASIC_INFO

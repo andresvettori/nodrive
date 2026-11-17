@@ -20,6 +20,8 @@ internal sealed class LocalOps(ItemIndex index, GraphDrive graph, string syncRoo
     private const int InboxLimit = 200_000;
     private static readonly TimeSpan[] Backoff = [TimeSpan.FromSeconds(15), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(30)];
 
+    /// <summary>A delete waits a few seconds so an application's "save" (delete the original, write a new file) is merged into one update instead of a delete plus an upload.</summary>
+    private static readonly TimeSpan DeleteGrace = TimeSpan.FromSeconds(10);
     public const int MassDeleteThreshold = 200;
     private static readonly TimeSpan MassWindow = TimeSpan.FromMinutes(10);
     private readonly Queue<DateTime> _recentDeletes = new();
@@ -48,7 +50,7 @@ internal sealed class LocalOps(ItemIndex index, GraphDrive graph, string syncRoo
         {
             try
             {
-                while (s_inbox.TryDequeue(out var op)) { index.EnqueueOp(op.Kind, op.Id, op.Target, DateTime.UtcNow.Ticks); }
+                while (s_inbox.TryDequeue(out var op)) { index.EnqueueOp(op.Kind, op.Id, op.Target, DateTime.UtcNow.Add(op.Kind == "delete" ? DeleteGrace : TimeSpan.Zero).Ticks); }
                 if (UserSettings.Paused) { await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false); continue; }
                 var due = index.DueOps(DateTime.UtcNow.Ticks, 20);
                 int ran = 0;
