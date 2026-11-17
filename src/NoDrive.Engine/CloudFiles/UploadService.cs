@@ -334,7 +334,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             {
                 h = PInvoke.CreateFile(new PCWSTR(p), 0x100 | 0x80, FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE | FILE_SHARE_MODE.FILE_SHARE_DELETE, null, FILE_CREATION_DISPOSITION.OPEN_EXISTING, FILE_FLAGS_AND_ATTRIBUTES.FILE_FLAG_BACKUP_SEMANTICS, HANDLE.Null);
                 plainHandle = true;
-                if (h.IsNull || h.Value == -1) { Log.Warn($"convert: open {path} -> 0x{open.Value:X8}"); return false; }
+                if (h.IsNull || (nint)h.Value == -1) { Log.Warn($"convert: open {path} -> 0x{open.Value:X8}"); return false; }
             }
         }
         try
