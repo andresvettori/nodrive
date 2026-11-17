@@ -157,7 +157,7 @@ a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}
         <h2 id="hSync"></h2>
         <div class="field"><label for="sPoll" id="lPoll"></label><div class="inline"><input type="number" id="sPoll" min="15" max="3600" style="width:120px"><span id="uPoll"></span></div><span class="hint" id="hPoll"></span></div>
         <div class="field"><label for="sIdle" id="lIdle"></label><div class="inline"><input type="number" id="sIdle" min="1" max="1440" style="width:120px"><span id="uIdle"></span></div></div>
-        <div class="field"><label for="sWorkers" id="lWorkers"></label><input type="number" id="sWorkers" min="2" max="16" style="width:120px"><span class="hint" id="hWorkers"></span></div>
+        <div class="field"><label for="sBulk" id="lWorkers"></label><select id="sBulk"><option value="gentle"></option><option value="balanced"></option><option value="turbo"></option></select><span class="hint" id="hWorkers"></span></div>
       </div>
       <div class="card wide"><h2 id="hCoex"></h2><div id="coex"></div></div>
       <div class="card wide">
@@ -212,7 +212,7 @@ en: {
   policyHint:"Applies after restarting NoDrive. Whole-file mode is how OneDrive works and is the most compatible with apps like Photos.",
   bandwidth:"Bandwidth", downLimit:"Download limit", upLimit:"Upload limit", limitHint:"0 means no limit. Changes apply immediately.",
   sync:"Synchronization", poll:"Check for changes every", pollHint:"Used while there is activity.", idle:"When idle, check at most every", sec:"seconds", min:"minutes",
-  workers:"Parallel downloads", workersHint:"Applies after restarting NoDrive.",
+  workers:"Bulk download speed", workersHint:"How many files are downloaded at the same time when you keep a folder on this device. Applies immediately. Turbo uses most of your connection.", bulkGentle:"Gentle (2 at a time)", bulkBalanced:"Balanced (4 at a time)", bulkTurbo:"Turbo (8 at a time)",
   info:"About this setup", iFolder:"NoDrive folder", iData:"Data folder", iConfig:"Config file", iClient:"Sign-in app ID", iVersion:"Version", iMemory:"Memory in use", iUptime:"Running for",
   iLang:"Windows language", iRegion:"Regional format", iZone:"Time zone",
   rpH:"Report a problem", rpIntro:"Something not working? NoDrive can collect what we need to find the cause.", rpStep1:"Press the button below. NoDrive creates one zip file on your Desktop and opens the folder.", rpStep2:"Write down what you were doing when the problem happened.", rpStep3:"Send the zip and your note to the person who gave you NoDrive.", rpNames:"Include file names (recommended: it helps find the problem faster)", rpBtn:"Create report", rpDone:p=>`Created: ${p}`, rpFail:"Could not create the report.", supportId:"Support ID",
@@ -246,7 +246,7 @@ es: {
   policyHint:"Se aplica al reiniciar NoDrive. El modo de archivo completo es el de OneDrive y el más compatible con apps como Fotos.",
   bandwidth:"Ancho de banda", downLimit:"Límite de descarga", upLimit:"Límite de subida", limitHint:"0 significa sin límite. Los cambios se aplican al instante.",
   sync:"Sincronización", poll:"Buscar cambios cada", pollHint:"Se usa mientras hay actividad.", idle:"En reposo, buscar como máximo cada", sec:"segundos", min:"minutos",
-  workers:"Descargas en paralelo", workersHint:"Se aplica al reiniciar NoDrive.",
+  workers:"Velocidad de descarga masiva", workersHint:"Cuántos archivos se descargan a la vez cuando mantenés una carpeta en este dispositivo. Se aplica al instante. Turbo usa casi toda tu conexión.", bulkGentle:"Suave (2 a la vez)", bulkBalanced:"Equilibrada (4 a la vez)", bulkTurbo:"Turbo (8 a la vez)",
   info:"Sobre esta instalación", iFolder:"Carpeta NoDrive", iData:"Carpeta de datos", iConfig:"Archivo de configuración", iClient:"ID de la app de inicio de sesión", iVersion:"Versión", iMemory:"Memoria en uso", iUptime:"En ejecución desde hace",
   iLang:"Idioma de Windows", iRegion:"Formato regional", iZone:"Zona horaria",
   rpH:"Informar un problema", rpIntro:"¿Algo no funciona? NoDrive puede reunir lo necesario para encontrar la causa.", rpStep1:"Presioná el botón de abajo. NoDrive crea un archivo zip en tu Escritorio y abre la carpeta.", rpStep2:"Anotá qué estabas haciendo cuando ocurrió el problema.", rpStep3:"Enviá el zip y tu nota a la persona que te dio NoDrive.", rpNames:"Incluir nombres de archivos (recomendado: ayuda a encontrar el problema más rápido)", rpBtn:"Crear informe", rpDone:p=>`Creado: ${p}`, rpFail:"No se pudo crear el informe.", supportId:"ID de soporte",
@@ -302,6 +302,7 @@ function applyStatic(){
    ["hBandwidth","bandwidth"],["lDownLimit","downLimit"],["lUpLimit","upLimit"],["hLimit","limitHint"],["hSync","sync"],["lPoll","poll"],["hPoll","pollHint"],["uPoll","sec"],["lIdle","idle"],["uIdle","min"],
    ["lWorkers","workers"],["hWorkers","workersHint"],["hInfo","info"],["saveBtn","save"],["discardBtn","discard"],["dirtyMsg","unsaved"],["helpIntro","helpIntro"]].forEach(([i,k]) => set(i,k));
   $("sLang").options[0].textContent = t("langAuto");
+  $("sBulk").options[0].textContent = t("bulkGentle"); $("sBulk").options[1].textContent = t("bulkBalanced"); $("sBulk").options[2].textContent = t("bulkTurbo");
   $("sPolicy").options[0].textContent = t("policyFull"); $("sPolicy").options[1].textContent = t("policyProg");
   $("helpLinks").innerHTML = [["report-a-problem","h6"],["whats-new","h7"],["install","h1"],["configure","h2"],["onedrive-coexistence","h5"],["custom-app-registration","h3"],["troubleshooting","h4"]].map(([f,k]) =>
     `<a class="link" target="_blank" rel="noopener" href="${DOCS}${f}.${lang}.md"><b>${t(k)}</b><span>${t(k + "d")}</span></a>`).join("");
@@ -390,7 +391,7 @@ function fillSettings(){
   $("sLang").value = s.language; $("sPolicy").value = s.hydrationPolicy; $("sAuto").checked = S.autostart;
   const d = kb(s.downloadKiBps), u = kb(s.uploadKiBps);
   $("sDown").value = d[0]; $("uDown").value = d[1]; $("sUp").value = u[0]; $("uUp").value = u[1];
-  $("sPoll").value = s.pollActiveSeconds; $("sIdle").value = Math.round(s.pollIdleMaxSeconds / 60); $("sWorkers").value = s.hydrationWorkers;
+  $("sPoll").value = s.pollActiveSeconds; $("sIdle").value = Math.round(s.pollIdleMaxSeconds / 60); $("sBulk").value = s.bulkSpeed;
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const path = v => esc(v).replace(/\\/g, "\\<wbr>");
   const loc = [["iFolder", S.rootPath, "/api/open-folder"], ["iData", S.dataDir, "/api/open-data-folder"], ["iConfig", S.configPath, ""], ["iClient", S.clientId, ""]];
@@ -468,7 +469,7 @@ async function save(){
   const num = (id, mul = 1) => Math.max(0, Math.round((parseFloat($(id).value) || 0) * mul));
   const body = { language: $("sLang").value, hydrationPolicy: $("sPolicy").value,
     downloadKiBps: num("sDown", +$("uDown").value), uploadKiBps: num("sUp", +$("uUp").value),
-    pollActiveSeconds: num("sPoll"), pollIdleMaxSeconds: num("sIdle", 60), hydrationWorkers: num("sWorkers") };
+    pollActiveSeconds: num("sPoll"), pollIdleMaxSeconds: num("sIdle", 60), bulkSpeed: $("sBulk").value };
   try {
     const r = await api("/api/settings", body);
     if (S.autostart !== $("sAuto").checked) await api("/api/autostart", { value: $("sAuto").checked });

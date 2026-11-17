@@ -23,6 +23,7 @@ internal sealed class SettingsDto
     public int PollIdleMaxSeconds { get; set; }
     public int HydrationWorkers { get; set; }
     public string HydrationPolicy { get; set; } = "full";
+    public string BulkSpeed { get; set; } = "balanced";
 }
 internal sealed class CoexistenceDto { public bool OneDriveRunning { get; set; } public string? Email { get; set; } public string? Folder { get; set; } public List<string> BackedUp { get; set; } = []; public bool Inside { get; set; } }
 internal sealed class StateDto
@@ -251,7 +252,7 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
             Coexistence = ToDto(Infrastructure.Coexistence.Detect(paths.SyncRoot)),
             OsLanguage = OsLanguage(),
             OsCulture = OsCulture(),
-            Settings = new SettingsDto { Language = config.Language, DownloadKiBps = config.DownloadKiBps, UploadKiBps = config.UploadKiBps, PollActiveSeconds = config.PollActiveSeconds, PollIdleMaxSeconds = config.PollIdleMaxSeconds, HydrationWorkers = config.HydrationWorkers, HydrationPolicy = config.HydrationPolicy },
+            Settings = new SettingsDto { Language = config.Language, DownloadKiBps = config.DownloadKiBps, UploadKiBps = config.UploadKiBps, PollActiveSeconds = config.PollActiveSeconds, PollIdleMaxSeconds = config.PollIdleMaxSeconds, HydrationWorkers = config.HydrationWorkers, HydrationPolicy = config.HydrationPolicy, BulkSpeed = config.BulkSpeed },
             Active = [.. active.Select(a => new ActiveDto { Id = a.Id, Kind = a.Kind, Name = a.Name, Total = a.Total, Done = a.Done, ElapsedMs = (long)(now - a.StartedUtc).TotalMilliseconds })],
         };
     }
@@ -278,13 +279,15 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
         if (s is null) { return new SaveResultDto { Error = "empty" }; }
         string lang = s.Language is "en" or "es" ? s.Language : "auto";
         string policy = s.HydrationPolicy == "progressive" ? "progressive" : "full";
-        bool restart = policy != config.HydrationPolicy || Math.Clamp(s.HydrationWorkers, 2, 16) != config.HydrationWorkers;
+        bool restart = policy != config.HydrationPolicy || (s.HydrationWorkers >= 2 && Math.Clamp(s.HydrationWorkers, 2, 16) != config.HydrationWorkers);
         config.Language = lang;
         config.DownloadKiBps = Math.Clamp(s.DownloadKiBps, 0, 10_000_000);
         config.UploadKiBps = Math.Clamp(s.UploadKiBps, 0, 10_000_000);
         config.PollActiveSeconds = Math.Clamp(s.PollActiveSeconds, 15, 3600);
         config.PollIdleMaxSeconds = Math.Clamp(s.PollIdleMaxSeconds, config.PollActiveSeconds, 86_400);
-        config.HydrationWorkers = Math.Clamp(s.HydrationWorkers, 2, 16);
+        if (s.HydrationWorkers >= 2) { config.HydrationWorkers = Math.Clamp(s.HydrationWorkers, 2, 16); }
+        config.BulkSpeed = s.BulkSpeed is "gentle" or "turbo" ? s.BulkSpeed : "balanced";
+        PinWatcher.SetParallelism(config.BulkParallelism);
         config.HydrationPolicy = policy;
         config.Save(paths.ConfigPath);
         ActivityLog.ApplyLimits(config);                          // limits and poll intervals apply immediately

@@ -109,7 +109,7 @@ internal static class CloudProvider
             Marshal.ThrowExceptionForHR(hr.Value);
             s_connection = key;
         }
-        for (int i = 0; i <= services.HydrationWorkers; i++) { bool backgroundOnly = i == 0; _ = Task.Run(() => DataWorkerAsync(backgroundOnly)); }   // worker 0 only serves the background lane; the other HydrationWorkers (not one fewer) take interactive work first
+        for (int i = 0; i <= Math.Max(services.HydrationWorkers, 8); i++) { bool backgroundOnly = i == 0; _ = Task.Run(() => DataWorkerAsync(backgroundOnly)); }   // worker 0 only serves the background lane; the other HydrationWorkers (not one fewer) take interactive work first
         for (int i = 0; i < 2; i++) { _ = Task.Run(PopulateWorkerAsync); }
         s_syncRoot = rootPath;
         s_driveRoot = (Path.GetPathRoot(rootPath) ?? "C:\\").TrimEnd('\\');

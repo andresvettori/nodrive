@@ -28,12 +28,15 @@ internal static class PinWatcher
     private static readonly ConcurrentDictionary<string, DateTime> Due = new(StringComparer.OrdinalIgnoreCase);       // path -> when to check
     private static readonly ConcurrentDictionary<string, int> Attempts = new(StringComparer.OrdinalIgnoreCase);       // path -> failed attempts so far
     private static readonly ConcurrentDictionary<string, byte> InFlight = new(StringComparer.OrdinalIgnoreCase);
-    private static SemaphoreSlim Gate = new(2);
+    private static readonly NoDrive.Core.Net.AdjustableGate Gate = new(4);
+
+    /// <summary>Changes how many pin downloads run at once, immediately (waiting work starts, running work finishes).</summary>
+    public static void SetParallelism(int parallel) => Gate.Limit = Math.Clamp(parallel, 1, 8);
     private static CancellationTokenSource? s_cts;
 
     public static void Start(string root, int parallel = 2)
     {
-        Gate = new SemaphoreSlim(Math.Clamp(parallel, 1, 8));
+        SetParallelism(parallel);
         s_cts = new CancellationTokenSource();
         s_watcher = new FileSystemWatcher(root) { IncludeSubdirectories = true, NotifyFilter = NotifyFilters.Attributes, InternalBufferSize = 64 * 1024 };
         s_watcher.Changed += (_, e) => Hint(e.FullPath, TimeSpan.Zero);

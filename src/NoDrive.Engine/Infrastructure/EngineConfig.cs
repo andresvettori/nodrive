@@ -11,8 +11,10 @@ internal sealed class EngineConfig
     [JsonPropertyName("clientId")] public string ClientId { get; set; } = GraphEndpoints.DefaultClientId;
     [JsonPropertyName("syncRoot")] public string? SyncRoot { get; set; }
     [JsonPropertyName("hydrationWorkers")] public int HydrationWorkers { get; set; } = 4;
-    /// <summary>How many "Always keep on this device" downloads run at once (1 to 8). Each small file costs about a second of latency, so more streams make big folders much faster.</summary>
-    [JsonPropertyName("pinParallelism")] public int PinParallelism { get; set; } = 4;
+    /// <summary>"gentle" (2 at a time), "balanced" (4, default) or "turbo" (8): how many "Always keep on this device" downloads run at once. Each small file costs about a second of latency, so more streams make big folders much faster. Applied immediately.</summary>
+    [JsonPropertyName("bulkSpeed")] public string BulkSpeed { get; set; } = "balanced";
+
+    [JsonIgnore] public int BulkParallelism => BulkSpeed switch { "gentle" => 2, "turbo" => 8, _ => 4 };
     [JsonPropertyName("populationBudget")] public long PopulationBudget { get; set; } = 150_000;
     [JsonPropertyName("pollActiveSeconds")] public int PollActiveSeconds { get; set; } = 60;
     [JsonPropertyName("pollIdleMaxSeconds")] public int PollIdleMaxSeconds { get; set; } = 900;

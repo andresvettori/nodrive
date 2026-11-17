@@ -7,7 +7,7 @@ Versions before `0.9.0-beta` were development milestones, not numbered builds; t
 ## [Unreleased]
 
 ### Changed
-- "Always keep on this device" on a folder with thousands of small files is faster: up to 4 files download at once (setting `pinParallelism` in `config.json`, 1 to 8), and the downloads settings no longer reserve one worker for background reads.
+- **Bulk download speed** setting (Settings page, applied immediately): Gentle (2 files at a time), Balanced (4, default) or Turbo (8) for "Always keep on this device" on big folders. Each small file costs about a second of latency, so more streams make folders with thousands of small files much faster. Also `bulkSpeed` in `config.json`.
 
 ### Fixed
 - Some files could stay "syncing" when many were downloaded at once ("Always keep on this device" on a big folder): a race in the download bookkeeping failed a few downloads and they were never retried. Downloads now own their cancellation, failed keep-on-device downloads are retried with back-off, and pinned files that never finished are picked up by the periodic catch-up.
