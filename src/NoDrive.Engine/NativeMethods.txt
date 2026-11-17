@@ -70,3 +70,5 @@ CfSetInSyncState
 ExtractIcon
 GetUserDefaultLocaleName
 GetUserDefaultUILanguage
+CreateFile
+CloseHandle

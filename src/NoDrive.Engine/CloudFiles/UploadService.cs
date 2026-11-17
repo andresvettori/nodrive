@@ -7,6 +7,7 @@ using NoDrive.Graph;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Storage.CloudFilters;
+using Windows.Win32.Storage.FileSystem;
 
 namespace NoDrive.Engine.CloudFiles;
 
@@ -320,24 +321,31 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
     /// <summary>Turns the uploaded local file or folder into an in-sync placeholder (content stays on disk).</summary>
     private static unsafe bool ConvertToPlaceholder(string path, string itemId, bool onDemand)
     {
+        byte[] id = System.Text.Encoding.UTF8.GetBytes(itemId);
+        var flags = CF_CONVERT_FLAGS.CF_CONVERT_FLAG_MARK_IN_SYNC | (onDemand ? CF_CONVERT_FLAGS.CF_CONVERT_FLAG_ENABLE_ON_DEMAND_POPULATION : 0);
         HANDLE h = default;
+        bool plainHandle = false;
         fixed (char* p = path)
         {
-            // Exclusive first; when Explorer or another program has the item open (0x80070020) a shared open is enough to link it.
+            // 1) exclusive oplock; 2) shared; 3) attribute-only handle with full sharing, which works while Explorer has the folder open (sharing violation 0x80070020).
             HRESULT open = PInvoke.CfOpenFileWithOplock(new PCWSTR(p), CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_WRITE_ACCESS | CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_EXCLUSIVE, &h);
             if (open.Failed) { open = PInvoke.CfOpenFileWithOplock(new PCWSTR(p), CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_WRITE_ACCESS, &h); }
-            if (open.Failed) { Log.Warn($"convert: open {path} -> 0x{open.Value:X8}"); return false; }
+            if (open.Failed)
+            {
+                h = PInvoke.CreateFile(new PCWSTR(p), 0x100 | 0x80, FILE_SHARE_MODE.FILE_SHARE_READ | FILE_SHARE_MODE.FILE_SHARE_WRITE | FILE_SHARE_MODE.FILE_SHARE_DELETE, null, FILE_CREATION_DISPOSITION.OPEN_EXISTING, FILE_FLAGS_AND_ATTRIBUTES.FILE_FLAG_BACKUP_SEMANTICS, HANDLE.Null);
+                plainHandle = true;
+                if (h.IsNull || h.Value == -1) { Log.Warn($"convert: open {path} -> 0x{open.Value:X8}"); return false; }
+            }
         }
         try
         {
-            byte[] id = System.Text.Encoding.UTF8.GetBytes(itemId);
             fixed (byte* pid = id)
             {
-                HRESULT hr = PInvoke.CfConvertToPlaceholder(h, pid, (uint)id.Length, CF_CONVERT_FLAGS.CF_CONVERT_FLAG_MARK_IN_SYNC | (onDemand ? CF_CONVERT_FLAGS.CF_CONVERT_FLAG_ENABLE_ON_DEMAND_POPULATION : 0), null, null);
-                if (hr.Failed) { Log.Warn($"convert {path} -> 0x{hr.Value:X8}"); }
+                HRESULT hr = PInvoke.CfConvertToPlaceholder(h, pid, (uint)id.Length, flags, null, null);
+                if (hr.Failed) { Log.Warn($"convert {path} -> 0x{hr.Value:X8}{(plainHandle ? " (attribute-only handle)" : "")}"); }
                 return hr.Succeeded;
             }
         }
-        finally { PInvoke.CfCloseHandle(h); }
+        finally { if (plainHandle) { PInvoke.CloseHandle(h); } else { PInvoke.CfCloseHandle(h); } }
     }
 }
