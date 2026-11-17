@@ -15,6 +15,19 @@ permissions:
   contents: write   # lets the job publish binaries to the ci-binaries branch
 
 jobs:
+  # The portable layers (Core, Graph) and the tests must stay buildable and green on macOS: the macOS port starts from them (memory_bank/macos-plan.md).
+  build-test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Build
+        run: dotnet build NoDrive.slnx -c Release
+      - name: Test
+        run: dotnet test NoDrive.slnx -c Release --no-build
+
   build-test-publish:
     runs-on: windows-latest
     steps:
