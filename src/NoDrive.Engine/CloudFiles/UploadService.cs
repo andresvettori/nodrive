@@ -323,7 +323,9 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
         HANDLE h = default;
         fixed (char* p = path)
         {
+            // Exclusive first; when Explorer or another program has the item open (0x80070020) a shared open is enough to link it.
             HRESULT open = PInvoke.CfOpenFileWithOplock(new PCWSTR(p), CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_WRITE_ACCESS | CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_EXCLUSIVE, &h);
+            if (open.Failed) { open = PInvoke.CfOpenFileWithOplock(new PCWSTR(p), CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_WRITE_ACCESS, &h); }
             if (open.Failed) { Log.Warn($"convert: open {path} -> 0x{open.Value:X8}"); return false; }
         }
         try
