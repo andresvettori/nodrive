@@ -27,7 +27,7 @@ public readonly record struct DeltaChange(string Id, RemoteItem? Item)
 public sealed record DeltaPage(IReadOnlyList<DeltaChange> Changes, string? NextLink, string? DeltaLink);
 
 /// <summary>An item as stored in the local index.</summary>
-public readonly record struct IndexedItem(string Id, string? ParentId, string Name, long Size, long ModifiedUtcTicks, bool IsFolder, string? ETag, string? CTag, string? QuickXorHash, bool Populated)
+public readonly record struct IndexedItem(string Id, string? ParentId, string Name, long Size, long ModifiedUtcTicks, bool IsFolder, string? ETag, string? CTag, string? QuickXorHash, bool Populated, bool Local = false)
 {
     public DateTimeOffset ModifiedUtc => new(ModifiedUtcTicks, TimeSpan.Zero);
 }

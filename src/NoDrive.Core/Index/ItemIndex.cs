@@ -13,7 +13,7 @@ public sealed record RemoteOp(long Seq, string Kind, string ItemId, string? Targ
 
 public sealed class ItemIndex : IDisposable
 {
-    private const int SchemaVersion = 3;
+    private const int SchemaVersion = 4;
     private static readonly string[] UpsertParameters = ["$id", "$p", "$n", "$s", "$m", "$f", "$e", "$c", "$q", "$g"];
     private readonly string _path;
     private readonly SqliteConnection _writer;
@@ -63,6 +63,14 @@ public sealed class ItemIndex : IDisposable
                 CREATE TABLE IF NOT EXISTS remote_ops(seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, item_id TEXT NOT NULL, target TEXT, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY NOT NULL, v TEXT) WITHOUT ROWID;
                 """);
+            // v4: `local` = a placeholder or file for this item exists on disk (set when we create or link it). Only such items can be judged "deleted locally".
+            bool hasLocal = false;
+            using (var info = _writer.CreateCommand())
+            {
+                info.CommandText = "SELECT 1 FROM pragma_table_info('items') WHERE name='local'";
+                hasLocal = info.ExecuteScalar() is not null;
+            }
+            if (!hasLocal) { Exec(_writer, "ALTER TABLE items ADD COLUMN local INTEGER NOT NULL DEFAULT 0"); }
             Exec(_writer, $"PRAGMA user_version={SchemaVersion}");
             tx.Commit();
         }
@@ -322,6 +330,65 @@ public sealed class ItemIndex : IDisposable
         return Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    /// <summary>True when an operation of the given kind (delete or rename) is queued for the item.</summary>
+    public bool HasPendingOp(string itemId, string kind)
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT 1 FROM remote_ops WHERE item_id=$i AND kind=$k LIMIT 1";
+        cmd.Parameters.AddWithValue("$i", itemId);
+        cmd.Parameters.AddWithValue("$k", kind);
+        return cmd.ExecuteScalar() is not null;
+    }
+
+    /// <summary>Cancels queued operations of a kind for an item (for example a delete that turned out to be a safe-save).</summary>
+    public void RemoveOps(string itemId, string kind) => ExecWrite("DELETE FROM remote_ops WHERE item_id=$i AND kind=$k", ("$i", itemId), ("$k", kind));
+
+    /// <summary>After the network or the PC comes back: make every deferred upload and operation due now so it does not wait out its backoff.</summary>
+    public void ReleaseBackoff(long nowTicks)
+    {
+        ExecWrite("UPDATE uploads SET due=$n WHERE due>$n", ("$n", nowTicks));
+        ExecWrite("UPDATE remote_ops SET due=$n WHERE due>$n", ("$n", nowTicks));
+    }
+
+    // ---------------- "exists on disk" tracking (offline reconcile) ----------------
+
+    public void MarkLocal(string itemId) => ExecWrite("UPDATE items SET local=1 WHERE id=$i AND local=0", ("$i", itemId));
+
+    /// <summary>All children of a folder now have a placeholder on disk (the folder was populated).</summary>
+    public void MarkChildrenLocal(string parentId) => ExecWrite("UPDATE items SET local=1 WHERE parent_id=$p AND local=0", ("$p", parentId));
+
+    public void MarkNotLocal(string itemId) => ExecWrite("UPDATE items SET local=0 WHERE id=$i", ("$i", itemId));
+
+    /// <summary>Children known to exist on disk (the reconcile compares these with the real folder).</summary>
+    public IEnumerable<IndexedItem> EnumerateLocalChildren(string parentId)
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = SelectColumns + " WHERE parent_id=$p AND local=1";
+        cmd.Parameters.AddWithValue("$p", parentId);
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) { yield return Read(r); }
+    }
+
+    public long CountLocal()
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM items WHERE local=1";
+        return Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Runs SQLite's quick integrity check; returns null when healthy, otherwise the first problem text.</summary>
+    public string? QuickCheck()
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "PRAGMA quick_check(1)";
+        string? first = cmd.ExecuteScalar() as string;
+        return string.Equals(first, "ok", StringComparison.OrdinalIgnoreCase) ? null : first ?? "unknown";
+    }
+
     public bool HasPendingOp(string itemId)
     {
         using var c = Open(_path);
@@ -395,7 +462,7 @@ public sealed class ItemIndex : IDisposable
 
     public string? GetName(string id) => TryGet(id)?.Name;
 
-    private const string SelectColumns = "SELECT id,parent_id,name,size,mtime,is_folder,etag,ctag,qxor,populated FROM items";
+    private const string SelectColumns = "SELECT id,parent_id,name,size,mtime,is_folder,etag,ctag,qxor,populated,local FROM items";
 
     private static IndexedItem Read(SqliteDataReader r) => new(
         r.GetString(0),
@@ -407,7 +474,8 @@ public sealed class ItemIndex : IDisposable
         r.IsDBNull(6) ? null : r.GetString(6),
         r.IsDBNull(7) ? null : r.GetString(7),
         r.IsDBNull(8) ? null : r.GetString(8),
-        r.GetInt64(9) != 0);
+        r.GetInt64(9) != 0,
+        r.GetInt64(10) != 0);
 
     private static void Exec(SqliteConnection c, string sql)
     {
