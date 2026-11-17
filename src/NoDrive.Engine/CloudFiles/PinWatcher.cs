@@ -91,7 +91,13 @@ internal static class PinWatcher
                     else { Log.Warn($"{what}: {Path.GetFileName(path)} stayed in use; giving up until its pin state changes again"); Attempts.TryRemove(path, out _); }
                 }
                 else if (hr.Value == unchecked((int)0x80070179)) { Log.Info($"{what}: {Path.GetFileName(path)} is not in sync; Windows refuses (intended)"); }
-                else { Log.Warn($"{what}: {Path.GetFileName(path)} -> 0x{hr.Value:X8}"); }
+                else
+                {
+                    // Any other failure (a download that failed or was cancelled, network trouble): keep trying with back-off instead of leaving the file half done.
+                    int n = Attempts.AddOrUpdate(path, 1, (_, c) => c + 1);
+                    if (n <= RetryDelays.Length) { Log.Warn($"{what}: {Path.GetFileName(path)} -> 0x{hr.Value:X8}; retry {n}/{RetryDelays.Length} in {RetryDelays[n - 1].TotalSeconds:F0} s"); Hint(path, RetryDelays[n - 1]); }
+                    else { Log.Warn($"{what}: {Path.GetFileName(path)} -> 0x{hr.Value:X8}; giving up until its pin state changes again"); Attempts.TryRemove(path, out _); }
+                }
             }
             catch (Exception ex) { Log.Warn($"pin action failed for {path}: {ex.Message}"); }
             finally { Gate.Release(); InFlight.TryRemove(path, out _); }

@@ -23,12 +23,19 @@ internal sealed record ProviderServices(ItemIndex Index, Hydrator Hydrator, Popu
 /// </summary>
 internal static class CloudProvider
 {
-    private sealed record DataRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, long FileSize, long Offset, long Length, long OptionalOffset, long OptionalLength, string? Process, bool Background, long EnqueuedTicks, string? NormPath = null);
+    private sealed record DataRequest(long ConnectionKey, long TransferKey, long RequestKey, string ItemId, long FileSize, long Offset, long Length, long OptionalOffset, long OptionalLength, string? Process, bool Background, long EnqueuedTicks, string? NormPath = null, CancellationTokenSource? Cts = null);
 
     /// <summary>Files up to this size are downloaded whole at the first read by interactive apps (Photos cancels slow partial reads and reports the image as corrupted).</summary>
     private const long WholeFileLimit = 64L * 1024 * 1024;
     private const long MinFreeBytes = 256L * 1024 * 1024;
     private static string s_driveRoot = "C:";
+
+    /// <summary>Removes the request's own entry (never another request's with the same key) and disposes its own cancellation source.</summary>
+    private static void ReleaseInFlight(DataRequest req)
+    {
+        if (s_inFlight.TryGetValue(req.RequestKey, out var e) && ReferenceEquals(e.Cts, req.Cts)) { s_inFlight.TryRemove(req.RequestKey, out _); }
+        try { req.Cts?.Dispose(); } catch (ObjectDisposedException) { /* already released */ }
+    }
 
     private static long? FreeBytes()
     {
@@ -128,13 +135,15 @@ internal static class CloudProvider
         var req = new DataRequest(info->ConnectionKey.Value, info->TransferKey, info->RequestKey, Identity(info), info->FileSize,
             parameters->FetchData.RequiredFileOffset, parameters->FetchData.RequiredLength, parameters->FetchData.OptionalFileOffset, parameters->FetchData.OptionalLength,
             info->ProcessInfo is null ? null : info->ProcessInfo->ImagePath.ToString(), false, t0, info->NormalizedPath.ToString());
-        req = req with { Background = req.Process is not null && BackgroundCallers.Contains(Path.GetFileName(req.Process)) };
+        // Each request owns its cancellation source: Windows can deliver two requests with the same key, and sharing one source through the dictionary let the first to finish dispose the other's token.
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(s_stop.Token);
+        req = req with { Background = req.Process is not null && BackgroundCallers.Contains(Path.GetFileName(req.Process)), Cts = cts };
         try
         {
-            s_inFlight[req.RequestKey] = new InFlight(req.TransferKey, req.Offset, req.Length, CancellationTokenSource.CreateLinkedTokenSource(s_stop.Token), Stopwatch.GetTimestamp(), req);
-            if (req.ItemId.Length == 0 || !(req.Background ? s_backgroundQueue : s_dataQueue).Writer.TryWrite(req)) { CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
+            s_inFlight[req.RequestKey] = new InFlight(req.TransferKey, req.Offset, req.Length, cts, Stopwatch.GetTimestamp(), req);
+            if (req.ItemId.Length == 0 || !(req.Background ? s_backgroundQueue : s_dataQueue).Writer.TryWrite(req)) { ReleaseInFlight(req); CompleteData(req, NTSTATUS.STATUS_CLOUD_FILE_REQUEST_ABORTED); }
         }
-        catch (Exception ex) { Log.Error($"FETCH_DATA callback: {ex.Message}"); }
+        catch (Exception ex) { Log.Error($"FETCH_DATA callback: {ex.Message}"); ReleaseInFlight(req); }
         Record(t0);
     }
 
@@ -241,7 +250,7 @@ internal static class CloudProvider
             catch (OperationCanceledException) { return; }
             double queuedMs = Stopwatch.GetElapsedTime(req.EnqueuedTicks).TotalMilliseconds;
             if (queuedMs > 1000) { Log.Info($"request for {Path.GetFileName(req.Process ?? "?")} waited {queuedMs:F0} ms in the {(req.Background ? "background" : "interactive")} queue"); }
-            var cts = s_inFlight.GetValueOrDefault(req.RequestKey)?.Cts ?? new CancellationTokenSource();
+            var cts = req.Cts ?? new CancellationTokenSource();
             var sw = Stopwatch.StartNew();
             s_svc.Callers.Record(req.Process, req.Length, req.FileSize);
             ActiveTransfer? act = null;
@@ -250,7 +259,7 @@ internal static class CloudProvider
                 string shown = s_svc.Index.GetName(req.ItemId) ?? req.ItemId;
                 ActivityLog.Add("error", shown, "failed", detail: $"not enough free disk space ({free / 1048576:N0} MB free, {req.FileSize / 1048576:N0} MB needed)");
                 Log.Warn($"download of {shown} refused: only {free / 1048576:N0} MB free");
-                if (s_inFlight.TryRemove(req.RequestKey, out var done)) { done.Cts.Dispose(); }
+                ReleaseInFlight(req);
                 CompleteData(req, new NTSTATUS(unchecked((int)0xC000007F)));      // STATUS_DISK_FULL
                 continue;
             }
@@ -286,7 +295,7 @@ internal static class CloudProvider
             }
             finally
             {
-                if (s_inFlight.TryRemove(req.RequestKey, out var c)) { c.Cts.Dispose(); }
+                ReleaseInFlight(req);
             }
         }
     }

@@ -6,6 +6,9 @@ Versions before `0.9.0-beta` were development milestones, not numbered builds; t
 
 ## [Unreleased]
 
+### Fixed
+- Some files could stay "syncing" when many were downloaded at once ("Always keep on this device" on a big folder): a race in the download bookkeeping failed a few downloads and they were never retried. Downloads now own their cancellation, failed keep-on-device downloads are retried with back-off, and pinned files that never finished are picked up by the periodic catch-up.
+
 ## [0.9.0-beta] - 2026-11-16
 
 First beta: feature complete for personal use on Windows 11, hardened for reliability.

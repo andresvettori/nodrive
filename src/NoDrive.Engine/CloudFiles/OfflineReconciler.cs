@@ -13,7 +13,7 @@ namespace NoDrive.Engine.CloudFiles;
 /// </summary>
 internal sealed class OfflineReconciler(ItemIndex index, PopulationState population, string syncRoot) : IDisposable
 {
-    private const FileAttributes RecallOnOpen = (FileAttributes)0x40000, RecallOnDataAccess = (FileAttributes)0x400000;
+    private const FileAttributes RecallOnOpen = (FileAttributes)0x40000, RecallOnDataAccess = (FileAttributes)0x400000, Pinned = (FileAttributes)0x80000;
     private readonly SemaphoreSlim _run = new(1, 1);
     private readonly SemaphoreSlim _poke = new(0);
     private List<(string Id, string Name, string FolderId)> _held = [];
@@ -69,6 +69,7 @@ internal sealed class OfflineReconciler(ItemIndex index, PopulationState populat
                 {
                     if (disk.TryGetValue(c.Name, out var info))
                     {
+                        if (!c.IsFolder && (info.Attributes & (Pinned | RecallOnDataAccess)) == (Pinned | RecallOnDataAccess)) { PinWatcher.Hint(info.FullName, TimeSpan.FromSeconds(2)); }          // pinned ("always keep") but not downloaded: finish it
                         if ((info.Attributes & FileAttributes.ReparsePoint) == 0) { plain.Add(info.FullName); }
                         else if (!c.IsFolder && info is FileInfo fi && (fi.Attributes & (FileAttributes.Offline | RecallOnDataAccess)) == 0 && (c.Size != fi.Length || Math.Abs(c.ModifiedUtcTicks - fi.LastWriteTimeUtc.Ticks) > 2 * TimeSpan.TicksPerSecond))
                         {
