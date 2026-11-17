@@ -38,7 +38,7 @@ internal sealed class Hydrator(GraphDrive graph, HydrationPolicy policy, Failure
             MaxConnectionsPerServer = 8,
         })
         { Timeout = Timeout.InfiniteTimeSpan };                                           // the watchdog is the only timeout
-        c.DefaultRequestHeaders.UserAgent.ParseAdd("ISV|NoDrive|NoDrive/0.1.0");
+        c.DefaultRequestHeaders.UserAgent.ParseAdd($"ISV|NoDrive|NoDrive/{BuildInfo.Version}");
         return c;
     }
 

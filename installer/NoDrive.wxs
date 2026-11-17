@@ -2,7 +2,7 @@
 <!--
   NoDrive per-user installer (WiX Toolset v5, MSI). No administrator rights: installs to %LOCALAPPDATA%\Programs\NoDrive.
   Build from the repo root:
-    wix build installer/NoDrive.wxs -ext WixToolset.UI.wixext -arch x64 -d EnginePath=<folder with NoDrive.Engine.exe> -d Version=0.1.0 -o NoDrive-x64.msi
+    wix build installer/NoDrive.wxs -ext WixToolset.UI.wixext -arch x64 -d EnginePath=<folder with NoDrive.Engine.exe> -d Version=0.9.0 -d DisplayVersion=0.9.0-beta.0 -o NoDrive-x64.msi
   Options (msiexec ... PROPERTY=value): AUTOSTART=0 skips "start with Windows"; SUPPRESSLAUNCH=1 does not start NoDrive after install.
   Upgrades keep the sync root and the user's files. Uninstall quits the engine, refuses while changes are unsynced (use the tray to finish first),
   unregisters the sync root and removes the autostart entry; downloaded files stay on disk.
@@ -12,6 +12,7 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of NoDrive is already installed." />
     <MediaTemplate EmbedCab="yes" />
     <Property Id="AUTOSTART" Value="1" />
+    <Property Id="ARPCOMMENTS" Value="NoDrive $(DisplayVersion)" />
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="ProgramsDir" Name="Programs">

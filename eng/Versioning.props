@@ -1,0 +1,23 @@
+<Project>
+  <!--
+    Single source of truth for the NoDrive version (see memory_bank/release-process.md).
+      Display version : <base>-<channel>.<build>        e.g. 0.9.0-beta.142   (stable releases: just <base>)
+      File version    : <base>.<build>                  e.g. 0.9.0.142        (exe properties, 4th part max 65535)
+      MSI version     : <major>.<minor>.<build>         e.g. 0.9.142
+    CI sets NoDriveBuild (run number, or the number in the release tag), NoDriveCommit and may override base/channel from a tag (v0.9.0-beta.142).
+    Local builds show build 0 and commit "local". Environment variables with these names also override the defaults.
+  -->
+  <PropertyGroup>
+    <NoDriveBaseVersion Condition="'$(NoDriveBaseVersion)' == ''">0.9.0</NoDriveBaseVersion>
+    <NoDriveChannel Condition="'$(NoDriveChannel)' == '' and '$(NoDriveStable)' != 'true'">beta</NoDriveChannel>
+    <NoDriveBuild Condition="'$(NoDriveBuild)' == ''">0</NoDriveBuild>
+    <NoDriveCommit Condition="'$(NoDriveCommit)' == ''">local</NoDriveCommit>
+    <NoDriveVersion Condition="'$(NoDriveChannel)' != ''">$(NoDriveBaseVersion)-$(NoDriveChannel).$(NoDriveBuild)</NoDriveVersion>
+    <NoDriveVersion Condition="'$(NoDriveChannel)' == ''">$(NoDriveBaseVersion)</NoDriveVersion>
+    <AssemblyVersion>$(NoDriveBaseVersion).0</AssemblyVersion>
+    <FileVersion>$(NoDriveBaseVersion).$(NoDriveBuild)</FileVersion>
+    <Version>$(NoDriveVersion)</Version>
+    <InformationalVersion>$(NoDriveVersion)+$(NoDriveCommit)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

@@ -3,6 +3,7 @@ name: windows
 on:
   push:
     branches: [main]
+    tags: ['v*']          # v0.9.0-beta.142 builds that exact version and publishes a GitHub release
   pull_request:
   workflow_dispatch:
 
@@ -21,6 +22,23 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+      # Version policy (memory_bank/release-process.md): display 0.9.0-beta.<build>, file 0.9.0.<build>, MSI 0.9.<build>.
+      # Normal builds use the run number as <build>; a tag vX.Y.Z-channel.N uses exactly that version, a tag vX.Y.Z is a stable release.
+      - name: Compute version
+        shell: pwsh
+        run: |
+          $props = Get-Content eng/Versioning.props -Raw
+          $base = [regex]::Match($props, '<NoDriveBaseVersion[^>]*>([^<]+)<').Groups[1].Value
+          $channel = [regex]::Match($props, '<NoDriveChannel[^>]*>([^<]+)<').Groups[1].Value
+          $build = $env:GITHUB_RUN_NUMBER
+          $stable = 'false'
+          if ($env:GITHUB_REF -match '^refs/tags/v(\d+\.\d+\.\d+)-([A-Za-z]+)\.(\d+)$') { $base = $Matches[1]; $channel = $Matches[2]; $build = $Matches[3] }
+          elseif ($env:GITHUB_REF -match '^refs/tags/v(\d+\.\d+\.\d+)$') { $base = $Matches[1]; $channel = ''; $stable = 'true' }
+          $display = if ($channel) { "$base-$channel.$build" } else { $base }
+          $msi = (($base -split '\.')[0..1] -join '.') + ".$build"
+          $sha = $env:GITHUB_SHA.Substring(0, 7)
+          @("NoDriveBaseVersion=$base", "NoDriveChannel=$channel", "NoDriveStable=$stable", "NoDriveBuild=$build", "NoDriveCommit=$sha", "NoDriveVersion=$display", "NoDriveMsiVersion=$msi") | Add-Content $env:GITHUB_ENV
+          "version $display (msi $msi, commit $sha)"
       - name: Restore
         run: dotnet restore
       - name: Build
@@ -84,11 +102,14 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force artifacts/installer | Out-Null
           $log = 'artifacts/installer/msi-build.log'
+          $msiName = "NoDrive-$($env:NoDriveVersion)-x64.msi"
           dotnet tool install --global wix --version 5.0.2 2>&1 | Tee-Object $log
           $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
           wix extension add -g WixToolset.UI.wixext/5.0.2 2>&1 | Tee-Object -Append $log
-          wix build installer/NoDrive.wxs -ext WixToolset.UI.wixext -arch x64 -d EnginePath=artifacts/engine-win-x64 -d Version=0.1.${{ github.run_number }} -o artifacts/installer/NoDrive-x64.msi 2>&1 | Tee-Object -Append $log
+          wix build installer/NoDrive.wxs -ext WixToolset.UI.wixext -arch x64 -d EnginePath=artifacts/engine-win-x64 -d Version=$($env:NoDriveMsiVersion) -d DisplayVersion=$($env:NoDriveVersion) -o "artifacts/installer/$msiName" 2>&1 | Tee-Object -Append $log
           if ($LASTEXITCODE -ne 0) { throw 'wix build failed' }
+          Copy-Item "artifacts/installer/$msiName" artifacts/installer/NoDrive-x64.msi       # stable alias for the test scripts
+          Get-FileHash "artifacts/installer/$msiName" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $msiName" } | Set-Content artifacts/installer/SHA256SUMS.txt
 
       # Publish the freshly built binaries to an orphan branch so they can be fetched with plain git over SSH
       # (private repo: artifact downloads need a browser login). The branch is force-pushed on every push to main.
@@ -103,7 +124,7 @@ jobs:
           Copy-Item -Recurse -Force artifacts/engine-win-x64/* "$dir/engine" -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force "$dir/installer" | Out-Null
           Copy-Item -Recurse -Force artifacts/installer/* "$dir/installer" -ErrorAction SilentlyContinue
-          "$env:GITHUB_SHA built $(Get-Date -AsUTC -Format o)" | Set-Content "$dir/BUILD.txt"
+          "$env:GITHUB_SHA built version $($env:NoDriveVersion) $(Get-Date -AsUTC -Format o)" | Set-Content "$dir/BUILD.txt"
           Set-Location $dir
           git init -q -b ci-binaries
           git config user.name 'github-actions'
@@ -115,6 +136,15 @@ jobs:
           foreach ($attempt in 1..4) { git push -q -f origin ci-binaries; if ($LASTEXITCODE -eq 0) { $pushed = $true; break }; Start-Sleep -Seconds (5 * $attempt) }
           if (-not $pushed) { throw 'could not push ci-binaries after 4 attempts' }
 
+      - name: Create GitHub release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pwsh tools/release-notes.ps1 -Version $env:NoDriveVersion | Set-Content notes.md
+          $pre = if ($env:NoDriveChannel) { '--prerelease' } else { '' }
+          gh release create $env:GITHUB_REF_NAME "artifacts/installer/NoDrive-$($env:NoDriveVersion)-x64.msi" artifacts/installer/SHA256SUMS.txt --title "NoDrive $($env:NoDriveVersion)" --notes-file notes.md $pre
       - uses: actions/upload-artifact@v7
         if: always()
         with:

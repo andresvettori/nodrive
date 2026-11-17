@@ -11,7 +11,8 @@ Tech stack, development setup, build commands, constraints and reference materia
 - **Local web page**: `http://localhost:47653` (config `webPort`), per-run token, see ADR-0011. **Config fields** (`config.json`): `clientId`, `syncRoot`, `hydrationWorkers`, `populationBudget`, `pollActiveSeconds`, `pollIdleMaxSeconds`, `language`, `downloadKiBps`, `uploadKiBps`, `hydrationPolicy`, `webPort`.
 - **Engine commands**: `--status`, `--cleanup [--delete-root]`, `--quit [--wait N]`, `--pending` (exit 3 when queued work), `--uninstall [--force] [--delete-data] [--delete-root]`, `--sync-root`, `--data-dir`.
 - **Dev gotcha**: a locally built, unsigned `NoDrive.Engine.dll` (JIT) can be blocked by Windows Application Control (0x800711C7) on the test PC; test the CI AOT exe or MSI instead. Native AOT ignores `runtimeconfig.template.json` (settings live in `eng/LowFootprint.props`).
-- **Tests**: 48 xunit.v3 tests on Microsoft.Testing.Platform (`dotnet test NoDrive.slnx`), including index, delta, population, hydration policy, read-ahead, Graph with a fake handler, upload and ops journals, bandwidth limiter.
+- **Versioning**: `eng/Versioning.props` (base version and channel), build number and commit from CI, generated `BuildInfo` constants in the engine, MSI `<major>.<minor>.<build>`, tags `v<version>` publish a GitHub release; see `release-process.md`.
+- **Tests**: 60 xunit.v3 tests on Microsoft.Testing.Platform (`dotnet test NoDrive.slnx`), including index, delta, population, hydration policy, read-ahead, Graph with a fake handler, upload and ops journals, bandwidth limiter.
 
 ## 1. Tech stack
 

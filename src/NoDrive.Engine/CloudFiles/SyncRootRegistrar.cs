@@ -20,7 +20,7 @@ internal static class SyncRootRegistrar
 {
     public const int ShellIntegrationFlags = 1058;
     public const string ProviderName = "NoDrive";
-    public const string ProviderVersion = "0.1.0";
+    public static string ProviderVersion => BuildInfo.Version;
     public static readonly Guid ProviderId = new("3b0c8d5e-6a47-4f43-9c1e-5d2f7a9b1c42");
 
     public static string SyncRootId => $"NoDrive!{WindowsIdentity.GetCurrent().User!.Value}!Personal";

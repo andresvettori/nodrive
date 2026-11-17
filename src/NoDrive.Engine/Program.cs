@@ -26,7 +26,7 @@ internal static class Program
         if (args.Contains("--quit")) { return Lifecycle.Quit(int.TryParse(ArgValue(args, "--wait"), out int w) ? w : 20); }
         if (args.Contains("--pending")) { return Lifecycle.PendingExitCode(paths); }
         if (args.Contains("--uninstall")) { return Lifecycle.Uninstall(paths, args.Contains("--force"), args.Contains("--delete-data"), args.Contains("--delete-root"), int.TryParse(ArgValue(args, "--wait"), out int w2) ? w2 : 20); }
-        if (args.Contains("--version")) { Console.WriteLine($"NoDrive {Diagnostics.Version}"); return 0; }
+        if (args.Contains("--version")) { Console.WriteLine($"NoDrive {Diagnostics.Version} ({Diagnostics.Commit}), build {BuildInfo.Build}"); return 0; }
         if (args.Contains("--doctor")) { Console.WriteLine(Diagnostics.Report(paths, config, null, out bool failed)); return failed ? 2 : 0; }
         if (args.Contains("--report")) { Console.WriteLine(SupportBundle.Create(paths, config, null, includeNames: !args.Contains("--no-names"))); return 0; }
         if (args.Contains("--status")) { return Status(paths); }
@@ -72,7 +72,7 @@ internal static class Program
         {
             while (!cts.IsCancellationRequested)
             {
-                TrayWindow.SetTooltip("NoDrive: " + service.Status);
+                TrayWindow.SetTooltip($"NoDrive {Diagnostics.Version}: {service.Status}");
                 try { await Task.Delay(TimeSpan.FromSeconds(5), cts.Token).ConfigureAwait(false); } catch (OperationCanceledException) { }
             }
         });

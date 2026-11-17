@@ -229,7 +229,7 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
         var now = DateTime.UtcNow;
         return new StateDto
         {
-            Version = SyncRootRegistrar.ProviderVersion,
+            Version = $"{BuildInfo.Version} ({BuildInfo.Commit})",
             Status = service.Status,
             Paused = UserSettings.Paused,
             NeedsSignIn = service.NeedsSignIn,

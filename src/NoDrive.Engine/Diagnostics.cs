@@ -15,11 +15,12 @@ internal static class Diagnostics
 {
     /// <summary>Short id of this run, written in the log header and shown on the page so a report can be matched to its log.</summary>
     public static readonly string SessionId = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(3)).ToLowerInvariant();
-    public static string Version => SyncRootRegistrar.ProviderVersion;
+    public static string Version => BuildInfo.Version;
+    public static string Commit => BuildInfo.Commit;
     private static readonly DateTime Started = DateTime.UtcNow;
 
     public static string Header() =>
-        $"NoDrive {Version} session {SessionId} | {RuntimeInformation.OSDescription} {RuntimeInformation.OSArchitecture} | language {WebUi.OsLanguage()}, region {WebUi.OsCulture()}, time zone {TimeZoneInfo.Local.Id}";
+        $"NoDrive {Version} ({Commit}) session {SessionId} | {RuntimeInformation.OSDescription} {RuntimeInformation.OSArchitecture} | language {WebUi.OsLanguage()}, region {WebUi.OsCulture()}, time zone {TimeZoneInfo.Local.Id}";
 
     /// <summary>Runs the checks and returns the report text; <paramref name="failed"/> is true when something needs attention.</summary>
     public static string Report(EnginePaths paths, EngineConfig config, ItemIndex? liveIndex, out bool failed)

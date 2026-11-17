@@ -39,4 +39,14 @@
     <ProjectReference Include="../NoDrive.Core/NoDrive.Core.csproj" />
     <ProjectReference Include="../NoDrive.Graph/NoDrive.Graph.csproj" />
   </ItemGroup>
+
+  <!-- BuildInfo.g.cs: the version as constants (reflection on assembly attributes is unreliable under Native AOT). -->
+  <Target Name="NoDriveBuildInfo" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <BuildInfoFile>$(IntermediateOutputPath)BuildInfo.g.cs</BuildInfoFile>
+      <BuildInfoText>namespace NoDrive.Engine%3B internal static class BuildInfo { public const string Version = "$(NoDriveVersion)"%3B public const string Commit = "$(NoDriveCommit)"%3B public const int Build = $(NoDriveBuild)%3B public const string Channel = "$(NoDriveChannel)"%3B }</BuildInfoText>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(BuildInfoFile)" Lines="$(BuildInfoText)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup><Compile Include="$(BuildInfoFile)" /></ItemGroup>
+  </Target>
 </Project>
