@@ -7,6 +7,11 @@ Si OneDrive respalda estas carpetas, viven dentro de la carpeta de OneDrive y On
 
 Para que NoDrive tome el control, primero detené el respaldo en OneDrive: icono de OneDrive > Configuración > Sincronización y copia de seguridad > Administrar copia de seguridad > desactivá las carpetas. OneDrive te ofrece conservar los archivos en las carpetas originales. Elegí conservarlos allí, verificá que estén completos y luego seguí con NoDrive.
 
+## Antes de detener la copia de seguridad de carpetas
+1. En OneDrive: icono > Configuración > Sincronización y copia de seguridad > Configuración avanzada > Archivos a petición > **Descargar todos los archivos** de las carpetas que respaldás, y esperá las marcas verdes. Detener la copia falla con archivos solo en línea.
+2. Tras detenerla, verificá que las carpetas volvieron a tu perfil: en PowerShell, `[Environment]::GetFolderPath('Desktop')`, `('MyDocuments')` y `('MyPictures')` deben mostrar `C:\Users\<vos>\...`, no una ruta de OneDrive. Si no, clic derecho en la carpeta del Explorador > Propiedades > Ubicación > **Restaurar valores predeterminados**.
+3. Cuando OneDrive pregunte, elegí conservar los archivos en sus carpetas originales de esta PC (no elijas quitarlos de la PC ni de OneDrive).
+
 ## Pasarte por completo a NoDrive
 1. Verificá que NoDrive muestre todos los archivos que necesitás (abrí algunos o usá Mantener siempre en este dispositivo en las carpetas importantes).
 2. Detené el respaldo de carpetas como se indicó.

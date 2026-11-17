@@ -22,16 +22,16 @@ Measurable where possible. Numbers are acceptance criteria, measured on the deve
 
 ## Scope of v1
 
-- **Browse**: the whole personal OneDrive appears under `%USERPROFILE%\NoDrive` as online-only placeholders, populated lazily per folder from the local index (PopulationPolicy PARTIAL, FETCH_PLACEHOLDERS).
-- **Download**: opening a placeholder hydrates it on demand with progressive hydration (HTTP Range on `@microsoft.graph.downloadUrl`, 206 with fallback to 200: https://learn.microsoft.com/en-us/graph/api/driveitem-get-content?view=graph-rest-1.0). Progress shown by Explorer.
+- **Browse**: the whole personal OneDrive appears under `%USERPROFILE%\NoDrive` as online-only placeholders. Folders are populated from the local SQLite index (answered in the callback path from the index only), heavy folders are pre-populated in the background by cost, and light folders on demand (ADR-0007).
+- **Download**: opening a placeholder downloads the whole file first (hydration policy Full, ADR-0010), with Windows' own progress dialog; keep on device / free up space verbs work. A shared download rate limit is configurable. Graph's pre-authenticated `downloadUrl` is used with Range where useful and tolerates 200 responses.
 - **Upload new files**: files and folders dropped or created inside the sync root are uploaded (simple PUT for small files, upload sessions with 320 KiB-aligned 5-10 MiB chunks above that: https://learn.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0), then converted to in-sync placeholders.
 - **Rename and delete propagation** of local operations with guards (acknowledged locally first, replayed to the server asynchronously, remote deletes go to the OneDrive recycle bin, mass-delete threshold pauses sync).
 - **Remote change tracking**: `/me/drive/root/delta` polling (adaptive, 1 min active to 15-60 min idle, daily safety full delta) applied to the index and to existing placeholders (https://learn.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0).
 - **Explorer integration**: unpackaged sync-root registration, nav-pane node, Status column, built-in hydration verbs, hydration progress and toasts raised by cfapi.
-- **Tray icon** (Shell_NotifyIcon, no UI framework): status, pause/resume, sign in/out, open folder, fallback actions for "free up space" / "keep offline" in case Windows moves the built-in verbs (Insider 26220.7271 moved them into a per-provider flyout: https://blogs.windows.com/windows-insider/2025/11/21/announcing-windows-11-insider-preview-build-26100-7271-dev-beta-channels/).
+- **Tray icon** (Shell_NotifyIcon, no UI framework): open the settings page (double-click), pause/resume, start with Windows, sign in, allow held deletions, open folder, quit.
 - **Sign-in** via system browser (authorization code + PKCE, loopback redirect), refresh token protected with DPAPI. Scopes `Files.ReadWrite` + `offline_access`.
-- **Lifecycle**: autostart at logon (HKCU Run), single instance, restart on failure, graceful disconnect at logoff, uninstall flow that hydrates or warns before `CfUnregisterSyncRoot` (which permanently deletes unhydrated placeholders: https://learn.microsoft.com/en-us/windows/win32/api/cfapi/nf-cfapi-cfunregistersyncroot). Unpackaged apps must call Unregister themselves on uninstall (https://learn.microsoft.com/en-us/uwp/api/windows.storage.provider.storageprovidersyncrootmanager.unregister).
-- **Settings**: JSON config file; tray menu + browser sign-in is the whole UI in v1.
+- **Lifecycle**: autostart at logon (HKCU Run, set by the MSI or the tray), per-user single instance, in-process crash restart (max 3 in 10 minutes), `--quit/--pending/--uninstall`, a per-user WiX MSI whose uninstall refuses while work is queued and unregisters the sync root (downloaded files stay).
+- **Settings and activity**: a local web page served by the engine (ADR-0011) with live transfers, recent activity, bandwidth limits, sync intervals, language (English/Spanish, Windows regional formats) and guides; `config.json` for the rest. Optional "Switch from OneDrive" assistant (ADR-0013).
 
 ## Explicit non-goals for v1
 
@@ -40,9 +40,9 @@ Measurable where possible. Numbers are acceptance criteria, measured on the deve
 - **Business / SharePoint accounts.** Not tested; the app registration keeps the option open (`AzureADandPersonalMicrosoftAccount`) but nothing else does.
 - **macOS / Linux.** cfapi is Windows-only; File Provider / FUSE are at most a P3 exploration.
 - **Package identity (MSIX or sparse package).** Not needed for the core cfapi experience; only for Windows 11 modern context-menu entries, which v1 does not add (https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/integrate-packaged-app-with-file-explorer).
-- **Thumbnails, status flyout, custom states, Share handler, socket.io push, settings window.** P2 candidates.
+- **Cloud thumbnails, status flyout, custom states, Share handler, socket.io push.** P2 candidates (the settings page and bandwidth limits were moved into v1 on 2026-11-15).
 - **"Shared with me" / "Recent" views.** The endpoints are deprecated and stop returning data after November 2026 (https://learn.microsoft.com/en-us/graph/api/drive-sharedwithme?view=graph-rest-1.0).
-- **Running alongside OneDrive.exe on the same account.** NoDrive refuses to start while OneDrive.exe is linked to the same account.
+- **Replacing OneDrive automatically.** NoDrive runs side by side with the OneDrive app (decision 2026-11-16, ADR-0013). It never unlinks, uninstalls or reconfigures OneDrive; an optional assistant guides a manual switch.
 - **Windows 10.** Windows 11 24H2 with the August 2025 cumulative update or later is the floor; Windows 10 22H2 under ESU shares the API baseline but is untested.
 - **Personal Vault, OneNote packages, Windows-invalid names**: shown as unsupported, not synced (presentation decided in P1).
 - **Microsoft.Graph SDK and MSAL/WAM broker**: not used in v1 (see decisions).
@@ -74,12 +74,12 @@ Acceptance tests for each item are listed in `projectPlan.md` and automated wher
 | Licence | MIT; only permissive sources copied (rclone, CloudMirror, cfapiSync, WinCfApiWrapper, CfSharp, Vanara, CsWin32); GPL projects (Nextcloud, ownCloud, abraunegg/onedrive, onedriver, PrimalZed/CloudSync) read for protocol knowledge only (ADR-0006) |
 | Scale | Design for 500k items: lazy population, disk-backed index, streaming delta (ADR-0007) |
 | v1 scope | Browse, download, upload new files; no in-place editing (P2) |
-| OneDrive.exe | NoDrive replaces it for the account; refuses to start while a personal account is linked (registry + SyncRootManager + `CfGetSyncRootInfoByPath` guard). Auto-detects the former OneDrive folder and offers it as the sync root. Adopts the files left there (metadata-only conversion on size/mtime match) in v1 as epic E1b, ADR-0008, confirmed 2026-11-13 |
+| OneDrive.exe | Coexists (like a second computer); optional switch assistant; never touched by NoDrive (registry + SyncRootManager + `CfGetSyncRootInfoByPath` guard). Auto-detects the former OneDrive folder and offers it as the sync root. Adopts the files left there (metadata-only conversion on size/mtime match) in v1 as epic E1b, ADR-0008, confirmed 2026-11-13 |
 | Packaging | Unpackaged in v1; registry-based shell integration; identity only if modern context-menu entries are ever wanted (P3) |
 | Build/test host | Physical Windows 11 x64 PC; win-x64 primary target; optional GitHub Actions windows-latest (Native AOT cannot cross-compile from macOS) |
 | Windows floor | Windows 11 24H2 with Aug 2025 cumulative update or later |
 | Sync root | `%USERPROFILE%\NoDrive`, NTFS, never a drive root, added to the Search crawl scope |
-| Hydration / population | PROGRESSIVE + AUTO_DEHYDRATION_ALLOWED; PARTIAL population |
+| Hydration / population | FULL + AUTO_DEHYDRATION_ALLOWED (ADR-0010); population Full with the engine's own hybrid prefetch (ADR-0007) |
 | Change wake-up | Adaptive delta polling in v1; socket.io channel in P2 |
 | Photos / thumbnails | P2 unless the spike shows generic icons are unacceptable |
 | Settings UI | Tray menu + browser sign-in + JSON config in v1; real window (Avalonia 12 or WinUI 3, separate process) later |

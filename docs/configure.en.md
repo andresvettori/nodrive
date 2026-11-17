@@ -11,3 +11,5 @@ Settings page
 Config file: `%LOCALAPPDATA%\NoDrive\config.json`. Fields: `syncRoot`, `clientId`, `language`, `downloadKiBps`, `uploadKiBps`, `pollActiveSeconds`, `pollIdleMaxSeconds`, `hydrationWorkers`, `hydrationPolicy`, `webPort`. Edit it with NoDrive closed.
 
 Tray menu: Open NoDrive…, Pause/Resume syncing, Start with Windows, Open NoDrive folder, Quit. A **Sign in…** item appears when sign-in is needed, and **Allow N held deletions…** if a mass delete was held for your safety.
+
+Activity tab: live transfers with progress and the recent activity (choose to show the last 25, 50, 100, 200 or 400 entries; they are kept when NoDrive restarts). The **Switch from OneDrive** tab is optional and does nothing unless you use it. The page opens only from the tray icon; if it says it is out of date, NoDrive was restarted: open it again from the tray icon.

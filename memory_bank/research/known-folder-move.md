@@ -59,3 +59,7 @@ Path < 260 chars; no files > 250 GB; invalid characters and reserved names; the 
 - Confirm on the target build which stop-backup dialog appears and that `User Shell Folders` reverts to `%USERPROFILE%\...` for all three folders and the GUID values.
 - Whether Storage Sense would dehydrate a pinned Desktop folder (it should not; pinned excluded) and how Explorer's Desktop view treats placeholders.
 - Whether `.lnk` shortcuts on the Desktop survive as placeholders (community reports duplicate shortcuts across machines with OneDrive KFM).
+
+## Status (2026-11-16)
+
+NoDrive does not implement Known Folder Move. It detects Folder Backup read-only, shows which of Desktop, Documents and Pictures are inside the OneDrive folder, and `docs/onedrive-coexistence.*.md` plus the Switch assistant guide the user through stopping it in OneDrive itself (OneDrive icon > Settings > Sync and backup > Manage backup, choose to keep the files in the original folders; verify with `[Environment]::GetFolderPath('Desktop')`). Native support stays a P2 item.

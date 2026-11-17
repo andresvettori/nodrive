@@ -16,7 +16,7 @@ Source conventions: every API/limit/version claim carries a URL from the 2026-11
 | Phase | Goal | Duration | Gate |
 |---|---|---|---|
 | P0 Spike | Prove cfapi + Native AOT + .NET 11 + unpackaged registration + 500k-scale index on the user's Windows 11 x64 PC | 2-3 weeks | Kill/go criteria (section 2.4) |
-| P1 v1 | Browse (lazy placeholders), download (progressive hydration), upload new files, rename/delete propagation with guards, tray, recovery, uninstall, memory hygiene, responsiveness harness green | 2-3 months | All cross-cutting acceptance tests (section 6) pass on the PC |
+| P1 v1 (functionally done 2026-11-16) | Browse (lazy placeholders), download (whole-file hydration), upload new files, rename/delete propagation with guards, tray, recovery, uninstall, memory hygiene, responsiveness harness green | 2-3 months | All cross-cutting acceptance tests (section 6) pass on the PC |
 | P2 | In-place editing with conflict copies and USN replay, pin/unpin, thumbnails, StatusUI flyout, socket.io wake-up, settings window | after v1 | per-epic |
 | P3 (optional) | Signed sparse package for modern context-menu entries; macOS/Linux exploration | undecided | none |
 
@@ -85,32 +85,42 @@ Status 2026-11-13: the toolchain half is answered. CI AOT-published `cfapi-minim
 
 ## 3. P1: v1 (2-3 months)
 
-v1 = browse, download, upload new files. No in-place editing of existing files (P2). NoDrive replaces OneDrive.exe for the account and refuses to start while OneDrive.exe is linked to the same account.
+v1 = browse, download, upload new files, delete/rename propagation. No in-place editing of existing files (P2). NoDrive can run next to the OneDrive app (decision 2026-11-16, see E1b); it is a full replacement only if the user chooses the optional Switch assistant.
 
 Each epic lists acceptance criteria. "Harness" = the P0 responsiveness harness; "fake server" = the fault-injecting fake Graph server.
 
 ### E1. Registration and placeholders
+
+**Status 2026-11-16: DONE, verified.** Built with PopulationPolicy Full plus the engine's own hybrid population (ADR-0007), HydrationPolicy FULL (ADR-0010) and Flags 1058 (ADR-0009). The registration is replaced only when the configured root changes. The bullets below are the original design.
 - Register one sync root at `%USERPROFILE%\NoDrive` (never a drive root, NTFS only: https://learn.microsoft.com/en-us/windows/win32/cfapi/build-a-cloud-file-sync-engine), PopulationPolicy PARTIAL, HydrationPolicy PROGRESSIVE, `AUTO_DEHYDRATION_ALLOWED`, InSync on LastWriteTime. Refuse to register over an existing/overlapping root (`CfGetSyncRootInfoByPath`). Add root to the Search crawl scope.
 - Re-register with update semantics on every start; never unregister on normal exit (`CfUnregisterSyncRoot` permanently deletes unhydrated placeholders: https://learn.microsoft.com/en-us/windows/win32/api/cfapi/nf-cfapi-cfunregistersyncroot).
 - Acceptance: fresh install shows nav-pane node, Status column, verbs; restart of the engine re-attaches without re-creating placeholders; attempt to register inside an existing OneDrive root fails with a clear message.
 
 ### E1b. OneDrive.exe guard, folder detection and adoption (ADR-0008; confirmed in v1 scope 2026-11-13)
+
+**Status 2026-11-16: CHANGED and PARTIAL.** The user decided on coexistence: NoDrive does NOT refuse to start while OneDrive runs (side by side like two computers). Built: OneDrive/Folder Backup detection card, guides, adoption of identical files by name + size + mtime (ADR-0013, no hashes), and the optional Switch from OneDrive assistant (read-only scan verified; take-over not yet run for real; no automated unlink, uninstall or Folder Backup changes, by design). The text below is the original design.
 - Start-up guard: refuse to connect while `HKCU\...\OneDrive\Accounts\Personal` exists, a `SyncRootManager\OneDrive!<SID>!Personal*` key exists, or `CfGetSyncRootInfoByPath` reports a foreign provider on the configured root; tray balloon with unlink steps, exit code 3. Business-only OneDrive allowed.
 - First-run folder choice: offer `UserFolder` / `%OneDriveConsumer%` / `%USERPROFILE%\OneDrive` (if not a live sync root) and `%USERPROFILE%\NoDrive`.
 - Adoption worker after the first delta pass: size+mtime match -> `CfConvertToPlaceholder` + `CfSetInSyncState` (no download), lazy quickXorHash verification, `AdoptedUnverified` never dehydrated; mismatch -> `<name> (local copy YYYY-MM-DD)` + cloud placeholder; unknown -> upload-new; known-folder redirection (detected via `SHGetKnownFolderPath` default-path comparison for Desktop/Documents/Pictures/Screenshots/Camera Roll) under the root aborts adoption with a message linking to the README migration steps.
 - Acceptance: on a folder with 50k ordinary files matching the index, adoption finishes without any Graph download, Explorer stays responsive (latency histogram unchanged), memory stays within the idle budget + transfer buffers; a deliberately modified file becomes a local copy, not an overwrite; `--status` reports OneDrive presence and the `DisableFileSyncNGSC` policy value.
 
 ### E2. Lazy enumeration (FETCH_PLACEHOLDERS)
+
+**Status 2026-11-16: DONE, verified** (unsupported-name listing not built).
 - Answer only from the SQLite index, in batches, paginated; never call Graph on the callback path. Callback body enqueues and returns.
 - Exclude unsupported items (Personal Vault, OneNote package facet, Windows-invalid names, case collisions) and surface them in a conflict/unsupported list instead of creating placeholders.
 - Acceptance: folder with 30k children opens with harness p99 callback latency under 5 ms; Explorer shows contents progressively; same test with the fake server offline behaves identically (index only).
 
 ### E3. Progressive hydration (FETCH_DATA / CANCEL_FETCH_DATA)
+
+**Status 2026-11-16: DONE, verified**, with the Full policy (whole file on first access, ADR-0010): watchdog, throttle handling, cancel handling and Range/200 tolerance are in; progressive streaming and read-ahead remain only behind `hydrationPolicy: progressive`.
 - Worker pool of 3-4 hydrations; Range requests on a per-item refreshed `downloadUrl`; 200-full-body treated as "write ahead from offset 0"; chunks streamed from HTTP into `CfExecute TRANSFER_DATA` with pooled fixed-size buffers; `CfReportProviderProgress` at least every 15 s; watchdog deadline well under 60 s that completes the request with a failing `CompletionStatus` (there is no `CF_OPERATION_ACK_DATA_FLAG_CANCELED`; only `_NONE` exists).
 - Handle `CF_CALLBACK_FETCH_DATA_FLAG_RECOVER` after a provider restart. Honour cancellation via `CANCEL_FETCH_DATA`.
 - Acceptance: open an online-only file in Notepad and Photos; copy a 2 GB online-only file (progress dialog shows progress); pull the network mid-copy and get a visible Explorer error within 10 s, no hang; kill the engine mid-hydration, restart, re-open the file successfully.
 
 ### E4. Delta ingestion and index
+
+**Status 2026-11-16: DONE, verified**, plus E4b: remote changes are mirrored into folders already on disk (create, rename, delete, update) and Explorer is refreshed.
 - Initial `/me/drive/root/delta` with `$select`, streamed page by page into SQLite transactions, persisted nextLink/deltaLink, resumable, low priority, bounded buffers. Track by id, deletes first, last occurrence wins for duplicates, handle 410 Gone with both resync codes (https://learn.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0). Consumer deletes omit ctag/size.
 - Index schema: graphId, parentId, name, size, eTag, cTag, quickXorHash, lastModified, NTFS FileId, USN, state, plus deltaLink and a mutation journal table.
 - Adaptive polling: 1 min active, backing off to 15-60 min idle, daily safety full delta (Microsoft recommends notifications + delta with a daily check: https://learn.microsoft.com/en-us/onedrive/developer/rest-api/concepts/scan-guidance). Single global Retry-After gate for all workers; `User-Agent: ISV|<owner>|NoDrive/<version>` (https://learn.microsoft.com/en-us/sharepoint/dev/general-development/how-to-avoid-getting-throttled-or-blocked-in-sharepoint-online).
@@ -118,20 +128,28 @@ Each epic lists acceptance criteria. "Harness" = the P0 responsiveness harness; 
 - Acceptance: 500k-item fake delta ingests with flat peak memory and a resumable interruption at any page; unit tests for duplicates, deletes-first, 410 resync; real account first sync completes and the time is recorded.
 
 ### E5. New-file upload
+
+**Status 2026-11-16: DONE, verified.** Uses a `FileSystemWatcher`, a SQLite journal, two lanes, 4 MiB simple PUT / 5 MiB sessions, conflict copies, placeholder conversion, adoption of identical files and a bandwidth limit.
 - Local watcher (`ReadDirectoryChangesW`) detects new files; debounce 2-5 s; simple PUT below a small threshold, upload session above it with 320 KiB-multiple chunks of 5-10 MiB, each PUT under 60 MiB, no Authorization header on fragment PUTs, 404 = restart session (https://learn.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0). Explicit `@microsoft.graph.conflictBehavior=fail` on every new-file write (session default is `fail`, simple PUT default is `replace`: https://learn.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0). Compute quickXorHash while streaming and verify (https://learn.microsoft.com/en-us/graph/api/resources/hashes?view=graph-rest-1.0).
 - After upload: `CfConvertToPlaceholder` + `CfSetInSyncState` (new local files are not auto-converted: community-reported, https://learn.microsoft.com/en-us/answers/questions/2288103/cloud-file-api-faq). Sanitize restricted names before upload and surface collisions as conflicts.
 - Journal every mutation in SQLite before execution; replay after crash.
 - Acceptance: drop 1,000 small files and one 5 GB file into the root; all appear remotely with matching hashes; kill the engine mid-upload, restart, upload resumes from `nextExpectedRanges`; a name collision produces a visible conflict entry, not a silent rename. Unit tests cover fragment alignment (320 KiB multiples, under 60 MiB) and resume from `nextExpectedRanges`.
 
 ### E6. Rename/delete propagation with guards
+
+**Status 2026-11-16: DONE, verified.** Acks are immediate, operations are journalled (`remote_ops`) and replayed in order; mass-delete guard is 200 per 10 minutes with a tray "Allow" action.
 - `NOTIFY_DELETE` / `NOTIFY_RENAME` acked immediately from local state; remote operation journaled and executed asynchronously. Double delete callbacks (Recycle Bin, replace-on-save) are idempotent by RequestKey/FileId.
 - Guards: remote deletes go to the OneDrive recycle bin only (`permanentDelete` exists on personal, https://learn.microsoft.com/en-us/graph/api/driveitem-permanentdelete?view=graph-rest-1.0, but is never used by default); mass-delete threshold (N items or X% of the index in one batch) pauses sync and asks; move-out of the root: a hydrated item is acked and journaled as a remote `Delete`; a dehydrated placeholder is denied (`ACK_RENAME` with a failure status, the tray explains how to hydrate first) because hydrating inside the ack would block Explorer's dialog, and P2 adds a CopyHook warning (see `systemPatterns.md` 3e); never dehydrate a NotInSync file.
 - Acceptance: move a folder of 10k placeholders inside the root and then out of it; the Explorer dialog completes in local-move time, remote reconciles later with zero duplicates or conflicts; delete 60% of the index in one shot and sync pauses with a prompt.
 
 ### E3d. Caller behaviour diagnostics and UX (from `research/app-compatibility.md`)
+
+**Status 2026-11-16: PARTIAL.** Caller statistics are in the periodic log report and the activity page lists downloads with the real file name; the dedicated UX is not built.
 - Local caller-behaviour log (process, ranges, bytes before cancel, time to first byte, extension); `--status --callers` report; tray "downloading <file> for <app>" with Cancel; per-caller read-ahead; recommended-apps note generated from the measured table. Acceptance: for each app in the compatibility doc there is a recorded row and no unbounded read-ahead for range-friendly callers.
 
 ### E3c. Background population (proven in P0; fixes the Explorer busy-cursor freeze)
+
+**Status 2026-11-16: DONE, verified** (big folders open instantly).
 - **Policy (decided with the user, 2026-11-14): populate by cost, not by depth.** Wait time of a folder is children x per-placeholder cost (about 160 us, re-measured at run time), so only folders whose on-demand wait would be perceptible are worth prefetching: **heavy = children >= T, with T = 300 ms / measured cost (about 2,000 children)**; never prefetch whole levels of light folders or siblings (a 20-child folder saves 3 ms). Mechanisms, in priority order:
   1. *Heavy-first sweep* when the index is ready: build the heavy set from `COUNT(*) GROUP BY parent_id`, populate each heavy folder after its **ancestor chain** (ancestors must be populated before the heavy folder's directory exists; they are normally light so the chain is cheap), largest and shallowest first.
   2. *Reactive, along the current branch only*: when a folder becomes populated (on demand, by prefetch, or its file opened: callback process info) enqueue its **heavy child folders** (one level down, heavy ones only); light children are left lazy, so cost does not grow with tree breadth or depth.
@@ -144,31 +162,43 @@ Each epic lists acceptance criteria. "Harness" = the P0 responsiveness harness; 
 - Acceptance: cold open of a prefetched 30k-child folder in about 1 s with zero callbacks; foreground listing latency unchanged during prefetch (p95 under 10 ms); an unprefetched folder of 1,000 children opens in under 300 ms; user-confirmed no busy-cursor freeze for prefetched folders.
 
 ### E3b. Pin / unpin handling (proven in P0)
+
+**Status 2026-11-16: DONE, verified** (keep/free with Explorer refresh).
 - A recursive attribute watcher (bounded to 2 concurrent operations) reacts to `PINNED` on an online-only file with `CfHydratePlaceholder` and to `UNPINNED` on a hydrated in-sync file with `CfDehydratePlaceholder`; never dehydrate a file that is not in sync; ignore directories; de-duplicate in-flight paths; startup sweep for pins set while the engine was not running (a pin applied before the watcher existed is not re-signalled).
 - Acceptance: pin of 1,000 files completes with bounded memory and Explorer responsive; unpin of a pinned folder dehydrates only in-sync files.
 
 ### E7a. Setup and Explorer verbs (ADR-0009; no elevation needed, measured)
+
+**Status 2026-11-16: DONE, verified** (flags are applied at start; the installer never needs elevation).
 - `--setup` (unelevated, first launch): `Register` the sync root, write `Flags=1058` under our SyncRootManager key (Users have SetValue there); engine start-up never calls `Register`, only `CfConnectSyncRoot`.
 - Start-up check of `Flags`; if it differs the engine rewrites it itself (no UAC) and logs it; sync continues regardless.
 - Uninstall: `Unregister` after hydrate-or-warn (verify it works unelevated; the P0 cleanup ran in an elevated SSH token).
 - Acceptance: on a clean Windows 11 build the verbs appear after setup; killing and restarting the engine keeps them; a test fails if the engine binary can reach `Register`; re-test on each supported Windows build. Status column/icon handling decided separately (ADR-0009 point 5).
 
 ### E7. Tray and lifecycle
+
+**Status 2026-11-16: DONE, verified**: tray menu, pause (persisted), autostart (HKCU Run, also from the MSI), per-user single instance, in-process crash restart (max 3 in 10 minutes) instead of a Task Scheduler task. No refusal to run beside OneDrive.exe (see E1b).
 - Message-only window + `Shell_NotifyIcon` menu: status, pause/resume, "Free up space in folder..." and "Keep folder offline" fallbacks (calling `CfSetPinState` / `CfDehydratePlaceholder` ourselves, because the built-in verbs may have moved into a flyout and `NOTIFY_DEHYDRATE` does not fire on "Free up space": community-reported, https://learn.microsoft.com/en-gb/answers/questions/1694157/when-will-cf-callback-type-notify-dehydrate-be-inv), sign in/out, open folder, quit.
 - HKCU Run autostart, single-instance mutex, Task Scheduler restart-on-failure, `CfDisconnectSyncRoot` on `WM_QUERYENDSESSION`, refuse to start while OneDrive.exe is linked to the same account.
 - Acceptance: reboot and the engine is back before Explorer needs it; two launches yield one process; log off/on cleanly.
 
 ### E8. Recovery and uninstall
+
+**Status 2026-11-16: PARTIAL.** Done: journals replayed on start, damaged index rebuilt, `--quit/--pending/--uninstall`, MSI uninstall that refuses while work is queued and keeps downloaded files. Not done: USN cursor reconcile, RECOVER re-drive of pending hydrations, a friendlier message when uninstall is refused.
 - Startup: re-attach registration, replay journal, reconcile USN cursor for changes made while stopped, re-drive pending hydrations via RECOVER.
 - Uninstall flow: disconnect, hydrate-all prompt or explicit warning, `StorageProviderSyncRootManager.Unregister` (unpackaged apps must call it themselves), remove registry/autostart.
 - Acceptance: kill -9 during hydration and during delta ingestion, restart: no stuck placeholders, no lost journal entries, no Explorer restart; uninstall leaves either a fully hydrated folder or a user-acknowledged empty one.
 
 ### E9. Memory hygiene
+
+**Status 2026-11-16: PARTIAL.** GC settings in `eng/LowFootprint.props`, bounded queues and 1 MiB pooled buffers; measured 15-30 MB. No explicit post-burst aggressive collect yet.
 - GC: workstation, Concurrent=false, ConserveMemory 5-7, RegionSize 1 MB, HeapHardLimit set so a leak fails loudly. After each burst: dispose, return buffers, `GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive)` (https://learn.microsoft.com/en-us/dotnet/api/system.gc.collect?view=net-11.0), allow a second collect because .NET 10+ ages UOH regions over two gen2 GCs; no periodic collects while idle; no sub-minute timers.
 - Networking: one `SocketsHttpHandler`, `PooledConnectionIdleTimeout` 20-30 s, `ResponseHeadersRead` streaming; `ShouldEvictConnection` is `[Experimental("SYSLIB5008")]` and is not used in v1 (https://learn.microsoft.com/en-us/dotnet/api/system.net.http.socketshttphandler.shouldevictconnection?view=net-11.0).
 - Acceptance: idle Private Bytes under 30 MB with the 500k index; within 10 MB of idle 60 s after a 10 GB hydration burst; flat peak during 500k ingestion.
 
 ### E10. Responsiveness harness (continuous)
+
+**Status 2026-11-16: PARTIAL.** The P0 PowerShell harness exists; running it in CI and the 24 h soak are not done.
 - The P0 histogram and fake server run in CI on the Windows PC (or windows-latest runner) for every release; a supervisor thread inside the engine watches callback latency, queue depth and commit and fails/restarts rather than leaving Explorer waiting.
 - Acceptance: all section 6 tests green; the 24 h soak passes before tagging v1.
 
@@ -177,12 +207,12 @@ Each epic lists acceptance criteria. "Harness" = the P0 responsiveness harness; 
 - **Folder backup (Known Folder Move) support**, opt-in per folder (Desktop, Documents, Pictures): `IKnownFolderManager::Redirect` into `<root>\<Folder>` with `COPY_CONTENTS | DEL_SOURCE_CONTENTS | WITH_UI`, folder pinned (always keep on this device) by default so Desktop items are never online-only, refuse when `GetRedirectionCapabilities` reports a policy denial or the folder contains reparse points/open files, `SHChangeNotify` then prompt for an Explorer restart; reversible via Redirect back to the default path. Release gate: verification matrix in `research/known-folder-move.md` section 6 (Desktop view, wallpaper, Start/taskbar shortcuts, Search, Storage Sense, Office save into Documents, screenshots). The user runs folder backup today, so this is the first P2 item.
 
 - In-place editing of existing files: If-Match eTag on every PUT, 412 -> conflict copy `<name> (conflicted copy <date>)`, echo suppression via stored cTag/eTag, Office save-storm debounce, USN journal replay for offline edits.
-- Pin/unpin handling (watch `FILE_ATTRIBUTE_UNPINNED`, self-dehydrate), validation of hydrated data.
-- Thumbnail COM local server backed by Graph `/thumbnails` (promote to late v1 if photos matter to the user).
+- ~~Pin/unpin handling~~ done in P1 (E3b); validation of hydrated data (quickXorHash) is still open.
+- Thumbnail COM local server backed by Graph `/thumbnails`. Confirmed gap on 2026-11-15: online-only pictures show an icon only (thumbnails appear after download). Promote if photos matter.
 - StatusUI flyout (`IStorageProviderStatusUISourceFactory`, registry-registrable for unpackaged apps; feature-detect, present from build 23504+).
 - socket.io change wake-up (`/me/drive/root/subscriptions/socketIo`, WebSocket only, https://learn.microsoft.com/en-us/graph/api/subscriptions-socketio?view=graph-rest-1.0) replacing most polling.
-- Settings window as a separate on-demand process (Avalonia 12 or WinUI 3, both AOT-capable) launched via .NET 11 `StartDetached` (https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/libraries).
-- Metered-network and power-event awareness; bandwidth cap.
+- ~~Settings window as a separate on-demand process~~ superseded 2026-11-15: delivered earlier as the local web page served by the engine (ADR-0011).
+- Metered-network and power-event awareness (bandwidth caps are done, see P1.5); parallel segment download for large files (one connection is about 14 MB/s).
 - Prepare for tempauth URL retirement 2027-04-01 (commercial clouds; consumer scope unclear): transfer layer behind an interface.
 
 ## 5. P3 (optional)
@@ -218,6 +248,8 @@ Run on the Windows PC before every release; automated where possible via the har
 
 ## 8. Open questions and the spike step that resolves each
 
+_Status 2026-11-16: all kill-criteria questions below were answered by P0 and P1 (see `p0-results.md` and `progress.md`); the table is kept as history._
+
 | Question | Resolves in | Default if unresolved |
 |---|---|---|
 | Does unpackaged `StorageProviderSyncRootManager.Register` show the nav-pane node and Status icons on the user's exact build? | P0 step 3 | CfRegisterSyncRoot + registry fallback; else kill |
@@ -241,8 +273,9 @@ Run on the Windows PC before every release; automated where possible via the har
 - Any change to section 0 or section 6 (ground rules, acceptance tests) needs the user's explicit agreement; everything else can be updated as work progresses.
 - Re-read `projectbrief.md` before changing scope; scope changes go there first, then here.
 
-## P1.5 Activity, settings and bandwidth (proposed 2026-11-15, awaiting the user's choice of UI technology)
-- Cosmetic (done 2026-11-15): app icon (tools/make_icon.py -> Assets/nodrive.ico, embedded as ApplicationIcon, used by tray, sync root and navigation pane), Explorer navigation pane entry (HKCU CLSID with System.IsPinnedToNameSpaceTree).
-- Settings/activity screen opened from the tray. Options: (A) local web UI served by the engine on 127.0.0.1 (HttpListener, per-session token, no UI framework, AOT-clean, same UI later on macOS/Linux; recommended); (B) separate on-demand WinForms process (JIT, not AOT-compatible, Windows only, ~40 MB only while open); (C) Avalonia (AOT-capable, cross-platform, larger). The always-on engine must not load a UI framework.
-- Screen content: activity log (current and recent files with outcome), current configuration (root, account, policy, versions), editable settings (poll interval, workers, bandwidth limits, autostart, hydration policy), links to docs (install, configure, custom Entra app id).
-- Bandwidth throttling: token buckets shared by downloads (Hydrator) and uploads (UploadService), limits in config.json (KiB/s, 0 = unlimited), live-reloaded; optional schedule later.
+## P1.5 Activity, settings, bandwidth, installer and switch assistant (done 2026-11-15/16)
+
+- **Done and verified**: app icon (`tools/make_icon.py` -> `Assets/nodrive.ico`, used by tray, folder, installer); local settings and activity page (ADR-0011) with live transfers, persistent recent activity (last 25-400), speed tiles, settings with a header save bar, OneDrive status card, guides tab, EN/ES text and Windows regional formats/time zone; download and upload bandwidth limits (shared virtual-time limiter in Core, live); tray "Open NoDrive..." and pause/autostart.
+- **Done**: WiX v5 per-user MSI with CI artifact (ADR-0012); lifecycle commands; crash restart; index rebuild; adoption of identical files (ADR-0013); optional Switch from OneDrive assistant (scan verified, take-over pending a real run).
+- **Navigation pane**: Windows already adds the sync-root entry; the top group (Home, Gallery, OneDrive) is reserved for the OneDrive known folder and is not available to NoDrive (`research/explorer-ux.md`).
+- **Still to decide**: code signing certificate (needed before sharing the MSI), MSIX/winget packaging, and whether to add a dry-run mode for the take-over.

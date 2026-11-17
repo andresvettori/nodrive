@@ -47,3 +47,7 @@ E1 registration and Flags (ADR-0009)* -> E4 delta ingestion + index (`scale-500k
 ## Artifacts to keep
 
 `spikes/` (all), `memory_bank/research/*`, `memory_bank/decisions/ADR-0001..0009`, the `ci-binaries` branch mechanism, and the PC-side kit (`spikes/remote/*`: SSH enablement, in-session launcher, measurement, matrix, responsiveness, heap repro, state report).
+
+## After P0 (pointer, 2026-11-16)
+
+P0's design implications were implemented in P1. Two P0 assumptions changed later and are recorded as ADRs: hydration policy PROGRESSIVE became Full (ADR-0010) and OneDrive coexistence replaced the refuse-to-start rule (ADR-0013). Current status: `progress.md`.

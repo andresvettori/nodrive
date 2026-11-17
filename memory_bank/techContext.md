@@ -2,6 +2,17 @@
 
 Tech stack, development setup, build commands, constraints and reference material for NoDrive. Versions are as of 2026-11-13. Every version, limit and bug claim carries a source URL from the 2026-11-13 research pass, or is marked "community-reported" (Microsoft Q&A answers from external vendor moderators, forum threads) or "to verify in spike". See `memory_bank/decisions/` for the reasoning behind each choice.
 
+## 0. Current build facts (2026-11-16)
+
+- **Stack as built**: .NET 11 SDK (`global.json`), `NoDrive.Engine` net11.0-windows10.0.26100.0 Native AOT (about 8 MB exe), CsWin32 for Cf*/tray/shell P/Invoke (`NativeMethods.txt`), WinRT `StorageProviderSyncRootManager` for registration, `Microsoft.Data.Sqlite.Core` + `SQLitePCLRaw.provider.winsqlite3` (system SQLite), `System.Text.Json` source generation, `HttpListener` (sign-in loopback and the local settings page), no Graph SDK, no MSAL, no UI framework. Invariant globalization is on, so locale and UI language come from Win32 (`GetUserDefaultLocaleName`, `GetUserDefaultUILanguage`).
+- **Installer**: WiX Toolset **5.0.2** (pinned; v6+ carries the Open Source Maintenance Fee EULA) with `WixToolset.UI.wixext`; `installer/NoDrive.wxs`, `installer/license.rtf`; built by the `windows` workflow (continue-on-error step; the log is published too).
+- **Tools**: `tools/make_icon.py` (pure Python, generates `src/NoDrive.Engine/Assets/nodrive.ico`, embedded via `ApplicationIcon`); `docs/` guides (EN/ES, linked from the settings page to GitHub blob URLs).
+- **CI outputs**: artifacts `engine-win-x64`, `NoDrive-installer-win-x64`, `spikes-win-x64`; branch `ci-binaries` with `engine/`, `installer/`, `BUILD.txt` (commit). The dev flow copies the AOT exe or the MSI to the PC from that branch.
+- **Local web page**: `http://localhost:47653` (config `webPort`), per-run token, see ADR-0011. **Config fields** (`config.json`): `clientId`, `syncRoot`, `hydrationWorkers`, `populationBudget`, `pollActiveSeconds`, `pollIdleMaxSeconds`, `language`, `downloadKiBps`, `uploadKiBps`, `hydrationPolicy`, `webPort`.
+- **Engine commands**: `--status`, `--cleanup [--delete-root]`, `--quit [--wait N]`, `--pending` (exit 3 when queued work), `--uninstall [--force] [--delete-data] [--delete-root]`, `--sync-root`, `--data-dir`.
+- **Dev gotcha**: a locally built, unsigned `NoDrive.Engine.dll` (JIT) can be blocked by Windows Application Control (0x800711C7) on the test PC; test the CI AOT exe or MSI instead. Native AOT ignores `runtimeconfig.template.json` (settings live in `eng/LowFootprint.props`).
+- **Tests**: 48 xunit.v3 tests on Microsoft.Testing.Platform (`dotnet test NoDrive.slnx`), including index, delta, population, hydration policy, read-ahead, Graph with a fake handler, upload and ops journals, bandwidth limiter.
+
 ## 1. Tech stack
 
 | Component | Choice | Version (2026-11-13) | Licence | AOT status | Source |
@@ -33,7 +44,7 @@ Decision records behind this table: [ADR-0001](decisions/ADR-0001.md) cfapi over
 - Install: .NET 11 SDK; Visual Studio 2022 or later (or Build Tools) with the "Desktop development with C++" workload, required by Native AOT publish. Source: https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/
 - Hardware baseline: .NET 11 requires x86-64-v2; fails to start on pre-2013 CPUs. Source: https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/runtime
 - Enable the `Microsoft-Windows-CloudFiles/Operational` event log channel (see Diagnostics).
-- OneDrive.exe must be unlinked from the test account before NoDrive registers its root; NoDrive refuses to start while OneDrive.exe is linked to the same account (plan decision). Two providers cannot nest or overlap sync roots. Source: https://learn.microsoft.com/en-us/windows/win32/api/cfapi/nf-cfapi-cfregistersyncroot
+- OneDrive.exe can stay installed and running (coexistence, ADR-0013); NoDrive just must not register its root inside a folder another provider owns. Two providers cannot nest or overlap sync roots. Source: https://learn.microsoft.com/en-us/windows/win32/api/cfapi/nf-cfapi-cfregistersyncroot
 
 ### Toolchain facts verified while scaffolding (2026-11-13, macOS, .NET SDK 11.0.100)
 
@@ -60,9 +71,10 @@ Decision records behind this table: [ADR-0001](decisions/ADR-0001.md) cfapi over
 - `memory_bank/`: this documentation (core files, `research/`, `decisions/` with the ADRs; no separate docs folder).
 - `NoDrive.slnx`
 - `src/NoDrive.Engine/`: WinExe, `net11.0-windows10.0.26100.0`, `PublishAot`, CsWin32 `NativeMethods.txt` (Cf*, `Shell_NotifyIconW`, window/message-loop functions), GC settings via `RuntimeHostConfigurationOption` in `eng/LowFootprint.props` (sections 4-5).
-- `src/NoDrive.Graph/`: auth (PKCE), DTOs + `JsonSerializerContext`, delta, download, upload session, quickXorHash.
+- `src/NoDrive.Graph/`: auth (PKCE), DTOs + `JsonSerializerContext`, delta, download, upload (simple and session), create folder, delete, move. quickXorHash is not implemented.
 - `src/NoDrive.Core/`: reconciler, index, state machine, abstractions `IRemoteDrive` / `IPlaceholderStore` (testable on macOS).
 - `tests/NoDrive.Core.Tests/`: unit + property tests against the fake Graph server.
+- `installer/` (WiX MSI), `docs/` (guides EN/ES), `tools/` (icon generator).
 - `spikes/`: the P0 measurement apps (throwaway; only the fake server and latency histogram graduate to `tests/`).
 - `.github/workflows/windows.yml`: win-x64 AOT publish + tests on `windows-latest` (optional).
 

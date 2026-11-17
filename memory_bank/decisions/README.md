@@ -14,6 +14,10 @@ One ADR per default decision taken in the approved plan of 2026-11-13. ADRs are 
 | [ADR-0006](ADR-0006.md) | MIT licence for NoDrive; permissive sources only; GPL projects as read-only references | Accepted 2026-11-13 |
 | [ADR-0007](ADR-0007.md) | Lazy population (PopulationPolicy PARTIAL + FETCH_PLACEHOLDERS from the index) and PROGRESSIVE hydration for a 500k-item drive | Accepted 2026-11-13 |
 | [ADR-0009](ADR-0009.md) | Explorer verbs via writing SyncRootManager Flags=1058 after Register (no elevation needed, measured); engine never re-registers an existing root | Accepted 2026-11-14 (provisional) |
+| [ADR-0010](ADR-0010.md) | Full hydration policy (whole file on first access) by default | Accepted 2026-11-15 |
+| [ADR-0011](ADR-0011.md) | Settings and activity UI as a local web page served by the engine | Accepted 2026-11-15 |
+| [ADR-0012](ADR-0012.md) | WiX v5 per-user MSI installer (MSIX later) | Accepted 2026-11-16 |
+| [ADR-0013](ADR-0013.md) | Coexistence with the OneDrive app; adoption of identical files by name, size and modified time | Accepted 2026-11-16 (amends ADR-0008) |
 | [ADR-0008](ADR-0008.md) | Coexistence with OneDrive.exe: detection of a linked personal account and its folder, refuse-to-run rule, adoption of the existing sync folder | Accepted 2026-11-13 |
 
 ## Conventions

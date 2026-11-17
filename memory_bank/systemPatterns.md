@@ -11,6 +11,30 @@ state machine and index already reserve the states it needs.
 
 ---
 
+## 0. As built (2026-11-16): read this first
+
+The sections below are the original design (2026-11-13). The engine as implemented follows the same rules (no I/O in callbacks, bounded queues, journal before mutate, idempotent handlers) with these concrete shapes and deviations:
+
+| Component (all in `src/NoDrive.Engine` unless noted) | What it does | Deviation from the design below |
+|---|---|---|
+| `Program`, `Shell/TrayWindow`, `Lifecycle` | Tray + message loop; commands `--status --cleanup --quit --pending --uninstall`; per-user Global mutex and quit event; in-process crash restart (3 per 10 min) | No Task Scheduler supervisor, no supervisor thread yet |
+| `CloudFiles/CloudProvider` | cfapi callbacks (FETCH_DATA, CANCEL, FETCH_PLACEHOLDERS, NOTIFY_*); interactive and background request lanes; workers complete requests | Delete/rename acks succeed immediately and are posted to `LocalOps`; our own process's deletes/renames are acked but never posted |
+| `CloudFiles/Hydrator`, `Core/Hydration/*` | Downloads through Graph `downloadUrl` with watchdog, throttle policy, failure memory and the shared download limiter | Hydration policy is **Full** (ADR-0010): whole file on first access; read-ahead and the small-file mode only matter in `progressive` mode |
+| `SyncService`, `Core/Sync/DeltaIngestor`, `Core/Index/ItemIndex` | Sign-in state machine, delta ingestion into SQLite with resume and 410 resync, adaptive polling, prefetch | Index file also holds `uploads` (upload journal), `remote_ops` (delete/rename journal), activity metadata |
+| `CloudFiles/RemoteApplier` | Mirrors cloud changes into folders already on disk (create, rename, delete, update/dehydrate) and refreshes Explorer; skips items with a pending local op | Not in the original design (E4b) |
+| `CloudFiles/UploadService` | `FileSystemWatcher` (+ startup scan of populated folders) feeds a journal; 5 s quiet period; two lanes; simple PUT or 5 MiB sessions; conflict copy on clash; conversion to in-sync placeholder; **adoption**: identical files/folders (name, size, mtime) are linked instead of uploaded | Watcher is `FileSystemWatcher`, not raw `ReadDirectoryChangesW`; no USN replay |
+| `CloudFiles/LocalOps` | Replays Explorer deletes and renames in order with If-Match, recycle bin, conflict names and the mass-delete guard (tray "Allow") | As designed |
+| `Web/WebUi` + embedded `Web/index.html` | Local settings and activity page and JSON API (ADR-0011) | Replaces the planned separate `NoDrive.Settings.exe`; no named-pipe IPC |
+| `Infrastructure/ActivityLog` (+ `Core/Net/BandwidthLimiter`) | Bounded in-memory journal (400 entries) persisted to `activity.jsonl`, active transfers, byte counters, shared download/upload limiters | New |
+| `Switching/SwitchAssistant` | Read-only scan of a folder against the index; take-over of a folder with adoption (ADR-0013) | New, optional |
+| `Infrastructure/Coexistence` | Detects OneDrive process/account/Folder Backup (read-only) | Replaces the planned refuse-to-start guard |
+| `src/NoDrive.Graph/GraphDrive` | delta, item GET, download URL, upload (simple and sessions), create folder, delete, move; throttle gate | quickXorHash not implemented |
+| `installer/NoDrive.wxs` | WiX v5 per-user MSI (ADR-0012) | New |
+
+Data files under `%LOCALAPPDATA%\NoDrive`: `config.json`, `index.db` (+wal/shm), `token.bin`, `activity.jsonl`, `paused.flag`, `restarts.txt`, `logs\`. Index tables: `items`, `uploads`, `remote_ops`, `meta` (schema version 3). Where the original text below says PROGRESSIVE, PARTIAL, `NoDrive.Settings.exe`, "refuse to start" or "watcher via ReadDirectoryChangesW + USN", read the table above.
+
+---
+
 ## 1. Overview
 
 ```
@@ -537,7 +561,7 @@ fallback; sync root at `%USERPROFILE%\NoDrive` added to the Search crawl scope; 
 
 ---
 
-### 8.1 Start-up guard and adoption (ADR-0008)
+### 8.1 Coexistence and adoption (ADR-0008, amended by ADR-0013: no start-up refusal)
 
 Start-up order in `Engine/Program`: single-instance mutex -> load `config.json` -> **OneDrive guard** -> auth -> register/connect -> workers. The guard is read-only and unelevated: read `HKCU\Software\Microsoft\OneDrive\Accounts\Personal` (`UserFolder`, `UserEmail`), enumerate `HKLM\...\Explorer\SyncRootManager\OneDrive!<SID>!Personal*`, and call `CfGetSyncRootInfoByPath` on the configured root. Any hit on a linked personal account, or a foreign provider owning the root, means: tray balloon with unlink instructions, exit code 3, no connect. Business-only OneDrive is allowed.
 

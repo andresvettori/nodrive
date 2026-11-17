@@ -334,3 +334,14 @@ feature waits.
    and zero IL2xxx/IL3xxx warnings.** Rationale: `main` must always publish AOT-clean.
 7. **Assistant-made commits carry the `Co-Authored-By` trailer the session is configured with.**
    Rationale: attribution transparency.
+
+## Lessons from the implementation (2026-11-16)
+
+- **Never spawn `explorer.exe` yourself** to show a folder; use ShellExecute on the path (a child explorer.exe could not browse cloud folders).
+- **Acks first, work later**: NOTIFY_DELETE/RENAME and FETCH_* callbacks only validate, enqueue and return; persist the operation (SQLite journal) before touching the network; skip enqueueing for our own process.
+- **Per-user cross-session names**: use `Global\...<SID>` for the single-instance mutex and the quit event (installer, scheduled task and terminal run in different sessions).
+- **Every cancel path completes the request** (success or a failing status); a quiet exit leaves Explorer or the app waiting.
+- **Identical-content adoption beats duplicates**: before uploading a local file that already has a cloud twin (same name, size, mtime), link it; conflict copies are only for real differences.
+- **Wake loops on completion**, never a fixed sleep after a batch (it capped linking at one item per second).
+- **Test with the CI Native AOT exe or MSI**, not an unsigned local JIT build; and open the settings page again after an engine restart (the token changes).
+- **UI rules from user feedback**: a prominent Save bar in the page header, no layout that overflows its card, real file names (never internal ids), Windows regional formats and English/Spanish text, and optional features that never run unless the user opens them.

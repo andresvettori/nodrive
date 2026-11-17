@@ -38,3 +38,7 @@ Research pass 2026-11-13 (one agent, web sources). Evidence labels: **[MS]** Mic
 - Exact consumer sync-root id suffix (`!Personal` vs `!Personal|<driveId>`): check on the test PC.
 - Whether `Accounts\Personal` is removed immediately on unlink or only on sign-out/uninstall: check on the test PC.
 - Cost of `CfConvertToPlaceholder` over 200k files on 24H2/25H2 (P0 step 4/6 extension).
+
+## Status of the implementation (2026-11-16)
+
+Decision changed from "refuse to start" to coexistence (ADR-0013). Read-only detection uses the process list, `HKCU\Software\Microsoft\OneDrive\Accounts\Personal` (`UserEmail`, `UserFolder`) and whether Desktop/Documents/Pictures live under `UserFolder`. Measured on the user's PC: Folder Backup was on for all three; OneDrive was installed and linked but not always running; the read-only scan of the OneDrive folder (about 85,000 items, mostly online-only) took seconds and found 76 identical files, 0 different, 11 only on the PC. The take-over step (unlink first, then adopt) is built but has not been run on a real OneDrive folder.

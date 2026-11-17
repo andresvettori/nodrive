@@ -51,14 +51,19 @@ AOT-publish on Windows.
 dotnet build                                   # whole solution
 dotnet test                                    # cross-platform unit tests (tests/)
 dotnet publish src/NoDrive.Engine -c Release -r win-x64 -p:PublishAot=true   # Windows only
+# MSI (Windows, WiX 5.0.2): see README "Build and test"; CI publishes it as the NoDrive-installer-win-x64 artifact
+# Test on the PC with the CI Native AOT exe or MSI (a local unsigned JIT build can be blocked by Application Control)
 ```
 
 ## Layout
 
 - `src/NoDrive.Core` - reconciler, index, state machine, abstractions (platform neutral, testable anywhere)
 - `src/NoDrive.Graph` - OneDrive via Microsoft Graph: PKCE auth, DTOs, delta, download, upload, quickXorHash
-- `src/NoDrive.Engine` - the always-on Windows process: tray, Cloud Files provider, watcher, supervisor
+- `src/NoDrive.Engine` - the always-on Windows process: tray, Cloud Files provider, upload/ops/applier services, local settings page, lifecycle commands
 - `tests/` - unit and property tests with a fake Graph server
+- `installer/` - WiX v5 per-user MSI (`NoDrive.wxs`), built in CI
+- `docs/` - user guides in English and Spanish (linked from the settings page)
+- `tools/` - small dev tools (icon generator)
 - `spikes/` - P0 measurement and feasibility apps (see memory_bank/projectPlan.md)
 - `memory_bank/` - project memory (see above)
 

@@ -448,3 +448,13 @@ Sources: https://learn.microsoft.com/en-us/answers/questions/2288103/cloud-file-
 10. Behaviour with Fast User Switching / two interactive sessions each running NoDrive with per-user roots.
 11. Exact ACL of `HKLM\...\Explorer\SyncRootManager` for standard users (only matters for Option B).
 12. Does the provider-flyout change (Insider 26220.7271) or the File Explorer Home StorageProvider integration exist on the target GA build, and does the flyout depend on a registered StatusUI source?
+
+## Measured 2026-11-15: packaged apps, cancelled reads and the Full policy (Windows 11 26300.x, user's PC)
+
+- With PROGRESSIVE, Photos (a packaged app) issued partial reads of an online-only JPG (for example `[327680+4096]` of an 886 KB file) and Windows sent CANCEL_FETCH_DATA for them 3 ms to 1.4 s later (the cancel range equals the read range); Photos then reported the file as corrupted. Paint and "Always keep on this device" worked. Our TRANSFER_DATA after a cancel returns 0x8007018E (request cancelled) and the request must be completed with a failing status without leaving it pending.
+- Whole-file fetch on the first read from the provider side was too slow for the app's deadline (Graph URL lookup + download ran past about 1.4 s), so a provider workaround is unreliable.
+- With **Full** the shell shows its own "Downloading" dialog and the app only sees a complete file; Photos, Paint, PDFs and videos open correctly. Explorer thumbnails did not hydrate files (no bandwidth burst); online-only pictures show an icon and downloaded ones a preview.
+- FETCH_DATA callbacks carry no usable path for these requests (`NormalizedPath` was empty); resolve the display name from the item id via the index.
+- Opening a folder by spawning `explorer.exe <path>` from the engine produced a window in which navigating placeholders failed with "Class not registered"; `ShellExecute` on the folder path (the user's running Explorer creates the window) works.
+- TRANSFER_PLACEHOLDERS for an empty folder completes with `PlaceholderArray = null`, count 0 and the DISABLE_ON_DEMAND_POPULATION flag (a non-null array of count 0 failed with 0x8007017C).
+- Moving a placeholder (rename done by our own process) clears the in-sync flag; call `CfSetInSyncState(IN_SYNC)` afterwards or Explorer keeps the "syncing" icon. Self-initiated deletes/renames still raise NOTIFY_DELETE/RENAME; ack them as success and do not enqueue them.

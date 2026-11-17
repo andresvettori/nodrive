@@ -25,3 +25,13 @@ Open the same large online-only file (an mp4 of about 500 MB-1 GB) with each can
 - **UX for whole-file callers**: native toast/progress already shown by Windows; the tray should show "downloading <name> for <app>" with a Cancel action; consider an optional prompt for files above a size threshold opened by a known whole-file app.
 - **Per-caller read-ahead**: for range-friendly callers use the `optional` range sparingly (do not pull the rest of a 1 GB file until the user keeps reading); for whole-file callers there is nothing to save.
 - A short **recommended apps** note for users (which video/PDF/image apps behave well with online-only files), generated from the measured table above.
+
+## Measured 2026-11-15 (user's PC, hydration policy Full)
+
+| App | Behaviour with online-only files | Result |
+|---|---|---|
+| Photos (packaged) | Partial reads, cancelled quickly under PROGRESSIVE | Corrupted image under PROGRESSIVE; works under Full (Downloading dialog first) |
+| Paint, PDF viewers, Edge | Whole-file or sequential reads | Work under both policies |
+| Media Player / Photos video | Whole file needed | Plays after the full download (like OneDrive) |
+| explorer.exe thumbnails | Small reads, many files | Under Full no hydration is triggered; pictures show an icon until downloaded (cloud thumbnails are P2) |
+| Windows Search, antivirus | Background reads | Served from a separate background lane with no read-ahead (progressive mode only) |

@@ -1,70 +1,83 @@
 # Progress
 
-**P0 COMPLETE 2026-11-14: verdict GO, see `p0-results.md`. P1 milestone 1 (read-only mount of the real OneDrive) delivered the same day: see activeContext.**
-
-**Status (2026-11-13):** planning complete, memory bank created and reviewed, repo scaffolded and building (0 warnings) with 2/2 smoke tests green on macOS; P0 spike not started; no engine code runs yet; nothing committed to git.
+**Status 2026-11-16: P0 done (GO); P1 functionally complete for daily use on the author's PC.** Everything below marked
+"verified" was exercised by the user on Windows 11 (Native AOT engine from CI unless noted). Open items are in "Not verified yet" and "Known issues".
 
 ## What works
 
-- **CI run #5 (2026-11-13) AOT-published both spikes with ZERO IL2xxx/IL3xxx warnings**: `cfapi-minimal.exe` 6.06 MB (WinRT `StorageProviderSyncRootManager` projection + CsWin32 function-pointer callbacks + HttpClient/JSON), `aot-baseline.exe` 4.41 MB, `NoDrive.Engine.exe` stub 0.78 MB. The P0 kill criterion "AOT callbacks or WinRT projection unworkable on net11.0" is retired at compile time; runtime behaviour still to be proven on the PC. Caveat: run #5 binaries used default GC settings (runtimeconfig.template.json is ignored by AOT); use run #6 or later.
-- **CI on windows-latest is green (run #2, 2026-11-13, 2m20s):** restore, build, tests, and a **Native AOT publish of `NoDrive.Engine` for win-x64 on .NET 11 succeeded** (artifact `engine-win-x64`, 1.87 MB zipped). The engine is a stub, so this proves the toolchain (CsWin32 build-task bindings + ILC on net11.0-windows10.0.26100.0), not the runtime behaviour. The workflow now also AOT-publishes `aot-baseline` and `cfapi-minimal` and uploads them as `spikes-win-x64`, so the WinRT-projection-under-AOT question is answered by CI and the binaries can be downloaded straight to the test PC.
+- **Registration and Explorer integration** (unpackaged sync root, Flags 1058: Status column, cloud icons, keep/free verbs, nav-pane node; Windows creates the sidebar entry, it cannot join the top Home/Gallery/OneDrive group). Verified.
+- **Browse**: lazy placeholders answered from the SQLite index; background prefetch for heavy folders; empty folders complete cleanly; first sync of about 90k items takes minutes and memory stays flat. Verified.
+- **Download**: hydration policy Full (whole file at first access, Windows shows its own "Downloading" dialog); Photos, Paint, PDFs, videos open correctly; no-progress watchdog, throttle handling, failure memory, shared pooled HttpClient. Keep on device / Free up space with Explorer refresh. Verified.
+- **Remote changes**: delta ingestion with adaptive polling (E4) and mirroring into folders already on disk: create, rename/move (marked in sync), delete (placeholders only), update (dehydrate); Explorer refreshes without F5 (E4b). Verified.
+- **Upload (E5)**: watcher + journal, 5 s quiet period, two lanes, single PUT up to 4 MiB else resumable 5 MiB chunks, conflict copies on name clash, conversion to in-sync placeholders; identical existing files and folders are linked instead of uploaded (name + size + mtime). Verified, including reinstall adoption (0 conflict copies, thousands linked in seconds).
+- **Delete/rename from Explorer (E6)**: acked at once, journalled (`remote_ops`), replayed in order with backoff; delete uses If-Match and the recycle bin; rename conflicts get a conflict name; mass-delete guard (200 per 10 min) with a tray "Allow" action. Verified.
+- **Tray and lifecycle (E7)**: menu (open page, pause/resume persisted, autostart, sign-in, allow deletes, quit), single instance (per-user global mutex), quit event, crash restart (max 3 in 10 min), recoverable sign-in. Verified.
+- **Local settings and activity page**: live transfers with progress, persistent recent activity with selectable last-N, speed tiles, settings with a header save bar, bandwidth limits (download limit verified), EN/ES, Windows regional formats and time zone, guides, OneDrive status card. Verified (upload limit and Spanish text partly).
+- **Installer and uninstall (E8, part)**: WiX v5 per-user MSI built in CI (artifact `NoDrive-installer-win-x64`); install, upgrade, uninstall and reinstall verified; engine commands `--quit`, `--pending`, `--uninstall`; damaged index is rebuilt.
+- **Switch from OneDrive assistant** (optional): read-only scan verified on the real OneDrive folder (identical / online-only / different / only-on-PC); take-over step built, not yet run.
+- **Quality**: 48 unit tests (index, delta, population, hydration policy, read-ahead, Graph with fake handler, upload and ops journals, bandwidth limiter); CI builds, tests and AOT-publishes with zero IL2xxx/IL3xxx warnings; engine idle 10-15 MB private, 15-30 MB under work.
 
-- `spikes/graph-smoke` (JIT console, any OS): PKCE sign-in via browser + loopback, refresh-token grant, `/me/drive`, delta pages with `$top`, item GET with downloadUrl, two Range reads (206). P0 step 1 passed on 2026-11-13.
+## Not verified yet
 
-- `dotnet build NoDrive.slnx` compiles `NoDrive.Core`, `NoDrive.Graph`, `NoDrive.Engine` (Windows TFM, restores on macOS via EnableWindowsTargeting) and `NoDrive.Core.Tests` with 0 warnings under warnings-as-errors.
-- `dotnet test NoDrive.slnx` runs 2/2 scaffold tests (ItemState byte values, 320 KiB upload alignment) on Microsoft.Testing.Platform.
-- `.github/workflows/windows.yml` defines build, test and win-x64 Native AOT publish on windows-latest (not yet executed; repo has no remote).
-- No engine behaviour exists: `NoDrive.Engine.Program.Main` returns 0. CsWin32 generates the Cf*/tray bindings listed in `NativeMethods.txt` but nothing calls them yet.
-- Research findings with sources are recorded in `memory_bank/research/`; decisions in `memory_bank/decisions/`.
+- Upload bandwidth limit with a real upload; Spanish text across all pages.
+- Take-over step of the Switch assistant (needs OneDrive unlinked); behaviour while adoption is linking a very large tree (folders answer "unavailable" until it finishes).
+- Installer wizard wording and the message shown when uninstall is refused (generic MSI error, exit code 3 from `--uninstall`).
+- Native AOT soak (24 h), automated responsiveness harness in CI, manual Explorer checklist (Office save, rename storm, AV scan, kill mid-hydration, reboot).
 
-## What is left
+## P0 summary (done 2026-11-14, verdict GO; details in `p0-results.md`)
 
-Checkboxes mirror `projectPlan.md`. Tick here when the plan row is updated.
+| Question | Result |
+|---|---|
+| Graph on a personal account | PKCE, refresh grant, delta, Range 206 all work; no 403 serviceReadOnly; 136k items enumerated in 6.5 min |
+| AOT footprint | tray idle 4.3 MB private; cfapi provider idle 12.7-14.6 MB, +2.6 MB during a 1.68 GB hydration; OneDrive.exe idle 209 MB |
+| Unpackaged cfapi under AOT | Register, callbacks, hydration, pin/unpin, rename/delete acks all work; zero IL warnings |
+| CfUpdatePlaceholder heap corruption | not reproduced on build 26300.9974 (14,000 calls); keep `--heap-repro` as a regression check |
+| SQLite via winsqlite3 under AOT | works; 500k rows, 60.7 s ingest, peak 33 MB, 10.3 MB after release, 154 MB DB |
+| Explorer responsiveness | 31k-child folder froze Explorer 7-10 s on demand; fixed by background prefetch; fault-injection harness: errors in under 0.2-15 s, probes under 25 ms |
 
-### P0: Spike (2-3 weeks, Windows 11 x64 PC)
-- [x] 1. Entra tenant + app registration (client ID 6711e7c6-ec09-42df-a5bb-bfb449119fdc, settings verified by the user 2026-11-13); PKCE sign-in with the real account and refresh-token grant both work (`spikes/graph-smoke`, run on macOS); `/me/drive/root/delta` succeeds, no 403 serviceReadOnly; `$top=1000` honoured approximately (1019-1201 items/page); downloadUrl present on plain item GET (not with `$select`); Range requests return 206 at arbitrary offsets. Details in `research/graph-onedrive.md` ("Measured" section). Full-drive enumeration: 136,411 items (17,286 folders, 119,125 files) in 129 pages / 6.5 min, no throttling, 88 MiB JSON
-- [x] 2. **DONE for the decision (2026-11-14): AOT tray idle 4.3 MB private / 14.5 MB WS (20 min); AOT HttpClient 1 GB burst peak 9.0 MB, 6.4 MB after the release GC; AOT cfapi provider idle 12.7-14.6 MB and +2.6 MB during a 1.68 GB pin hydration, +2.5 MB after 60 s; OneDrive.exe idle 209 MB private / 142 MB WS. Hello and JIT-variant rows and the rclone reference remain optional.** Earlier note: Tray variant measured 2026-11-14 on the user's PC: 4.3 MB private / 14.5 MB WS idle for 20 min, 3-5 threads** (target < 30 MB). Still to run: hello and JIT variants, the 1 GB burst (`--item ... --limit-mb 1024`), OneDrive.exe reference row, `measure.ps1` CSVs. Native AOT memory baseline on .NET 11: hello-world, tray-only, tray + 1 GB download; AOT vs JIT; OneDrive.exe and rclone mount reference rows; measurement table filled
-- [x] 3. **Native AOT build verified on the PC too (2026-11-14): hydrate-on-read 1.6 s, rename/delete acks 11/9 ms, pin hydrates, unpin of a renamed (not-in-sync) file is refused by Windows with 0x80070179 (the safety rule enforced by the platform), unpin of an in-sync file dehydrates.** Pin/unpin implemented in the spike (`PinWatcher`): hydrate on pin 2.4 s, dehydrate on unpin 17 ms. Also: the spike keeps an existing registration and writes Flags=1058 only on fresh registration when elevated (ADR-0009 design).** **PASSED 2026-11-14 (unpackaged cfapi provider, user-verified in Explorer): native Status column, standard cloud icons and 'Always keep / Free up space' verbs once `Flags=1058` is written after `Register` (ADR-0009); remaining nuance: nav-pane node not explicitly confirmed, AOT runtime not yet run on the PC (CI compiles it).** SSH-driven tests 2026-11-14 (JIT build, same PC): hydration works end to end (14 KB to 1.7 GB, data intact, memory flat at 16-21 MB), rename/delete acks 8 ms, provider-down open fails in 17 ms (0x80070194), `--cleanup` 581 ms and deletes the 164 unhydrated placeholders as documented. FINDING: Windows requests the WHOLE file at open (`required=[0+size]`) even with PROGRESSIVE, so the opener blocks for the full download; investigate (see research/cfapi.md).** Still open: Explorer visual checks (nav pane, Status column, verbs), Explorer double-click/media-player behaviour. **First run 2026-11-14 on Win11 26H2 (26300.9974): `StorageProviderSyncRootManager.Register` worked unpackaged under Native AOT, `CfConnectSyncRoot` ok, 200 placeholders created, idle 10.6 MB private.** Not yet exercised: Explorer nav-pane/Status check, hydration (no FETCH_DATA seen because no file was opened), rename/delete acks, provider-kill test, `--cleanup`. Unpackaged sync root under PublishAot: Register, placeholders from a delta page, PROGRESSIVE FETCH_DATA via downloadUrl Range; nav pane, Status column, verbs and progress confirmed on the target build; zero IL2xxx/IL3xxx from our code
-- [x] 4. **DONE 2026-11-14: heap corruption NOT reproduced on Win11 26H2 build 26300.9974 (14,000 CfUpdatePlaceholder calls, 3 variants incl. 4 threads, heap validate OK, no crash events); keep `cfapi-minimal --heap-repro` as a per-build regression check; use CfUpdatePlaceholder sparingly.** CfUpdatePlaceholder heap-corruption repro on the dev build; decision recorded
-- [x] 5. **PASSED 2026-11-14: `Microsoft.Data.Sqlite.Core` + `SQLitePCLRaw.provider.winsqlite3` + source-generated STJ publish Native AOT with zero IL2xxx/IL3xxx warnings (5.30 MB exe, no native SQLite shipped, uses System32 winsqlite3.dll 3.53.4); 500,000 rows inserted and queried on the user's PC (spikes/scale-500k).** 500k-row insert/query
-- [~] 6. **USER-OBSERVED PROBLEM: on-demand population of a 31,030-child folder freezes the Explorer window 7-10 s (busy cursor, no hang state). Not tunable (batch/parallel matrix: 4.8-5.3 s provider regardless). FIX PROVEN: background prefetch (`Prefetcher`): 6.4 s off the user path, foreground listing unaffected, then cold open 1.1 s with 0 callbacks; awaiting the user's Explorer confirmation. Plan item E3c.** cfapi half measured by SSH 2026-11-14: FETCH_PLACEHOLDERS answered from the 500k index with population FULL; 31,030-child folder populated in 6.5 s (32 batches), root in 39 ms, callbacks 0.1-5 ms, +2.5 MB provider memory. Pending: the user's visual Explorer check of responsiveness while opening that folder cold.** Index half PASSED 2026-11-14 (Native AOT, user's PC): 500,000 items ingested in 60.7 s locally (network-bound against real Graph), peak private 33.0 MB, 10.3 MB after release, DB 154 MB (323 B/row), 30,030-child folder listed from the index in 153 ms (first 512 rows 3.1 ms), 100k lookups 16 us each, incremental 5,000 changes 0.87 s, interrupt+resume exact. Memory independent of item count (50k vs 500k peaks within 2 MB). STILL OPEN: the cfapi half (FETCH_PLACEHOLDERS answered from this index under real Explorer, PARTIAL population).** Fake Graph server 500k-item scale test: first-sync time, index size, peak/idle memory, 30k-child FETCH_PLACEHOLDERS latency
-- [x] 7. **DONE 2026-11-14 (`spikes/remote/responsiveness.ps1`, fake server with fault injection): throttling error 0.18 s, stall error 15.2 s, reset recovered, slow-but-alive OK, kill -> error 0.2 s and clean restart, 4 concurrent hydrations OK (peak 18.3 MB); Explorer-style probes median < 5 ms, max 25 ms in every scenario.** Responsiveness harness: callback-latency histogram, pending-request age tracker, fault-injecting fake server (429/timeout/expired URL/network loss/200-instead-of-206)
-- [x] Kill/go decision written: **GO** (`memory_bank/p0-results.md`); open questions answered there
+## P1 checklist (mirrors `projectPlan.md`)
 
-### P1: v1 (2-3 months)
-- [ ] E1 Registration and placeholders (PARTIAL population, PROGRESSIVE hydration, crawl scope, overlap check, never unregister on exit)
-- [~] E1b OneDrive coexistence: detection card + guide done; switch assistant in progress
-- [ ] E2 Lazy enumeration from the index only, batched and paginated; unsupported items excluded and listed
-- [ ] E3 Progressive hydration: bounded workers, Range with 200 fallback, pooled chunked TRANSFER_DATA, progress every 15 s, watchdog failure path, RECOVER and cancel handling
-- [ ] E4 Delta ingestion and index: streamed `$select` delta, resumable, deletes-first, duplicates, 410 resync, adaptive polling, global Retry-After gate, User-Agent, minimal CfUpdatePlaceholder with oplocks
-- [x] E5 upload of new files and folders (verified on PC)
-- [x] E6 delete/rename propagation (verified on PC)
-- [ ] E7 Tray and lifecycle: tray menu with pause and free-up-space/keep-offline fallbacks, HKCU Run, single instance, restart-on-failure, graceful disconnect, refuse to run beside OneDrive.exe
-- [ ] E8 Recovery and uninstall: journal replay, USN cursor reconcile, RECOVER re-drive, hydrate-or-warn before Unregister
-- [ ] E9 Memory hygiene: GC knobs, HeapHardLimit, Aggressive collect after bursts, short-lived pooled connections, no idle timers
-- [ ] E10 Responsiveness harness in CI; supervisor thread; all cross-cutting acceptance tests green; 24 h soak passed
-- [ ] Manual Explorer checklist passed (Notepad, Photos, Office save, rename storm, Free up space, AV scan, kill mid-hydration, reboot)
-- [ ] v1 tagged
+- [x] E1 Registration and placeholders (policy Full, population Full + prefetch; never unregister on exit; sync root moves are handled)
+- [~] E1b OneDrive coexistence: allowed (side by side); detection card, guide and the optional switch assistant done; take-over unverified; no OneDrive.exe refusal by design
+- [x] E2 Lazy enumeration from the index only
+- [x] E3 Hydration (Full policy; Range with 200 fallback kept; progress; watchdog; cancel handling; read-ahead only used by the progressive mode)
+- [x] E3b Pin/unpin handling; [x] E3c Background population
+- [~] E3d Caller diagnostics: caller stats in the log report and the activity page; no dedicated UX
+- [x] E4 Delta ingestion and index (+ E4b mirror into populated folders)
+- [x] E5 Upload of new files and folders (+ adoption of identical files)
+- [x] E6 Delete/rename propagation with guards
+- [x] E7 Tray, pause, autostart, single instance, crash restart; [x] E7a Setup flags 1058
+- [~] E8 Recovery and uninstall: journals replayed, index rebuild, MSI uninstall with pending-work check; USN cursor reconcile not done
+- [~] E9 Memory hygiene: GC knobs in `eng/LowFootprint.props`, bounded queues and buffers, measured 15-30 MB; no explicit post-burst aggressive collect
+- [~] E10 Responsiveness harness: PowerShell harness from P0 exists; CI harness and 24 h soak not done
+- [x] Installer (WiX MSI) and CI artifacts; [ ] code signing
+- [ ] Manual Explorer checklist complete; [ ] v1 tagged
+
+### P1.5 (added 2026-11-15)
+- [x] App icon (tray, folder, installer), local settings/activity page (EN/ES), persistent activity journal, bandwidth limits, OneDrive status card, guides in `docs/`
+- [~] Switch from OneDrive assistant (scan verified, take-over pending a real run)
 
 ### P2
-- [ ] Folder backup (Known Folder Move) support for Desktop/Documents/Pictures via IKnownFolderManager::Redirect, pinned by default, reversible; shell verification matrix passed
-- [ ] In-place editing with If-Match, 412 conflict copies, echo suppression, Office save-storm debounce, USN replay
-- [ ] Pin/unpin handling and self-dehydration on FILE_ATTRIBUTE_UNPINNED
-- [ ] Thumbnail COM local server backed by Graph /thumbnails
-- [ ] StatusUI flyout (feature-detected)
-- [ ] socket.io wake-up channel
-- [ ] Settings window as a separate on-demand AOT process
-- [ ] Metered-network, power events, bandwidth cap
-- [ ] Transfer layer ready for tempauth URL retirement (2027-04-01, consumer scope unclear)
+- [ ] Editing existing files: If-Match uploads, 412 conflict copies, echo suppression, Office save-storm debounce, USN replay (first item: changes to existing files are not uploaded today)
+- [ ] Cloud thumbnails for online-only pictures (thumbnail COM server backed by Graph `/thumbnails`)
+- [ ] Known Folder Move support for Desktop/Documents/Pictures (only guidance and detection exist)
+- [ ] StatusUI flyout; socket.io wake-up; metered-network and power events; parallel segment download (single connection is about 14 MB/s); tempauth URL retirement readiness (2027-04-01); MSIX/winget packaging once code signing exists
 
 ### P3 (optional)
-- [ ] Signed sparse package for Windows 11 modern context-menu entries
-- [ ] File Explorer Home integration when stable
-- [ ] macOS (File Provider) / Linux exploration
+- [ ] Signed sparse package for modern context-menu entries; Explorer Home integration; macOS (File Provider) / Linux (the web page is already portable)
 
-## Known issues and risks
+## Known issues
 
-Nothing is implemented, so there are no product bugs yet. The items below are platform and toolchain hazards the design already accounts for; see `projectPlan.md` section 7 for mitigations.
+- **Edits to files already in the cloud are not uploaded** (v1 scope; P2). Local edits stay local.
+- **Online-only pictures show no preview thumbnail**; Explorer does not hydrate for thumbnails under the Full policy (by design, no bandwidth burst). Cloud thumbnails are P2.
+- **Large videos download completely before they play** (same as OneDrive). The earlier progressive-streaming problem (choppy Photos playback, hang on pause) is moot under Full and the progressive mode is kept only as a switch.
+- **Navigation pane**: NoDrive stays in the lower group; the top group is reserved for the OneDrive known folder (`research/explorer-ux.md`).
+- **Unsigned binaries** can be blocked by Windows Application Control / Smart App Control (seen as 0x800711C7 on freshly built JIT DLLs). The CI AOT exe and MSI run fine on the author's PC; wider distribution needs signing.
+- **Uninstall while work is queued** aborts with a generic Windows Installer error (the reason is in the log and `--pending`).
+- A single download connection reaches about 14 MB/s; parallel segment download is a P2 idea.
+- Adoption matches files by name, size and modified time (no hash yet); a changed file with identical size and mtime would be linked, not uploaded.
+
+## Platform and toolchain risks (still valid; see `projectPlan.md` section 7 for mitigations)
 
 ### Platform bugs and pitfalls (cfapi / Explorer)
 - `CfUpdatePlaceholder` heap corruption on Windows 11 24H2/25H2, open since Nov 2024, community-reported (https://learn.microsoft.com/en-us/answers/questions/2120335/heap-corruption-after-using-cfupdateplaceholder); repro at https://github.com/iterate-ch/CloudFiles-HeapCorrupt. Verify in P0 step 4.
@@ -117,12 +130,12 @@ Nothing is implemented, so there are no product bugs yet. The items below are pl
 | 2026-11-13 | Responsiveness and correctness are hard requirements above features; 9 design rules, 6 acceptance tests | User's OneDrive.exe experience: 4 GB RAM, Explorer hangs, dialogs stuck at "0 files remaining" | plan section "Non-negotiable" |
 | 2026-11-13 | Windows 11 only, 24H2 + Aug 2025 CU minimum | cldflt.sys changed in the Aug 2025 patch; Windows 10 22H2 under ESU shares the API baseline but is untested (effort, not support, is the reason) | plan |
 | 2026-11-13 | Remote deletes to recycle bin only; mass-delete threshold pauses sync | Data-loss guard; permanentDelete exists on personal but is never the default | plan |
-
-## Known issue: large-video playback in Photos (deferred 2026-11-14)
-Undownloaded ~3.5 GB mp4 in Photos plays choppy; seeking (e.g. minute 5) fails with "can't play the file"; pause once hung the player.
-Tried: read-ahead (1 to 32 MiB), RequestKey-keyed cancellation, two request lanes (explorer/search/AV in background lane, no read-ahead). Not fixed.
-Evidence: single connection about 14 MB/s; explorer thumbnails fetched 12x requested bytes; no Photos.exe entries in caller stats.
-Next ideas when revisited: per-request timing log for Photos, parallel segment download (`--bench`), verify every request completes on cancel/ReadAheadStopped paths. Workaround: "Always keep on this device" for videos.
-
-## Status 2026-11-15
-Working on the PC: browse (lazy + prefetch), on-demand download (Full policy), keep/free, remote changes mirrored (E4b), upload of new files/folders (E5), delete/rename propagation with mass-delete guard (E6, built, not yet verified by the user), sign-in recovery. Not done: cloud thumbnails (P2), edits of existing files (P2), E7, E8, E1b. Known issue deferred: nothing blocking now (video streaming is moot under Full).
+| 2026-11-14 | Hybrid population: background prefetch of heavy folders (about 1,875+ children) plus on-demand fallback | On-demand costs about 160 us per placeholder inside Windows and froze Explorer 7-10 s on a 31k-child folder; measured, not tunable | ADR-0007 (amended) |
+| 2026-11-14 | Sync-root Flags 1058 written after Register, without elevation | Gives the OneDrive-like Status column, icons and verbs; re-registering resets it, so never re-register an existing root | ADR-0009 |
+| 2026-11-14 | Coexistence with OneDrive.exe allowed; adoption by name + size + mtime instead of refusing to start | User keeps OneDrive installed; two clients on one account behave like two computers | ADR-0008 (amended), ADR-0013 |
+| 2026-11-15 | Hydration policy FULL (whole file on first access) instead of PROGRESSIVE | Photos cancels slow partial reads and calls JPGs corrupted; OneDrive behaves the same way (Downloading dialog); thumbnails do not hydrate | ADR-0010 |
+| 2026-11-15 | Settings and activity UI is a local web page served by the engine, not WinForms/Avalonia | Zero UI framework in the always-on AOT process, same page reusable on macOS/Linux, EN/ES, regional formats from the browser | ADR-0011 |
+| 2026-11-15 | Bandwidth limits via a shared virtual-time limiter (Core), live-configurable | OneDrive parity; works for downloads and uploads without extra threads | plan P1.5 |
+| 2026-11-15 | Remote changes are mirrored into populated folders; Explorer deletes/renames are acked at once and journalled (no more read-only) | Delete/rename acks must never wait for the network; journal makes replay idempotent after crashes | plan E4b, E6 |
+| 2026-11-16 | Installer = WiX v5.0.2 per-user MSI (not Inno Setup, not MSIX yet) | User's choice; v6+ carries the maintenance-fee EULA; MSIX needs a signing certificate | ADR-0012 |
+| 2026-11-16 | Optional "Switch from OneDrive" assistant; the installer stays side-by-side only | User approval; never unlinks, uninstalls or changes Folder Backup itself | plan P1.5 |

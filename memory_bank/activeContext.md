@@ -1,67 +1,39 @@
 # Active context
 
-Updated at the end of every session. Read this file after `projectbrief.md` and before touching code.
+Updated at the end of every session. Read this file after `projectbrief.md` and before touching code. Current status and checklists are in `progress.md`; the plan is in `projectPlan.md`.
 
-- User insight (2026-11-14): knowing which apps behave well with online-only files improves UX a lot; recorded in `research/app-compatibility.md` and plan item E3d (Media Player is the modern Windows 11 app and still requests whole files; others still to be measured).
+## Current focus (2026-11-16)
 
-## Pending (2026-11-14, token-saving mode)
+P1 is functionally complete and in daily use on the author's PC. The last session added the installer (WiX MSI), the lifecycle commands, the optional Switch-from-OneDrive assistant and a full documentation pass. What remains is verification and polish, then P2:
 
-Engine build with read-ahead + Explorer-style pin detection (open-callback hints, in-use retries) is deployed on the PC (`nodrive-dev\engine`, log `engine6.log`). Waiting for the user's tests: video playback via Photos on an undownloaded video (see `--status`/report line for requested vs fetched bytes), keep/free on files. Next candidates: parallel segment download (single connection measured ~14 MB/s vs 300 Mbit/s line; add `--bench`), E4b apply remote changes to populated folders, E6 delete/rename propagation, E5 upload, E1b adoption.
+1. User checks still open: upload bandwidth limit with a real upload, Spanish text on every page, Switch assistant take-over (needs OneDrive unlinked), installer wizard wording.
+2. Engineering gaps: automated responsiveness harness in CI and a 24 h soak on the AOT build, manual Explorer checklist, post-burst GC, USN reconcile, a clearer message when uninstall is refused, code signing (decision pending).
+3. P2 candidates in the order I would propose: edits to existing files (today they are not uploaded), cloud thumbnails, Known Folder Move support, parallel segment download, socket.io wake-up.
 
-## P1 milestone 1 delivered (2026-11-14): read-only mount of the real OneDrive
+## Architecture in one paragraph (as built)
 
-`src/NoDrive.Core` (item index, delta ingestor with resume/410 resync, population planner, hydration policy), `src/NoDrive.Graph` (GraphDrive, ThrottleGate, PKCE authenticator), `src/NoDrive.Engine` (DPAPI token store, registrar with the Flags rule, provider with bounded queues, hydrator with the P0 failure policy, populator, prefetcher, pin watcher, sync service, tray). 34 unit tests (Mac and Windows). Run on the user's PC against the real drive: sign-in via PKCE, first sync of about 91k items in 250 s at 23 MB private, folders appear in Explorer (root listing 6 ms), Camera (4,469 children) prefetched in 0.9 s.
+One always-on Native AOT process (`NoDrive.Engine.exe`): Win32 tray + message loop; Cloud Files provider (callbacks only validate, enqueue, return; workers do the I/O); SyncService (sign-in, delta ingestion into SQLite, prefetch); RemoteApplier (mirrors cloud changes into folders on disk); UploadService (watcher + journal + adoption of identical files); LocalOps (replays Explorer deletes/renames with If-Match and the mass-delete guard); Hydrator (whole-file downloads, watchdog, shared limiter); WebUi (localhost settings and activity page, embedded HTML, EN/ES); Lifecycle (`--quit`, `--pending`, `--uninstall`, crash restart); SwitchAssistant (scan and take-over). Core and Graph stay platform neutral and testable on macOS. Details: `systemPatterns.md`.
 
-Known gaps in M1 (all planned): read-only (delete/rename are refused; no upload), remote changes after the first sync update the index but are not pushed into folders already populated on disk (E4b), no OneDrive.exe adoption (E1b), AOT engine build not yet re-verified after the sign-in fixes, tray has no pause. Sign-in is a recoverable state: tray "Sign in..." (a slow user earlier left the first AOT build stuck on a dead listener: fixed, tested).
+## Dev loop and test environment
 
-Dev loop on the PC: `NODRIVE_SCRATCH=<dir> spikes/remote/mac-sync-src.sh` (stop the engine first, the build overwrites its files), then `start-in-session.ps1 -Exe ...\nodrive-dev\engine\NoDrive.Engine.exe`.
+- Dev box: macOS; test PC: the user's personal Windows 11 x64 notebook (<PC_IP> over SSH from iTerm2; helper scripts in `spikes/remote/`: `mac-pc.sh`, `mac-put.sh`, `mac-sync-src.sh`, `start-in-session.ps1`; engine is started in the interactive session through a scheduled task).
+- **Test the CI Native AOT exe, not a local JIT build**: freshly built unsigned DLLs can be blocked by Windows Application Control (0x800711C7). Flow: push to `main`, wait until `git fetch origin ci-binaries` shows the commit in `BUILD.txt`, copy `engine/NoDrive.Engine.exe` (or `installer/NoDrive-x64.msi`) to the PC (`C:\Users\<PC_USER>\nodrive-aot`, `Downloads`), stop the old engine (`--quit` or kill), start with `start-in-session.ps1`. The MSI can be upgraded in place with `msiexec /i ... /qn SUPPRESSLAUNCH=1`.
+- The activity page token changes on every engine start; a page left open shows a stale notice. Open it again from the tray.
+- Keep token use low: the user is near their budget; batch edits, avoid re-reading large files.
 
-## Current focus (updated 2026-11-14): P0 finished, verdict GO
+## Active decisions (current)
 
-Read `p0-results.md` first. Next: start P1 in the order recommended there (E1 registration with Flags 1058, then the delta/index pipeline, population, hydration with watchdog). The PC is clean (no sync roots, tasks or processes); `index500k.db` and the AOT binaries stay under `C:\Users\<PC_USER>\nodrive-dev` and `nodrive-aot` for later runs.
-
-## Previous focus (2026-11-13)
-
-- Plan approved; memory bank created from the plan and the 2026-11-13 research pass and reviewed for fidelity and consistency; repository scaffolded and verified: `NoDrive.slnx` with `NoDrive.Core`, `NoDrive.Graph`, `NoDrive.Engine` (net11.0-windows10.0.26100.0, PublishAot, CsWin32 NativeMethods list) and `NoDrive.Core.Tests`; `dotnet build` is clean (0 warnings, warnings-as-errors) and `dotnet test` passes 2/2 on macOS. `CLAUDE.md`, `README.md`, `LICENSE` (MIT), `.github/workflows/windows.yml` (build, test, win-x64 AOT publish) exist. Nothing has been committed to git yet (repo initialised, all files untracked). The engine's `Main` is a stub.
-- Next milestone: **P0 spike** on the user's physical Windows 11 x64 PC (this planning session ran on macOS; Native AOT cannot cross-compile, https://learn.microsoft.com/dotnet/core/deploying/native-aot/cross-compile).
-- The spike's job is to retire two risks before any engine code: cfapi behaviour on the user's 24H2/25H2 build, and Native AOT on .NET 11 (GA 2026-11-10, STS, support ends Nov 2028: https://devblogs.microsoft.com/dotnet/announcing-dotnet-11/).
-
-## Recent changes
-
-- Research pass completed: 5 topic reports (cfapi, graph, oss, memory, ux), 5 skeptic verdicts, 1 completeness critique. Corrections from the skeptics are folded into the memory bank (notably: Vanara.PInvoke.CldApi is 5.0.8; PrimalZed/CloudSync is GPL-3.0; permanentDelete works on personal accounts; sharedWithMe/recent officially deprecated after Nov 2026; Windows App SDK is 2.6.5; "Microsoft confirmed" Q&A statements are vendor-moderator, community-reported; `System.GC.RegionSize` is a runtimeconfig setting since .NET 10; `ShouldEvictConnection` is `[Experimental]`; MSAL core is AOT-compatible since 4.77.1 but the WAM broker package is not; upload-session default conflictBehavior is `fail` while simple PUT defaults to `replace`; Microsoft.Extensions.Hosting AOT status unverified; `CF_OPERATION_ACK_DATA_FLAG_CANCELED` does not exist).
-- Decisions confirmed with the user (see below).
-- Hard requirement added to the plan: NoDrive must never hang or block Explorer, never leave dialogs stuck, never balloon memory. Nine design rules and six measurable acceptance tests now gate every release (`projectPlan.md` sections 0 and 6, `systemPatterns.md`).
-
-## Immediate next steps (ordered)
-
-1. **P0 step 1: DONE 2026-11-13** (`spikes/graph-smoke`: PKCE sign-in, refresh grant, drive, delta `$top`, downloadUrl, Range 206 all verified against the real account; no 403). Full-drive enumeration measured: 136,411 items, 129 pages, 6.5 min, no throttling. Original step text: verify the registration settings (public client, `AzureADandPersonalMicrosoftAccount`, redirect `http://localhost`, scopes `Files.ReadWrite offline_access`); sign in with the real personal account via hand-rolled PKCE; call `/me/drive/root/delta`. Confirms the reported 403 `serviceReadOnly` (community-reported, https://learn.microsoft.com/en-us/answers/questions/5983388/personal-onedrive-newly-consented-apps-get-403-acc) does not bite.
-2. **P0 step 2:** Native AOT memory baseline on .NET 11 (hello-world, tray-only, tray + 1 GB HttpClient download), AOT vs JIT, against OneDrive.exe and rclone mount on the same PC. Fill the measurement table in `projectPlan.md` section 2.3.
-3. **P0 step 3:** unpackaged `StorageProviderSyncRootManager.Register`, placeholders from one delta page, PROGRESSIVE `FETCH_DATA` from `downloadUrl` Range requests, all under `PublishAot`; confirm nav pane, Status column, verbs on the target build.
-4. Then P0 steps 4-7 (heap-corruption repro, winsqlite3 under AOT, 500k fake-server scale test, responsiveness harness), in any order.
-5. Before starting code: unlink OneDrive.exe from the account on the test PC (NoDrive refuses to start while it is linked), and note the exact OS build and cumulative update in the spike README.
-6. Set up the Windows PC: .NET 11 SDK (already installed), Visual Studio 2022+ "Desktop development with C++" workload for Native AOT (https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/), enable the `Microsoft-Windows-CloudFiles/Operational` event log.
-
-## Active decisions and status
-
-| Decision | Status | Notes |
+| Decision | Status | Where |
 |---|---|---|
-| cfapi provider, not a custom Explorer-like client | confirmed | ADR-0001; explorer.exe renders everything, engine stays headless |
-| .NET 11 + Native AOT first; fall back to .NET 10 LTS AOT, then trimmed JIT | confirmed, gated by P0 | ADR-0002; kill criteria in `projectPlan.md` 2.4 |
-| Hand-rolled auth-code + PKCE + system browser + loopback + DPAPI; MSAL/WAM deferred | confirmed | ADR-0003; WAM broker package not AOT-analysed and not single-file bundlable |
-| No Microsoft.Graph SDK; HttpClient + System.Text.Json source generators, about 10 endpoints | confirmed | ADR-0004 |
-| Index in SQLite via system winsqlite3.dll; fallback raw P/Invoke, then custom binary store | confirmed, verify in P0 step 5 | ADR-0005 |
-| MIT licence; permissive sources only, GPL projects read for protocol knowledge | confirmed | ADR-0006 |
-| PopulationPolicy PARTIAL with lazy FETCH_PLACEHOLDERS from the index; design for 500k items | confirmed | ADR-0007; never pre-create hundreds of thousands of placeholders |
-| v1 scope = browse, download, upload new files; in-place editing in P2 | confirmed | |
-| NoDrive replaces OneDrive.exe for the account; refuse to start while OneDrive.exe is linked | confirmed | |
-| Unpackaged in v1; no package identity; registry-based shell integration | confirmed | sparse package only in P3 if modern context-menu entries are wanted |
-| HydrationPolicy PROGRESSIVE, AUTO_DEHYDRATION_ALLOWED, InSync on LastWriteTime | default, verify Range behaviour in P0 step 3 | |
-| Windows 11 only, 24H2 with Aug 2025 CU or later | default | Windows 10 22H2 under ESU shares the API baseline but is untested |
-| Remote deletes go to recycle bin only; mass-delete threshold pauses sync | default | permanentDelete exists on personal but is never the default |
-| Thumbnails in P2 unless the user keeps photos in OneDrive | open, ask during P0 | |
-| OneDrive.exe guard (refuse while personal account linked), former-folder auto-detection, adoption of existing files in v1 (E1b) | confirmed 2026-11-13 | ADR-0008; unlink leaves only ordinary files, so adoption is metadata-only; KFM-redirected folders excluded in v1 |
-| Change wake-up: adaptive delta polling in v1, socket.io in P2 | default | |
-| Settings UI: tray + browser sign-in + JSON config in v1; real window (Avalonia 12 or WinUI 3) later | default | |
+| cfapi provider, headless engine, .NET 11 Native AOT, hand-rolled PKCE, no Graph SDK, SQLite via winsqlite3, MIT | confirmed and built | ADR-0001..0006 |
+| Hybrid population (index + background prefetch + on-demand) | confirmed | ADR-0007 |
+| Coexistence with OneDrive.exe allowed; adoption by name + size + mtime; optional switch assistant; installer stays side by side | confirmed 2026-11-16 | ADR-0008, ADR-0013 |
+| Flags 1058 without elevation; never re-register an existing root | confirmed | ADR-0009 |
+| Hydration policy Full (whole file on open) | confirmed 2026-11-15 | ADR-0010 |
+| Settings and activity UI = local web page served by the engine | confirmed 2026-11-15 | ADR-0011 |
+| Installer = WiX v5.0.2 per-user MSI; MSIX later if signing exists | confirmed 2026-11-16 | ADR-0012 |
+| v1 scope: browse, download, upload new files, delete/rename; editing existing files is P2 | confirmed | `projectbrief.md` |
+| Remote deletes to the recycle bin with If-Match; mass-delete guard 200 per 10 min | built | plan E6 |
 
 ## Important patterns and preferences (about the user)
 
@@ -74,15 +46,14 @@ Read `p0-results.md` first. Next: start P1 in the order recommended there (E1 re
 - **Uses OneDrive "Back up folders"** (Desktop, Documents, Pictures redirected into OneDrive). Migration must turn backup off before unlinking; native folder-backup support is the first P2 item (`research/known-folder-move.md`).
 - The Windows 11 x64 PC is the user's **personal notebook**, not a company-managed device.
 - Has .NET 11 installed and a physical Windows 11 x64 PC for building and testing; this planning session ran on macOS.
+- **Prefers to decide at checkpoints and to test each step on the PC** ("go ahead", "let's move on"); answers with screenshots; wants every Save button prominent, previews and layouts clean, and the web page to follow Windows language (EN/ES) and regional format.
+- **Optional features stay optional**: the Switch assistant never runs unless opened; the installer never touches OneDrive.
 
 ## Open questions
 
-See `projectPlan.md` section 8 for the full table with the resolving spike step. The ones that can kill the project:
-- Unpackaged registration showing nav pane and Status column on the user's build (P0 step 3).
-- CsWinRT projection and cfapi function-pointer callbacks under Native AOT on net11.0 (P0 step 3).
-- Fresh personal-account app getting 403 serviceReadOnly (P0 step 1).
-
-Non-blocking: CfUpdatePlaceholder heap corruption status (step 4), winsqlite3 AOT (step 5), consumer delta `$top` and real first-sync time (step 6), verb placement and indexing of the sync root (step 3), photos/thumbnails (ask).
+- Code signing certificate (Azure Trusted Signing about 10 USD/month vs none): needed before giving the MSI to other people.
+- Whether to add edits-to-existing-files before or after cloud thumbnails (both P2).
+- Whether the Switch assistant's take-over should get an extra rehearsal mode (dry run on a copy) before the author uses it for real.
 
 ## Session log
 
@@ -132,22 +103,8 @@ Non-blocking: CfUpdatePlaceholder heap corruption status (step 4), winsqlite3 AO
 - First PC run done 2026-11-14 (see session log): tray idle 4.3 MB, cfapi registration + 200 placeholders OK under AOT; hydration not yet exercised.
 - Next: on the notebook `git clone git@github.com:andresvettori/nodrive.git` (or HTTPS), run `.\spikes\onedrive-state.ps1`, then runbook steps 2 and 3; expect to iterate on the cfapi spike with real callback behaviour.
 
-## 2026-11-14 decision
-Video playback problem deferred by the user; moving on with E4b (remote changes into populated folders), then E6 delete/rename, E5 upload. See progress.md "Known issue".
-E4b implemented (2026-11-14): `RemoteApplier` (Engine/CloudFiles) mirrors delta changes into populated folders: create placeholder, rename/move, delete (placeholders only, never real local files), update size/time + dehydrate via CfUpdatePlaceholder (file busy: logged, skipped). Hooked through `DeltaIngestor.BeforePage`; skipped during first enumeration and 410 full resync. NOTIFY_DELETE/RENAME from our own process are acked success; users stay read-only. Untested on the PC until the user changes something on onedrive.com. Known gaps: orphaned child rows if Graph omits child deletions; busy-file updates are not retried; stale placeholders after a full resync.
-E4b verified on the PC (2026-11-14): remote create/rename/delete appear in populated folders; Explorer refreshes without F5 via SHCNE_UPDATEDIR. Next: E5 upload of new files, then E6 delete/rename from Explorer.
-E5 implemented (2026-11-14), untested on the PC: `UploadService` (Engine/CloudFiles) + `GraphDrive.UploadNewFileAsync/CreateFolderAsync` + `uploads` journal table (schema v2) in ItemIndex. Watcher records new real (non-reparse) files/folders, 5 s quiet period, 2 lanes, files <= 4 MiB single PUT else 5 MiB chunked session, conflictBehavior=fail with "(NoDrive conflict ...)" copy on 409, then CfConvertToPlaceholder(MARK_IN_SYNC). Startup scan of populated folders queues files added while the engine was off. Edits to existing files are NOT uploaded (P2). Delete/rename from Explorer still refused (E6).
-E5 verified on the PC (2026-11-14). Next: E6 delete/rename from Explorer.
-E6 implemented (2026-11-14), untested on the PC: delete/rename in Explorer are acked at once (success) and posted to `LocalOps` (Engine/CloudFiles), journalled in the `remote_ops` table (schema v3), replayed in order with backoff. Delete = Graph DELETE with If-Match (recycle bin; 412 keeps the file and the delta restores it); rename/move = PATCH with conflictBehavior=fail then a "(NoDrive conflict ...)" name; rename to outside the sync root (Recycle Bin) = delete. Mass-delete guard: 200 deletions per 10 min, then held until tray "Allow N held deletions...". RemoteApplier skips items with a pending op so a deleted file is not recreated. Own-process deletes/renames (RemoteApplier) are acked but never posted.
-2026-11-15: Photos "corrupted JPG" solved by the Full hydration policy (ADR-0010). Also fixed empty-folder population (null placeholder array). Open check: Explorer thumbnails under Full (bandwidth, memory); update techContext/systemPatterns wording that still says PROGRESSIVE.
-2026-11-15 user verification under Full policy (ADR-0010): videos download fully before playing (as OneDrive); Explorer thumbnails appear only in medium+ icon sizes and only for already-downloaded pictures (no bandwidth burst). Cloud thumbnails for online-only pictures = P2 (thumbnail provider COM server). Remaining P1: E7 tray pause/autostart/lifecycle, E8 recovery/uninstall, E1b OneDrive.exe guard/adoption + KFM, AOT engine re-verify in CI, memory/responsiveness harness.
-E7 (part): tray "Pause syncing/Resume" (flag file paused.flag in the data dir; pauses ingest, upload, delete/rename replay; on-demand downloads continue) and "Start NoDrive with Windows" (HKCU Run) added 2026-11-15. E6 verified by the user.
-2026-11-15: CI green (windows #63, AOT publish of the engine, commit 31ebc2e). AOT engine (8 MB exe from ci-binaries) copied to C:\Users\<PC_USER>\nodrive-aot and started on the PC: starts in about 1 s, delta ok, private 15 MB / working set 36 MB with 90,879 items (log nodrive-dev\aot1.log). User functional test of the AOT build pending (open photo, upload, rename/delete, pause).
-2026-11-15 P1.5 built (untested on PC until the user opens it): local settings/activity page (Engine/Web/WebUi.cs + Web/index.html embedded; http://localhost:47653, per-run token cookie, Host check, X-NoDrive header on POST), tray "Open NoDrive..." and double-click; ActivityLog (400 entries, 32 transfers) fed by download/upload/applier/ops/sync; BandwidthLimiter (Core, tested) applied to downloads (Hydrator) and uploads (GraphDrive) live from config downloadKiBps/uploadKiBps; config fields language/hydrationPolicy/webPort; EN/ES strings in the page, formats follow Windows regional culture (GetUserDefaultLocaleName) and browser timezone; guides in docs/*.{en,es}.md linked from the Help tab (GitHub URLs). Engine runs with invariant globalization, so locale comes from Win32.
-2026-11-16 user verified the download limit (works) and liked the Activity screen. Settings page reworked after feedback: header save bar (blue when unsaved), grid overflow fix, grouped "About this setup" card with Open buttons, stale-page notice (a restart issues a new token), activity journal persisted in activity.jsonl. Still to verify by the user: upload limit, Spanish text, activity entries.
-2026-11-16: activity list shows real file names (index lookup, Windows gives no path on FETCH_DATA); folders open via ShellExecute (a child explorer.exe gave "Class not registered"); Explorer-driven downloads (>=256 KiB) are logged. IMPORTANT dev note: freshly JIT-built NoDrive.Engine.dll can be blocked by Windows Application Control (0x800711C7) on the PC; run the CI Native AOT exe instead (git fetch origin ci-binaries; copy engine/NoDrive.Engine.exe to C:\Users\<PC_USER>\nodrive-aot; start with start-in-session.ps1). Next candidates: E8 recovery/uninstall, E1b OneDrive.exe detection/adoption + KFM, upload limit and Spanish checks by the user.
-2026-11-16 E1b (detection part): Infrastructure/Coexistence.cs reads OneDrive.exe presence, HKCU\Software\Microsoft\OneDrive\Accounts\Personal (UserEmail, UserFolder) and Known Folder Backup (Desktop/Documents/Pictures inside the OneDrive folder); the settings page shows a "OneDrive on this PC" card; guide docs/onedrive-coexistence.{en,es}.md. Policy: coexistence allowed (like a second computer), no adoption/migration code, NoDrive never changes OneDrive settings.
-2026-11-16 Installer + lifecycle (E8 part): WiX v5.0.2 per-user MSI (installer/NoDrive.wxs, built in CI step "Build MSI installer", published to ci-binaries/installer/NoDrive-x64.msi, log msi-build.log; WiX pinned to v5 to stay on MS-RL, v6+ has the OSMF fee EULA). Install dir %LOCALAPPDATA%\Programs\NoDrive, Start menu shortcut, optional autostart (AUTOSTART=0 to skip), launches the engine after install; MajorUpgrade keeps the sync root; uninstall runs `NoDrive.Engine.exe --uninstall` (quit, refuse with exit 3 while uploads/ops are pending, unregister sync root, remove autostart; downloaded files stay). Engine commands: --quit [--wait N], --pending, --uninstall [--force --delete-data --delete-root]; quit event and single-instance mutex are per-user Global names (work across sessions; verified over SSH). Crash restart (max 3 per 10 min) and index rebuild on corruption added. Upload adoption: a local file with the same name, size and modified time (+-2 s) as the cloud item is linked (converted to a placeholder) instead of uploaded or conflict-copied; an existing cloud folder of the same name is linked and its files matched. MSIX is a later option (needs signing); Inno was dropped in favour of WiX by the user's decision.
-2026-11-16 decision (user): BUILD the "Switch from OneDrive" assistant (web page tab): read-only completeness scan of the OneDrive folder against the cloud index, guided steps for the parts only OneDrive can do (stop Folder Backup keeping files in place, unlink), then "take over" the folder (unregister the old NoDrive root, set syncRoot, restart, adopt identical files by name+size+mtime). NoDrive never switches off Folder Backup, unlinks or uninstalls OneDrive itself and never deletes user files. Pending user test: install the MSI (CI artifact NoDrive-installer-win-x64 or ci-binaries/installer), uninstall/reinstall with the newest build.
-2026-11-16 Switch assistant built (untested on the PC): Engine/Switching/SwitchAssistant.cs (read-only scan classifying files as same/cloud-only/differs/local-only without enumerating unpopulated OneDrive folders; Blockers; TakeOver writes config.syncRoot + meta adopt.pending then the engine restarts), WebUi /api/switch, /api/switch/scan, /api/switch/takeover, and a "Switch from OneDrive" tab. SyncRootRegistrar replaces the registration when the configured path differs from the registered one. During adoption (meta adopt.pending=1, until the upload journal drains) FETCH_PLACEHOLDERS is answered "unavailable" so population cannot collide with existing plain files; UploadService queues the root's real entries and links identical files (name+size+mtime). Optional by design: the installer and normal runs never trigger it; side-by-side stays the default. Test with scan only first; take-over needs OneDrive Folder Backup off and the account unlinked.
-2026-11-16 verified on the PC: MSI install, uninstall (files stay) and reinstall; reinstall linked thousands of existing folders/files to their cloud copies ("already in the cloud: linked") with 0 conflict copies; loop speed-up (wake on job completion) took linking from 1/s to thousands in seconds; MSI upgrade over the installed build (QuitEngine + replace) works; engine private memory 15 to 29 MB. Switch assistant scan verified read-only (OneDrive running/installed/not installed wording fixed). Take-over itself not yet run on a real OneDrive folder.
+### 2026-11-15 and 2026-11-16 (condensed)
+- 2026-11-14 evening: first real-OneDrive mount, Flags 1058, prefetch, read-ahead (later dropped from the default path), sign-in recovery, pin detection.
+- 2026-11-15: Photos "corrupted JPG" traced to Photos cancelling slow partial reads; fixed by the Full hydration policy (ADR-0010). Empty-folder population fixed (null placeholder array). E4b (mirror remote changes), E5 (upload), E6 (delete/rename), E7 (pause, autostart, crash restart) built and verified. AOT engine verified on the PC (15 MB). App icon; Explorer top navigation group is not available to third parties.
+- 2026-11-15/16: local settings and activity page (EN/ES), activity journal, bandwidth limits, OneDrive status card, sticky save bar, name lookup for downloads, ShellExecute for folders.
+- 2026-11-16: WiX v5 MSI + CI artifact; `--quit/--pending/--uninstall`; per-user global mutex and quit event; index rebuild; adoption of identical files (fixes reinstall duplicates); loop wake-up fix (linking from 1/s to thousands in seconds); Switch from OneDrive assistant (scan verified); full documentation update.
