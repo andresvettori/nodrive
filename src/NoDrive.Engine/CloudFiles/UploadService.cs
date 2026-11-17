@@ -85,7 +85,9 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                             if (!_active.ContainsKey(j.Path)) { _active[j.Path] = ProcessAsync(j.Path, j.Attempts, ct); }
                         }
                     }
-                    await Task.Delay(TimeSpan.FromSeconds(_active.Count == 0 ? 3 : 1), ct).ConfigureAwait(false);
+                    // Wake as soon as any running job finishes: linking an existing file takes milliseconds, a fixed pause would cap the rate at one item per second.
+                    if (_active.Count == 0) { await Task.Delay(TimeSpan.FromSeconds(3), ct).ConfigureAwait(false); }
+                    else { await Task.WhenAny(_active.Values.Append(Task.Delay(TimeSpan.FromSeconds(1), ct))).ConfigureAwait(false); }
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
                 catch (Exception ex) { Log.Warn($"upload loop: {ex.Message}"); await Task.Delay(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false); }
