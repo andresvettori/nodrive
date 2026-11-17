@@ -10,3 +10,4 @@
 - **The uninstall stops with an error**: NoDrive found uploads, deletes or renames that have not reached OneDrive yet. Start NoDrive, wait until the Activity page shows nothing waiting, then uninstall again (`NoDrive.Engine.exe --pending` shows the count).
 - **Windows blocks NoDrive or the installer**: unsigned programs can be stopped by Smart App Control or Application Control (error 0x800711C7 for freshly built files). Use the official MSI; a signed release is planned.
 - **The settings page says it is out of date**: NoDrive restarted; open the page again from the tray icon.
+- **Anything else**: create a report and send it (see the report-a-problem guide): tray icon > Report a problem...

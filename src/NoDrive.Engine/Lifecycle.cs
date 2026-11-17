@@ -83,6 +83,7 @@ internal static class Lifecycle
             try
             {
                 Log.Error($"unhandled exception, restarting: {e.ExceptionObject}");
+                try { File.WriteAllText(Path.Combine(paths.LogDir, $"crash-{DateTime.Now:yyyyMMdd-HHmmss}.txt"), $"{Diagnostics.Header()}{Environment.NewLine}{e.ExceptionObject}"); } catch (IOException) { }
                 string file = Path.Combine(paths.DataDir, "restarts.txt");
                 var recent = File.Exists(file) ? File.ReadAllLines(file).Select(l => DateTime.TryParse(l, null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d : DateTime.MinValue).Where(d => DateTime.UtcNow - d < TimeSpan.FromMinutes(10)).ToList() : [];
                 if (recent.Count < 3 && Environment.ProcessPath is { } exe)

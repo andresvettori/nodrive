@@ -61,6 +61,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
     }
 
     public Switching.SwitchAssistant? Assistant { get; private set; }
+    public ItemIndex? Index => _index;
     public OfflineReconciler? Reconciler { get; private set; }
     public bool IndexReady => _indexReady;
     public long PendingOps => _index?.CountOps() ?? 0;

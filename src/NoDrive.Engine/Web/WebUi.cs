@@ -28,6 +28,9 @@ internal sealed class CoexistenceDto { public bool OneDriveRunning { get; set; }
 internal sealed class StateDto
 {
     public CoexistenceDto Coexistence { get; set; } = new();
+    public int HeldMissing { get; set; }
+    public string LastReconcile { get; set; } = "";
+    public string SupportId { get; set; } = "";
     public string Version { get; set; } = "";
     public string Status { get; set; } = "";
     public bool Paused { get; set; }
@@ -66,6 +69,7 @@ internal sealed class SwitchDto
 }
 internal sealed class ActivityDto { public long LastId { get; set; } public List<ActivityEntry> Entries { get; set; } = []; }
 internal sealed class SaveResultDto { public bool Ok { get; set; } public bool RestartRequired { get; set; } public string? Error { get; set; } }
+internal sealed class ReportDto { public bool Ok { get; set; } public string? Path { get; set; } public string? Error { get; set; } }
 internal sealed class FlagDto { public bool Value { get; set; } }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
@@ -74,6 +78,7 @@ internal sealed class FlagDto { public bool Value { get; set; } }
 [JsonSerializable(typeof(SettingsDto))]
 [JsonSerializable(typeof(SaveResultDto))]
 [JsonSerializable(typeof(FlagDto))]
+[JsonSerializable(typeof(ReportDto))]
 [JsonSerializable(typeof(FolderDto))]
 [JsonSerializable(typeof(SwitchDto))]
 internal sealed partial class WebJson : JsonSerializerContext { }
@@ -109,10 +114,13 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
         _ = Task.Run(() => LoopAsync(ct), CancellationToken.None);
     }
 
-    public void Open()
+    public void Open() => Open(null);
+
+    /// <summary>Opens the page in the default browser, optionally on a tab (for example "help").</summary>
+    public void Open(string? tab)
     {
         if (_listener is null) { return; }
-        try { Process.Start(new ProcessStartInfo(Url) { UseShellExecute = true }); }
+        try { Process.Start(new ProcessStartInfo(tab is null ? Url : Url + "#" + tab) { UseShellExecute = true }); }
         catch (Exception ex) { Log.Warn($"could not open the browser: {ex.Message}"); }
     }
 
@@ -183,6 +191,21 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
                         if (ok) { SwitchAssistant.RestartEngine(); _ = Task.Delay(800).ContinueWith(_ => TrayWindow.RequestQuit(), TaskScheduler.Default); }
                         break;
                     }
+                case ("POST", "/api/reconcile/run"): service.Reconciler?.RequestRun(); Json(ctx, new SaveResultDto { Ok = service.Reconciler is not null }, WebJson.Default.SaveResultDto); break;
+                case ("POST", "/api/reconcile/restore"): Json(ctx, new SaveResultDto { Ok = (service.Reconciler?.RestoreHeld() ?? 0) >= 0 }, WebJson.Default.SaveResultDto); break;
+                case ("POST", "/api/reconcile/delete"): Json(ctx, new SaveResultDto { Ok = (service.Reconciler?.ConfirmDeleteHeld() ?? 0) >= 0 }, WebJson.Default.SaveResultDto); break;
+                case ("POST", "/api/support/report"):
+                    {
+                        bool names = (await ReadAsync(ctx, WebJson.Default.FlagDto).ConfigureAwait(false))?.Value ?? true;
+                        try
+                        {
+                            string zip = await Task.Run(() => SupportBundle.Create(paths, config, service.Index, names)).ConfigureAwait(false);
+                            ShellOpen.Folder(Path.GetDirectoryName(zip)!);
+                            Json(ctx, new ReportDto { Ok = true, Path = zip }, WebJson.Default.ReportDto);
+                        }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Json(ctx, new ReportDto { Ok = false, Error = ex.Message }, WebJson.Default.ReportDto); }
+                        break;
+                    }
                 case ("POST", "/api/signin"): service.RequestSignIn(); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
                 case ("POST", "/api/allow-deletes"): service.AllowDeletes(); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
                 case ("POST", "/api/open-folder"): OpenFolder(paths.SyncRoot); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
@@ -222,6 +245,9 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
             UptimeSeconds = (long)(now - _started).TotalSeconds,
             BytesDown = ActivityLog.BytesDown,
             BytesUp = ActivityLog.BytesUp,
+            HeldMissing = service.Reconciler?.HeldCount ?? 0,
+            LastReconcile = service.Reconciler is { LastRunUtc: { } lr } r ? $"{lr:O}|{r.LastSummary}" : "",
+            SupportId = Diagnostics.SessionId,
             Coexistence = ToDto(Infrastructure.Coexistence.Detect(paths.SyncRoot)),
             OsLanguage = OsLanguage(),
             OsCulture = OsCulture(),
@@ -315,10 +341,10 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
     }
 
     /// <summary>Windows display language ("en", "es"); the engine runs with invariant globalization, so ask Win32.</summary>
-    private static string OsLanguage() => (PInvoke.GetUserDefaultUILanguage() & 0x3FF) switch { 0x0A => "es", _ => "en" };
+    internal static string OsLanguage() => (PInvoke.GetUserDefaultUILanguage() & 0x3FF) switch { 0x0A => "es", _ => "en" };
 
     /// <summary>Windows regional format as a BCP-47 tag (for example es-AR): drives date, time and number formats in the page.</summary>
-    private static unsafe string OsCulture()
+    internal static unsafe string OsCulture()
     {
         Span<char> buf = stackalloc char[85];
         fixed (char* p = buf)

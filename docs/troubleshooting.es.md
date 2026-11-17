@@ -10,3 +10,4 @@
 - **La desinstalación termina con un error**: NoDrive encontró subidas, eliminaciones o cambios de nombre que todavía no llegaron a OneDrive. Iniciá NoDrive, esperá a que la página de Actividad no muestre nada pendiente y desinstalá de nuevo (`NoDrive.Engine.exe --pending` muestra la cantidad).
 - **Windows bloquea NoDrive o el instalador**: los programas sin firmar pueden ser detenidos por Smart App Control o Control de aplicaciones (error 0x800711C7 en archivos recién compilados). Usá el MSI oficial; se planea una versión firmada.
 - **La página de ajustes dice que está desactualizada**: NoDrive se reinició; abrila de nuevo desde el icono de la bandeja.
+- **Cualquier otra cosa**: creá un informe y enviálo (mirá la guía de informar un problema): icono de la bandeja > Report a problem...

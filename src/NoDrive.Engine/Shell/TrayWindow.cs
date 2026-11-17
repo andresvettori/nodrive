@@ -22,6 +22,11 @@ internal static unsafe class TrayWindow
     private const nuint IdPause = 6;
     private const nuint IdAutostart = 7;
     private const nuint IdOpenUi = 8;
+    private const nuint IdReport = 9;
+    private static Action? s_onReport;
+
+    /// <summary>Opens the page on its "report a problem" section.</summary>
+    public static void SetReportProblem(Action onReport) => s_onReport = onReport;
     private static Action? s_onOpenUi;
     private static Action? s_onResume;
 
@@ -148,6 +153,7 @@ internal static unsafe class TrayWindow
             fixed (char* pPause = (s_isPaused?.Invoke() == true ? "Resume syncing" : "Pause syncing"))
             fixed (char* pAuto = "Start NoDrive with Windows")
             fixed (char* pUi = "Open NoDrive...")
+            fixed (char* pReport = "Report a problem...")
             fixed (char* pOpen = "Open NoDrive folder")
             fixed (char* pQuit = "Quit NoDrive")
             {
@@ -155,6 +161,7 @@ internal static unsafe class TrayWindow
                 if (s_needsSignIn?.Invoke() == true) { PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdSignIn, new PCWSTR(pSign)); }
                 if ((s_heldDeletes?.Invoke() ?? 0) > 0) { PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdAllowDeletes, new PCWSTR(pAllow)); }
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdOpenUi, new PCWSTR(pUi));
+                PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdReport, new PCWSTR(pReport));
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdPause, new PCWSTR(pPause));
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING | (s_autostartOn?.Invoke() == true ? MENU_ITEM_FLAGS.MF_CHECKED : 0), IdAutostart, new PCWSTR(pAuto));
                 PInvoke.AppendMenu(menu, MENU_ITEM_FLAGS.MF_STRING, IdOpenFolder, new PCWSTR(pOpen));
@@ -164,6 +171,7 @@ internal static unsafe class TrayWindow
             nuint cmd = (nuint)PInvoke.TrackPopupMenuEx(menu, flags, pt.X, pt.Y, s_hwnd, null).Value;
             if (cmd == IdOpenFolder) { s_onOpenFolder?.Invoke(); }
             else if (cmd == IdOpenUi) { s_onOpenUi?.Invoke(); }
+            else if (cmd == IdReport) { s_onReport?.Invoke(); }
             else if (cmd == IdPause) { s_onTogglePause?.Invoke(); }
             else if (cmd == IdAutostart) { s_onToggleAutostart?.Invoke(); }
             else if (cmd == IdAllowDeletes) { s_onAllowDeletes?.Invoke(); }

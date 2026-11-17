@@ -13,8 +13,15 @@ internal static class Log
     {
         s_dir = logDir;
         Directory.CreateDirectory(logDir);
-        foreach (var old in Directory.EnumerateFiles(logDir, "engine-*.log").Where(f => File.GetLastWriteTimeUtc(f) < DateTime.UtcNow.AddDays(-7))) { TryDelete(old); }
+        // Keep 14 days and at most about 60 MB of logs and crash notes, oldest first.
+        foreach (var old in Directory.EnumerateFiles(logDir).Where(f => File.GetLastWriteTimeUtc(f) < DateTime.UtcNow.AddDays(-14))) { TryDelete(old); }
+        var files = new DirectoryInfo(logDir).EnumerateFiles().OrderByDescending(f => f.LastWriteTimeUtc).ToList();
+        long total = 0;
+        foreach (var f in files) { total += f.Length; if (total > 60L * 1024 * 1024) { TryDelete(f.FullName); } }
     }
+
+    /// <summary>First line of every run: version, session id, system, language. Lets a report be matched to its log in seconds.</summary>
+    public static void Header(string header) => Write("INFO ", "==== " + header);
 
     public static void Info(string message) => Write("INFO ", message);
     public static void Warn(string message) => Write("WARN ", message);
