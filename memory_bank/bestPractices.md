@@ -345,3 +345,4 @@ feature waits.
 - **Wake loops on completion**, never a fixed sleep after a batch (it capped linking at one item per second).
 - **Test with the CI Native AOT exe or MSI**, not an unsigned local JIT build; and open the settings page again after an engine restart (the token changes).
 - **UI rules from user feedback**: a prominent Save bar in the page header, no layout that overflows its card, real file names (never internal ids), Windows regional formats and English/Spanish text, and optional features that never run unless the user opens them.
+- **Folders converted from plain folders must be told to fill in from the cloud** (`CF_CONVERT_FLAG_ENABLE_ON_DEMAND_POPULATION` or `CfUpdatePlaceholder` with ENABLE_ON_DEMAND_POPULATION); otherwise Windows treats them as complete and cloud-only files never appear. Never drop a journal entry when a conversion fails: retry with backoff.
