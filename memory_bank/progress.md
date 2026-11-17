@@ -79,6 +79,8 @@
 
 ## Known issues
 
+- **Smart App Control blocks new unsigned builds (found 2026-11-17, S1 for distribution):** on a PC with SAC on, a newly built unsigned `NoDrive.Engine.exe` does not run (Application Control policy). Needs a trusted code signature before friends-and-family distribution (self-signed certificates do not help). Workaround on a test PC: turn SAC off (one-way on many builds) or keep running an already-approved older build.
+
 - **Reinstall adoption bug (fixed and verified on the PC 2026-11-16):** after uninstall and reinstall some folders were empty or missing cloud-only files; see `activeContext.md`. A repair walk ran once; linking falls back to a shared and then an attribute-only handle when Explorer has the folder open; population of folders with local entries tolerates existing names. Benign log noise remains: CfCreatePlaceholders 0x800700B7 (name exists) and mark-populated 0x80070178 on adopted folders.
 - **Online-only pictures show no preview thumbnail**; Explorer does not hydrate for thumbnails under the Full policy (by design, no bandwidth burst). Cloud thumbnails are P2.
 - **Large videos download completely before they play** (same as OneDrive). The earlier progressive-streaming problem (choppy Photos playback, hang on pause) is moot under Full and the progressive mode is kept only as a switch.

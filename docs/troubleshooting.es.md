@@ -11,3 +11,4 @@
 - **Windows bloquea NoDrive o el instalador**: los programas sin firmar pueden ser detenidos por Smart App Control o Control de aplicaciones (error 0x800711C7 en archivos recién compilados). Usá el MSI oficial; se planea una versión firmada.
 - **La página de ajustes dice que está desactualizada**: NoDrive se reinició; abrila de nuevo desde el icono de la bandeja.
 - **Cualquier otra cosa**: creá un informe y enviálo (mirá la guía de informar un problema): icono de la bandeja > Report a problem...
+- **"Una directiva de Control de aplicaciones bloqueó este archivo"**: Smart App Control de Windows solo ejecuta programas firmados o conocidos y NoDrive todavía no está firmado. Pedí una versión firmada a quien te dio NoDrive; no intentes saltear el bloqueo.
