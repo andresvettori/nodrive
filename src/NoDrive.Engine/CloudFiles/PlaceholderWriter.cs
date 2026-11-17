@@ -124,6 +124,21 @@ internal static unsafe class PlaceholderWriter
         finally { PInvoke.CfCloseHandle(h); }
     }
 
+    /// <summary>
+    /// Tells Windows a materialised directory still has cloud children to add (it will call FETCH_PLACEHOLDERS for it). A directory converted from a
+    /// plain folder is otherwise considered complete, which leaves the cloud files that were never downloaded missing from Explorer.
+    /// </summary>
+    public static bool EnableOnDemandPopulation(string directory)
+    {
+        HANDLE h = default;
+        fixed (char* p = directory)
+        {
+            if (PInvoke.CfOpenFileWithOplock(new PCWSTR(p), CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_WRITE_ACCESS, &h).Failed) { return false; }
+        }
+        try { return PInvoke.CfUpdatePlaceholder(h, null, null, 0, null, 0, CF_UPDATE_FLAGS.CF_UPDATE_FLAG_ENABLE_ON_DEMAND_POPULATION, null, null).Succeeded; }
+        finally { PInvoke.CfCloseHandle(h); }
+    }
+
     private static CF_PLACEHOLDER_CREATE_INFO BuildEntry(IndexedItem item, List<nint> allocations)
     {
         nint name = Marshal.StringToHGlobalUni(item.Name);

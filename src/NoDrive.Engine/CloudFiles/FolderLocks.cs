@@ -18,6 +18,17 @@ internal sealed class PopulationState
     public PopulationState(ItemIndex index, string rootId) { _index = index; RootId = rootId; }
     public string RootId { get; }
 
+    /// <summary>Disk path of a folder id (names from the index), or null when an ancestor is unknown.</summary>
+    public string? PathOfFolder(string folderId, string syncRoot)
+    {
+        if (folderId == RootId) { return syncRoot; }
+        var chain = _index.PathTo(folderId, RootId);
+        var parts = new string[chain.Count + 1];
+        parts[0] = syncRoot;
+        for (int i = 0; i < chain.Count; i++) { if (_index.GetName(chain[i]) is not { } n) { return null; } parts[i + 1] = n; }
+        return Path.Combine(parts);
+    }
+
     public bool IsPopulated(string folderId) => folderId == RootId ? _index.GetMeta(RootKey) == "1" : _index.TryGet(folderId)?.Populated == true;
 
     public void Set(string folderId, bool populated)

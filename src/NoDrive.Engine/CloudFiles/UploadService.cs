@@ -108,12 +108,13 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
     private async Task ScanPopulatedAsync(CancellationToken ct)
     {
         int n = 0, queued = 0;
-        if (index.GetMeta("adopt.pending") == "1")
+        if (index.GetMeta("adopt.pending") == "1" || index.GetMeta("repair.v2") != "1")
         {
-            // Switching to an existing folder: queue what is already in the root; folders are linked first and then queue their own children.
-            var first = Directory.EnumerateFileSystemEntries(syncRoot).Where(e => !Ignored(e) && IsRealLocal(e)).ToList();
-            if (first.Count > 0) { index.EnqueueUploads(first, DateTime.UtcNow.Ticks); queued += first.Count; }
-            Log.Info($"adoption: {first.Count} entries in the new folder queued for linking");
+            // Adoption / repair walk: every plain entry under materialised folders is queued for linking, and every materialised folder is told it still has cloud children.
+            var (q, fixedDirs) = await WalkAndRepairAsync(syncRoot, ct).ConfigureAwait(false);
+            queued += q;
+            index.SetMeta("repair.v2", "1");
+            Log.Info($"adoption walk: {q} entries queued for linking, {fixedDirs} folders set to fill in from the cloud");
         }
         foreach (var id in population.PopulatedSet())
         {
@@ -127,6 +128,42 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             if (++n % 200 == 0) { await Task.Delay(50, ct).ConfigureAwait(false); }
         }
         if (queued > 0) { Log.Info($"upload scan: {queued} local item(s) queued"); }
+    }
+
+    private const FileAttributes RecallOnOpen = (FileAttributes)0x40000, RecallOnDataAccess = (FileAttributes)0x400000;
+
+    /// <summary>
+    /// Walks the sync root through folders that exist on disk (never into online-only folders: that would make Windows populate them). Plain entries are queued for
+    /// linking; placeholder folders get on-demand population enabled so cloud files that were never downloaded show up when they are opened.
+    /// </summary>
+    private async Task<(int Queued, int Fixed)> WalkAndRepairAsync(string root, CancellationToken ct)
+    {
+        int queued = 0, fixedDirs = 0, visited = 0;
+        var pending = new Stack<string>();
+        pending.Push(root);
+        var batch = new List<string>();
+        while (pending.Count > 0)
+        {
+            ct.ThrowIfCancellationRequested();
+            string dir = pending.Pop();
+            try
+            {
+                foreach (var e in new DirectoryInfo(dir).EnumerateFileSystemInfos())
+                {
+                    var a = e.Attributes;
+                    bool reparse = (a & FileAttributes.ReparsePoint) != 0;
+                    if (!reparse) { if (!Ignored(e.FullName)) { batch.Add(e.FullName); } continue; }       // plain file or folder: link it (children are queued once the folder is linked)
+                    if ((a & FileAttributes.Directory) == 0 || (a & (RecallOnOpen | RecallOnDataAccess)) != 0) { continue; }   // placeholder file, or an online-only folder
+                    if (PlaceholderWriter.EnableOnDemandPopulation(e.FullName)) { fixedDirs++; }
+                    pending.Push(e.FullName);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log.Warn($"adoption walk skipped {dir}: {ex.Message}"); }
+            if (batch.Count >= 500) { index.EnqueueUploads(batch, DateTime.UtcNow.Ticks); queued += batch.Count; batch.Clear(); }
+            if (++visited % 100 == 0) { await Task.Delay(20, ct).ConfigureAwait(false); }
+        }
+        if (batch.Count > 0) { index.EnqueueUploads(batch, DateTime.UtcNow.Ticks); queued += batch.Count; }
+        return (queued, fixedDirs);
     }
 
     private string? PathOfFolder(string id)
@@ -207,7 +244,14 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             }
 
             if (!adopted) { index.ApplyPage([DeltaChange.Upsert(item)], "upload.last", item.Id, index.Generation); }
-            bool converted = ConvertToPlaceholder(finalPath, item.Id);
+            bool converted = ConvertToPlaceholder(finalPath, item.Id, onDemand: isDir && adopted);
+            if (!converted)
+            {
+                // Usually a sharing violation (the item is open in Explorer). The cloud side is done and in the index: retry the link later, never forget it.
+                if (act is not null) { ActivityLog.End(act, "ok", "uploaded; linking later"); act = null; }
+                Defer(path, attempts, TimeSpan.FromSeconds(30), bump: true);
+                return;
+            }
             if (isDir) { if (!adopted) { population.Set(item.Id, true); } QueueChildren(finalPath); }
             index.RemoveUpload(path);
             if (act is not null) { ActivityLog.End(act, "ok", finalPath != path ? "conflict copy" : null); act = null; }
@@ -274,7 +318,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
     }
 
     /// <summary>Turns the uploaded local file or folder into an in-sync placeholder (content stays on disk).</summary>
-    private static unsafe bool ConvertToPlaceholder(string path, string itemId)
+    private static unsafe bool ConvertToPlaceholder(string path, string itemId, bool onDemand)
     {
         HANDLE h = default;
         fixed (char* p = path)
@@ -287,7 +331,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             byte[] id = System.Text.Encoding.UTF8.GetBytes(itemId);
             fixed (byte* pid = id)
             {
-                HRESULT hr = PInvoke.CfConvertToPlaceholder(h, pid, (uint)id.Length, CF_CONVERT_FLAGS.CF_CONVERT_FLAG_MARK_IN_SYNC, null, null);
+                HRESULT hr = PInvoke.CfConvertToPlaceholder(h, pid, (uint)id.Length, CF_CONVERT_FLAGS.CF_CONVERT_FLAG_MARK_IN_SYNC | (onDemand ? CF_CONVERT_FLAGS.CF_CONVERT_FLAG_ENABLE_ON_DEMAND_POPULATION : 0), null, null);
                 if (hr.Failed) { Log.Warn($"convert {path} -> 0x{hr.Value:X8}"); }
                 return hr.Succeeded;
             }

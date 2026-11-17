@@ -97,7 +97,8 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
 
         Assistant = new Switching.SwitchAssistant(_index, rootId, paths, config);
         var population = new PopulationState(_index, rootId);
-        if (fresh || !Directory.Exists(paths.SyncRoot)) { population.ResetAll(); }          // a new registration has no placeholders yet
+        if (fresh || !Directory.Exists(paths.SyncRoot)) { population.ResetAll(); }
+        if (fresh && Directory.Exists(paths.SyncRoot) && Directory.EnumerateFileSystemEntries(paths.SyncRoot).Any()) { _index.SetMeta("adopt.pending", "1"); }   // a reinstall over existing files: link them, then let Explorer fill in the rest          // a new registration has no placeholders yet
         var locks = new FolderLocks();
         var policy = new HydrationPolicy();
         var hydrator = new Hydrator(graph, policy, new FailureMemory(policy.FailureMemory)) { Limiter = ActivityLog.Download };

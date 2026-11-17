@@ -68,6 +68,7 @@
 
 ## Known issues
 
+- **Reinstall adoption bug (fixed 2026-11-16, to be verified by the user):** after uninstall and reinstall some folders were empty or missing cloud-only files; see `activeContext.md`. A repair walk runs once on the next start.
 - **Edits to files already in the cloud are not uploaded** (v1 scope; P2). Local edits stay local.
 - **Online-only pictures show no preview thumbnail**; Explorer does not hydrate for thumbnails under the Full policy (by design, no bandwidth burst). Cloud thumbnails are P2.
 - **Large videos download completely before they play** (same as OneDrive). The earlier progressive-streaming problem (choppy Photos playback, hang on pause) is moot under Full and the progressive mode is kept only as a switch.

@@ -28,6 +28,7 @@ internal static class CloudProvider
     /// <summary>Files up to this size are downloaded whole at the first read by interactive apps (Photos cancels slow partial reads and reports the image as corrupted).</summary>
     private const long WholeFileLimit = 64L * 1024 * 1024;
     private static string s_driveRoot = "C:";
+    private static string s_syncRoot = "";
     private static readonly ConcurrentDictionary<string, byte> s_backfilling = new(StringComparer.Ordinal);
 
     /// <summary>Thrown when Windows refuses data BEYOND the required range (it may already have it): read-ahead stops quietly, the request itself succeeded.</summary>
@@ -72,6 +73,7 @@ internal static class CloudProvider
         }
         for (int i = 0; i < services.HydrationWorkers; i++) { bool backgroundOnly = i == 0; _ = Task.Run(() => DataWorkerAsync(backgroundOnly)); }   // worker 0 only serves the background lane; the others take interactive work first
         for (int i = 0; i < 2; i++) { _ = Task.Run(PopulateWorkerAsync); }
+        s_syncRoot = rootPath;
         s_driveRoot = (Path.GetPathRoot(rootPath) ?? "C:\\").TrimEnd('\\');
         Log.Info($"connected to the sync root (key 0x{s_connection.Value:X}), {services.HydrationWorkers} hydration workers");
     }
@@ -323,7 +325,22 @@ internal static class CloudProvider
             {
                 bool already = s_svc.Population.IsPopulated(req.FolderId);              // a background prefetch got there first: complete with nothing to add
                 long total = already ? 0 : s_svc.Index.CountChildren(req.FolderId);
-                long sent = PlaceholderWriter.Transfer(req.ConnectionKey, req.TransferKey, req.RequestKey, already ? [] : s_svc.Index.EnumerateChildren(req.FolderId), total);
+                long sent;
+                string? dir = already ? null : s_svc.Population.PathOfFolder(req.FolderId, s_syncRoot);
+                if (dir is not null && Directory.Exists(dir) && Directory.EnumerateFileSystemEntries(dir).Any())
+                {
+                    // A folder that already holds local entries (adopted after a reinstall or a switch): create only the missing placeholders, tolerating names that exist, then complete the request empty.
+                    var batch = new List<NoDrive.Core.Model.IndexedItem>(PlaceholderWriter.DefaultBatch);
+                    sent = 0;
+                    foreach (var child in s_svc.Index.EnumerateChildren(req.FolderId))
+                    {
+                        batch.Add(child);
+                        if (batch.Count >= PlaceholderWriter.DefaultBatch) { sent += PlaceholderWriter.CreateChildren(dir, batch); batch.Clear(); }
+                    }
+                    if (batch.Count > 0) { sent += PlaceholderWriter.CreateChildren(dir, batch); }
+                    PlaceholderWriter.Transfer(req.ConnectionKey, req.TransferKey, req.RequestKey, [], 0);
+                }
+                else { sent = PlaceholderWriter.Transfer(req.ConnectionKey, req.TransferKey, req.RequestKey, already ? [] : s_svc.Index.EnumerateChildren(req.FolderId), total); }
                 s_svc.Population.Set(req.FolderId, true);
                 if (sw.ElapsedMilliseconds > 500 || total > 1000) { Log.Info($"populated {req.FolderId} on demand: {sent} placeholders in {sw.ElapsedMilliseconds} ms{(already ? " (already populated by prefetch)" : "")}"); }
             }
