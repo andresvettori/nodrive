@@ -1,6 +1,6 @@
 # Progress
 
-**Status 2026-11-16: P0 done (GO); P1 functionally complete for daily use on the author's PC.** Everything below marked
+**Status 2026-11-16: P0 done (GO); P1 functionally complete; beta hardening 0.9.0-beta built and green in CI (build 98), NOT yet verified on the PC (the author's 24 h soak runs on the previous build).** Everything below marked
 "verified" was exercised by the user on Windows 11 (Native AOT engine from CI unless noted). Open items are in "Not verified yet" and "Known issues".
 
 ## What works
@@ -17,7 +17,16 @@
 - **Switch from OneDrive assistant** (optional): read-only scan verified on the real OneDrive folder (identical / online-only / different / only-on-PC); take-over step built, not yet run.
 - **Quality**: 48 unit tests (index, delta, population, hydration policy, read-ahead, Graph with fake handler, upload and ops journals, bandwidth limiter); CI builds, tests and AOT-publishes with zero IL2xxx/IL3xxx warnings; engine idle 10-15 MB private, 15-30 MB under work.
 
+## Beta hardening 0.9.0-beta (built 2026-11-16, CI green, awaiting PC verification)
+
+- **Edits to existing files (E11)**: `FileSystemWatcher` Changed events and the offline reconcile detect an edited download (size/mtime differ from the cloud version we know); upload with If-Match (simple PUT or resumable session on the item); 412 saves the user's version as a "(NoDrive conflict)" copy and shows the cloud version at the original path; the placeholder takes the cloud's new time/size afterwards (no repeat uploads); locally edited files are never deleted or overwritten by cloud changes; a replace by a plain file (safe-save: delete + re-create, or a newer copy) becomes an update (deletes wait 10 s so they can be merged); an item deleted in the cloud keeps the edit as a new file.
+- **Offline reconcile (E8)**: `OfflineReconciler` after the first sync of each start, every 6 h, after wake: edited downloads, plain files and folders, renamed/moved placeholders (identity read from the placeholder), items deleted while stopped (only items flagged `local` in index schema v4, never case-ambiguous or Windows-invalid names); more than max(50, 5% of known local items) missing = held, the page offers "Bring them back" or "Delete them in the cloud too".
+- **Resilience**: wake from sleep and network-available events (`Wake`: immediate check, backoff and rate-limit reset, reconcile); `Supervisor` (stuck requests failed after 50 s, memory release above 400 MB, self-restart above 1.2 GB for 15 s); database `quick_check` at start with rebuild; free-disk refusal (256 MB margin); invalid/colliding cloud names skipped and listed; `--doctor`.
+- **Support**: log header (version, commit, session id, Windows, language), 14 days / 60 MB retention, crash notes, Report a problem (tray + Help tab, zip with logs, activity, health report, Windows cloud-files events, names optional), `--report`, `--version`, Support ID in the footer, guides.
+- **Versioning**: `eng/Versioning.props`, CI build number, `BuildInfo`, versioned MSI + SHA-256, tag-driven GitHub releases, `CHANGELOG.md`, `docs/whats-new.*`, `release-process.md`, `qa-plan.md`, bug template.
+
 ## Not verified yet
+- Everything in "Beta hardening" above on the PC (needs the user to upgrade the soak machine), in particular: edit upload and conflict copy, Office safe-save, offline deletes/renames/edits replayed after a stop, the held-missing banner, sleep/resume, report zip contents, uninstall while queued.
 
 - Upload bandwidth limit with a real upload; Spanish text across all pages.
 - Take-over step of the Switch assistant (needs OneDrive unlinked); behaviour while adoption is linking a very large tree (folders answer "unavailable" until it finishes).
@@ -47,7 +56,9 @@
 - [x] E5 Upload of new files and folders (+ adoption of identical files)
 - [x] E6 Delete/rename propagation with guards
 - [x] E7 Tray, pause, autostart, single instance, crash restart; [x] E7a Setup flags 1058
-- [~] E8 Recovery and uninstall: journals replayed, index rebuild, MSI uninstall with pending-work check; USN cursor reconcile not done
+- [x] E8 Recovery and uninstall: journals replayed, index rebuild and integrity check, offline reconcile, MSI uninstall with pending-work check (built; verification pending)
+- [x] E11 Edits of existing files (built; verification pending)
+- [x] E12 Wake/network handling, watchdog, disk and name guards, support report, versioning (built; verification pending)
 - [~] E9 Memory hygiene: GC knobs in `eng/LowFootprint.props`, bounded queues and buffers, measured 15-30 MB; no explicit post-burst aggressive collect
 - [~] E10 Responsiveness harness: PowerShell harness from P0 exists; CI harness and 24 h soak not done
 - [x] Installer (WiX MSI) and CI artifacts; [ ] code signing
@@ -58,7 +69,7 @@
 - [~] Switch from OneDrive assistant (scan verified, take-over pending a real run)
 
 ### P2
-- [ ] Editing existing files: If-Match uploads, 412 conflict copies, echo suppression, Office save-storm debounce, USN replay (first item: changes to existing files are not uploaded today)
+- [~] Editing existing files: built in 0.9.0-beta (see above); USN-journal replay deliberately replaced by the disk-vs-index reconcile (no elevation needed)
 - [ ] Cloud thumbnails for online-only pictures (thumbnail COM server backed by Graph `/thumbnails`)
 - [ ] Known Folder Move support for Desktop/Documents/Pictures (only guidance and detection exist)
 - [ ] StatusUI flyout; socket.io wake-up; metered-network and power events; parallel segment download (single connection is about 14 MB/s); tempauth URL retirement readiness (2027-04-01); MSIX/winget packaging once code signing exists
@@ -69,7 +80,6 @@
 ## Known issues
 
 - **Reinstall adoption bug (fixed and verified on the PC 2026-11-16):** after uninstall and reinstall some folders were empty or missing cloud-only files; see `activeContext.md`. A repair walk ran once; linking falls back to a shared and then an attribute-only handle when Explorer has the folder open; population of folders with local entries tolerates existing names. Benign log noise remains: CfCreatePlaceholders 0x800700B7 (name exists) and mark-populated 0x80070178 on adopted folders.
-- **Edits to files already in the cloud are not uploaded** (v1 scope; P2). Local edits stay local.
 - **Online-only pictures show no preview thumbnail**; Explorer does not hydrate for thumbnails under the Full policy (by design, no bandwidth burst). Cloud thumbnails are P2.
 - **Large videos download completely before they play** (same as OneDrive). The earlier progressive-streaming problem (choppy Photos playback, hang on pause) is moot under Full and the progressive mode is kept only as a switch.
 - **Navigation pane**: NoDrive stays in the lower group; the top group is reserved for the OneDrive known folder (`research/explorer-ux.md`).
@@ -139,4 +149,6 @@
 | 2026-11-15 | Bandwidth limits via a shared virtual-time limiter (Core), live-configurable | OneDrive parity; works for downloads and uploads without extra threads | plan P1.5 |
 | 2026-11-15 | Remote changes are mirrored into populated folders; Explorer deletes/renames are acked at once and journalled (no more read-only) | Delete/rename acks must never wait for the network; journal makes replay idempotent after crashes | plan E4b, E6 |
 | 2026-11-16 | Installer = WiX v5.0.2 per-user MSI (not Inno Setup, not MSIX yet) | User's choice; v6+ carries the maintenance-fee EULA; MSIX needs a signing certificate | ADR-0012 |
+| 2026-11-16 | Beta hardening before distribution: edits, offline reconcile, resilience, support report, versioning before friends and family get the MSI | User's call: reliability and supportability first; features frozen | plan E11, E12, `release-process.md` |
+| 2026-11-16 | Offline reconcile uses an on-disk flag in the index instead of the NTFS USN journal | Reading the USN journal needs elevation; the flag makes "deleted while stopped" provable | plan E8 |
 | 2026-11-16 | Optional "Switch from OneDrive" assistant; the installer stays side-by-side only | User approval; never unlinks, uninstalls or changes Folder Backup itself | plan P1.5 |

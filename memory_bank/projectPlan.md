@@ -273,6 +273,13 @@ _Status 2026-11-16: all kill-criteria questions below were answered by P0 and P1
 - Any change to section 0 or section 6 (ground rules, acceptance tests) needs the user's explicit agreement; everything else can be updated as work progresses.
 - Re-read `projectbrief.md` before changing scope; scope changes go there first, then here.
 
+## Beta hardening (built 2026-11-16, verification pending)
+
+- **E11 Edits of existing files**: detection (watcher + reconcile), If-Match update upload, conflict copy on 412, echo suppression via `CfUpdatePlaceholder` metadata + in-sync, protection of edited files against cloud deletes/updates, safe-save merge (10 s delete grace), item deleted in the cloud keeps the edit. Acceptance: edit and save a downloaded Word file; the cloud shows the new version and history; edit the same file in the cloud first and locally: both versions survive; no re-upload loop.
+- **E8 completed**: offline reconcile (see `progress.md`), index `quick_check`, held-missing safeguard. Acceptance: kill NoDrive, delete/rename/edit files, restart: the cloud matches; wipe a folder while stopped: nothing deleted, banner shown.
+- **E12 Resilience, support, versioning**: wake/network handling, watchdog and memory supervisor, disk-space and name guards, `--doctor/--report/--version`, Report a problem, log retention, `release-process.md`, `qa-plan.md`, tag-driven releases. Acceptance: `qa-plan.md` scenario matrix; the report zip lets us diagnose a failure without the user's PC.
+- Still open for v1: automated responsiveness harness in CI, 24 h soak on the final build, code signing.
+
 ## P1.5 Activity, settings, bandwidth, installer and switch assistant (done 2026-11-15/16)
 
 - **Done and verified**: app icon (`tools/make_icon.py` -> `Assets/nodrive.ico`, used by tray, folder, installer); local settings and activity page (ADR-0011) with live transfers, persistent recent activity (last 25-400), speed tiles, settings with a header save bar, OneDrive status card, guides tab, EN/ES text and Windows regional formats/time zone; download and upload bandwidth limits (shared virtual-time limiter in Core, live); tray "Open NoDrive..." and pause/autostart.

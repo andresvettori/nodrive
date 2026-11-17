@@ -11,13 +11,13 @@ A deliberately small OneDrive client for Windows 11.
   is about 15 to 30 MB and does not grow with the number of files (measured with 90,000 items). It is
   designed never to block Explorer.
 
-**Status (2026-11-16): working beta for daily use on one PC.** Browsing, on-demand download, keep and
+**Status (2026-11-16): `0.9.0-beta`, in daily use on the author's PC; friends-and-family distribution is being prepared.** Browsing, on-demand download, keep and
 free up space, remote changes mirrored into folders you have opened, upload of new files and folders,
 delete and rename from Explorer, sign-in recovery, tray menu, a local settings and activity page
 (English and Spanish), bandwidth limits, a per-user MSI installer, and an optional "Switch from
-OneDrive" assistant are implemented and verified by the author. Not done yet: editing existing files
-(changes to files that are already in the cloud are not uploaded), cloud thumbnails for online-only
-pictures, code signing. See [memory_bank/progress.md](memory_bank/progress.md) for the full status and
+OneDrive" assistant are implemented and verified by the author. Edits to files you already downloaded are uploaded (with a conflict copy when the cloud changed first), NoDrive
+catches up after being stopped, and a "Report a problem" button creates one file to send for support. Not done yet:
+cloud thumbnails for online-only pictures and code signing. See [memory_bank/progress.md](memory_bank/progress.md) for the full status and
 [memory_bank/projectPlan.md](memory_bank/projectPlan.md) for the plan.
 
 ## Install
@@ -134,7 +134,7 @@ Settings > Apps > NoDrive > Uninstall. The installer quits NoDrive, checks that 
 in the folder as ordinary files; online-only placeholders are removed by Windows (the cloud copies are untouched). If you install
 again later, NoDrive links those files back to their cloud copies instead of creating duplicates.
 
-Command line (the installer uses these): `NoDrive.Engine.exe --quit`, `--pending` (exit code 3 when work is queued),
+Command line (the installer uses these): `NoDrive.Engine.exe --version`, `--doctor` (health checks), `--report` (support zip), `--quit`, `--pending` (exit code 3 when work is queued),
 `--uninstall [--force] [--delete-data] [--delete-root]`, `--status`, `--cleanup`, and the options `--sync-root <path>` and
 `--data-dir <path>`.
 
@@ -174,6 +174,12 @@ wix build installer/NoDrive.wxs -ext WixToolset.UI.wixext -arch x64 -d EnginePat
 
 Developer note: a freshly built, unsigned `NoDrive.Engine.dll` (the JIT build) can be blocked by Windows Application Control
 (error 0x800711C7). Test with the Native AOT single-file exe from CI instead.
+
+## Versions and support
+
+Versions look like `0.9.0-beta.142` (the number after `beta` is the build). The version is shown at the bottom of the NoDrive page, in the tray tooltip, in the installer's file name and in the log header. Release history: [CHANGELOG.md](CHANGELOG.md) (user summary in [docs/whats-new.en.md](docs/whats-new.en.md)). How versions, tags and releases work: [memory_bank/release-process.md](memory_bank/release-process.md); how builds are tested: [memory_bank/qa-plan.md](memory_bank/qa-plan.md).
+
+If something goes wrong: tray icon > **Report a problem...** creates one zip with logs and a health report to send to whoever supports you ([guide](docs/report-a-problem.en.md)).
 
 ## Licence
 

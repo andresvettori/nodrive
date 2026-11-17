@@ -2,7 +2,11 @@
 
 Updated at the end of every session. Read this file after `projectbrief.md` and before touching code. Current status and checklists are in `progress.md`; the plan is in `projectPlan.md`.
 
-## Current focus (2026-11-16)
+## Current focus (2026-11-16, evening): beta hardening built, waiting for the PC
+
+The user asked for beta readiness before distributing to friends and family: reliability features first, then support/logging, then versioning. All three are implemented and CI-green as build `0.9.0-beta.98` (commit 43a6547), but none of it has run on the PC: the user's 24 h soak is running on the previous build and must not be interrupted without asking. Next steps, in order: (1) the user upgrades with the MSI from the CI artifact when the soak ends; (2) run the scenario matrix in `qa-plan.md`, especially edit/conflict, offline reconcile, sleep/resume and the report zip; (3) fix S1/S2 findings; (4) update CHANGELOG, tag `v0.9.0-beta.<build>` per `release-process.md`; (5) code signing decision before wider distribution.
+
+Previous focus (kept for context):
 
 P1 is functionally complete and in daily use on the author's PC. The last session added the installer (WiX MSI), the lifecycle commands, the optional Switch-from-OneDrive assistant and a full documentation pass. What remains is verification and polish, then P2:
 
