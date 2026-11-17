@@ -6,6 +6,9 @@ Versions before `0.9.0-beta` were development milestones, not numbered builds; t
 
 ## [Unreleased]
 
+### Changed
+- "Always keep on this device" on a folder with thousands of small files is faster: up to 4 files download at once (setting `pinParallelism` in `config.json`, 1 to 8), and the downloads settings no longer reserve one worker for background reads.
+
 ### Fixed
 - Some files could stay "syncing" when many were downloaded at once ("Always keep on this device" on a big folder): a race in the download bookkeeping failed a few downloads and they were never retried. Downloads now own their cancellation, failed keep-on-device downloads are retried with back-off, and pinned files that never finished are picked up by the periodic catch-up.
 

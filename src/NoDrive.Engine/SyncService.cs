@@ -145,7 +145,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
 
         _indexReady = _index.GetMeta(DeltaIngestor.DeltaKey) is not null && _index.GetMeta(DeltaIngestor.NextKey) is null;
         CloudProvider.Start(paths.SyncRoot, new ProviderServices(_index, hydrator, population, locks, _callers, () => _indexReady && !Adopting, config.HydrationWorkers, new ReadAheadPlanner()));
-        PinWatcher.Start(paths.SyncRoot);
+        PinWatcher.Start(paths.SyncRoot, config.PinParallelism);
         _ = Task.Run(() => ReportLoopAsync(ct), CancellationToken.None);
 
         var prefetcher = new Prefetcher(_index, population, locks, paths.SyncRoot, config.ToPopulationOptions());
