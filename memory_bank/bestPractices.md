@@ -346,3 +346,5 @@ feature waits.
 - **Test with the CI Native AOT exe or MSI**, not an unsigned local JIT build; and open the settings page again after an engine restart (the token changes).
 - **UI rules from user feedback**: a prominent Save bar in the page header, no layout that overflows its card, real file names (never internal ids), Windows regional formats and English/Spanish text, and optional features that never run unless the user opens them.
 - **Folders converted from plain folders must be told to fill in from the cloud** (`CF_CONVERT_FLAG_ENABLE_ON_DEMAND_POPULATION` or `CfUpdatePlaceholder` with ENABLE_ON_DEMAND_POPULATION); otherwise Windows treats them as complete and cloud-only files never appear. Never drop a journal entry when a conversion fails: retry with backoff.
+
+- **Remote install over SSH:** the MSI's LaunchEngine starts the engine in the SSH session (no desktop, no tray icon). After a silent remote install, quit it and start it in the interactive session through a one-shot scheduled task (Interactive logon, RunLevel Limited), then check `SessionId` is not 0. Put multi-line PowerShell in a .ps1 sent with `mac-put.sh` instead of quoting it inline.
