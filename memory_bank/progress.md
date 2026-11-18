@@ -31,7 +31,7 @@
 - Wi-Fi cut during a large upload (beta.128): short (35 s) and long (~2 min) cuts PASSED: the saved session is continued from the offset reached, original name kept, no conflict copy, quickXorHash verified against OneDrive's. Earlier (beta.102-117) it FAILED three times with a false conflict copy (root causes: fragment 409 treated as a name clash; abandoned session keeping the name reserved; empty ghost item). Fixes built (hash adoption, empty-ghost removal, fragment resume, persisted sessions with 5 fake-Graph unit tests); NOT yet verified on the PC (test machine unavailable).
 
 ## Not verified yet
-- Quit mid-upload / kill mid-upload with persisted upload sessions; large-file edit; mass-delete guard test; upload of the same file twice after a conflict rename (should be gone).
+- Quit mid-upload / kill mid-upload with persisted upload sessions; mass-delete guard test; save-without-changes (large-file edit through a session PASSED 2026-11-18); upload of the same file twice after a conflict rename (should be gone).
 - Everything in "Beta hardening" above on the PC (needs the user to upgrade the soak machine), in particular: edit upload and conflict copy, Office safe-save, offline deletes/renames/edits replayed after a stop, the held-missing banner, sleep/resume, report zip contents, uninstall while queued.
 
 - Upload bandwidth limit with a real upload; Spanish text across all pages.
