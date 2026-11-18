@@ -57,11 +57,8 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
         else if (_seen.Count >= MaxWatched) { _rescan = true; }
     }
 
-    private static bool Ignored(string path)
-    {
-        string n = Path.GetFileName(path);
-        return n.StartsWith("~$", StringComparison.Ordinal) || n.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".part", StringComparison.OrdinalIgnoreCase) || n.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase) || n.Equals(".lock", StringComparison.OrdinalIgnoreCase) || n.Contains("_vti_", StringComparison.OrdinalIgnoreCase) || n[0] == ' ' || n.Equals("Thumbs.db", StringComparison.OrdinalIgnoreCase);
-    }
+    private bool Ignored(string path) =>
+        NoDrive.Core.Names.OneDriveNames.IsNeverUploaded(Path.GetFileName(path), string.Equals(Path.GetDirectoryName(path), syncRoot.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
 
     private static bool IsRealLocal(string path)
     {

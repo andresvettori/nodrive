@@ -10,6 +10,8 @@ Versions before `0.9.0-beta` were development milestones, not numbered builds; t
 - **Bulk download speed** setting (Settings page, applied immediately): Gentle (2 files at a time), Balanced (4, default) or Turbo (8) for "Always keep on this device" on big folders. Each small file costs about a second of latency, so more streams make folders with thousands of small files much faster. Also `bulkSpeed` in `config.json`.
 
 ### Fixed
+- A cloud item that appears created and then deleted in the same update could be left in the folder as if it still existed; the last change for each item now wins.
+- Edits that do not change the content (a save without changes) are no longer uploaded again; names OneDrive reserves (`.lock`, `_vti_`, a root `forms` folder, names starting with a space) are skipped instead of failing to upload.
 - **Large uploads survive network cuts**: the upload session is saved and continued after a cut, a sleep or a restart instead of starting again next to an orphaned session; a 409 on a fragment no longer turns the file into a "NoDrive conflict" copy; identical content already in the cloud is linked instead of copied; the empty leftover of an interrupted upload is cleared automatically.
 - A file edited soon after it was created no longer stays on "syncing" when the placeholder refresh fails (fallback to the in-sync flag, then re-link).
 - Deleting a freshly uploaded video works: OneDrive's post-processing changes its version tag without changing the content, which used to cancel the delete.

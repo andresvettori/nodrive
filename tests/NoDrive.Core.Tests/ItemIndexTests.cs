@@ -29,12 +29,15 @@ public class ItemIndexTests
     }
 
     [Fact]
-    public void Deletions_are_applied_before_upserts_so_a_recreated_id_survives()
+    public void A_delete_then_an_upsert_of_the_same_id_in_one_page_keeps_the_upsert_and_the_reverse_order_keeps_the_delete()
     {
+        // Graph: "the same item may appear more than once; use the last occurrence". The old rule (deletions always first) resurrected "upsert, delete" pairs.
         using var t = new TempIndex();
         t.Index.ApplyPage([Up(Items.File("X", "root", "old.txt"))], "k", "1", 0);
-        t.Index.ApplyPage([Up(Items.File("X", "root", "new.txt")), DeltaChange.Delete("X")], "k", "2", 0);
+        t.Index.ApplyPage([DeltaChange.Delete("X"), Up(Items.File("X", "root", "new.txt"))], "k", "2", 0);
         Assert.Equal("new.txt", t.Index.TryGet("X")!.Value.Name);
+        t.Index.ApplyPage([Up(Items.File("X", "root", "newer.txt")), DeltaChange.Delete("X")], "k", "3", 0);
+        Assert.Null(t.Index.TryGet("X"));
     }
 
     [Fact]

@@ -39,6 +39,25 @@ public sealed class ItemIndex : IDisposable, NoDrive.Core.Abstractions.IUploadSe
         return c;
     }
 
+    /// <summary>
+    /// Graph may repeat an id inside one page (for example created, then deleted): only the LAST occurrence is the truth. Deletes are applied before upserts, so without this
+    /// an "upsert, delete" pair would resurrect the item. Order of the surviving changes is kept; a list without repeats is returned as it is.
+    /// </summary>
+    public static IReadOnlyList<DeltaChange> LastPerId(IReadOnlyList<DeltaChange> changes)
+    {
+        if (changes.Count < 2) { return changes; }
+        var seen = new HashSet<string>(changes.Count, StringComparer.Ordinal);
+        List<DeltaChange>? keep = null;
+        for (int i = changes.Count - 1; i >= 0; i--)
+        {
+            if (seen.Add(changes[i].Id)) { keep?.Add(changes[i]); continue; }
+            if (keep is null) { keep = new List<DeltaChange>(changes.Count); for (int j = changes.Count - 1; j > i; j--) { keep.Add(changes[j]); } }
+        }
+        if (keep is null) { return changes; }
+        keep.Reverse();
+        return keep;
+    }
+
     private void Migrate()
     {
         lock (_writeLock)
@@ -119,6 +138,7 @@ public sealed class ItemIndex : IDisposable, NoDrive.Core.Abstractions.IUploadSe
     /// </summary>
     public (int Upserts, int Deletions) ApplyPage(IReadOnlyList<DeltaChange> changes, string metaKey, string metaValue, int generation)
     {
+        changes = LastPerId(changes);
         lock (_writeLock)
         {
             using var tx = _writer.BeginTransaction();

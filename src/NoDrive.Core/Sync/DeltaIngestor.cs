@@ -57,9 +57,10 @@ public sealed class DeltaIngestor(IRemoteDrive drive, ItemIndex index)
             bool last = page.NextLink is null;
             string key = last ? DeltaKey : NextKey;
             string token = page.NextLink ?? page.DeltaLink ?? throw new InvalidOperationException("A delta page must carry a nextLink or a deltaLink.");
+            var changes = ItemIndex.LastPerId(page.Changes);
             Action? after = null;
-            try { after = BeforePage?.Invoke(page.Changes, fullResync); } catch (Exception) { /* local mirroring is best effort */ }
-            var (u, d) = index.ApplyPage(page.Changes, key, token, generation);
+            try { after = BeforePage?.Invoke(changes, fullResync); } catch (Exception) { /* local mirroring is best effort */ }
+            var (u, d) = index.ApplyPage(changes, key, token, generation);
             try { after?.Invoke(); } catch (Exception) { }
             ups += u; dels += d; pages++;
             if (last)
