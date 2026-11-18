@@ -265,6 +265,13 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                         File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path));
                         Log.Info($"'{name}' was already in the cloud with the same content (an earlier attempt finished): linked, no conflict copy");
                     }
+                    else if (theirs is { IsFolder: false, Size: 0 } ghost && new FileInfo(path).Length > 0 && attempts < 4 && await TryRemoveEmptyGhostAsync(ghost, name, ct).ConfigureAwait(false))
+                    {
+                        // An empty cloud file with our name that our index never saw is the leftover of an upload session we abandoned (OneDrive keeps it for hours): it was removed, try again.
+                        ActivityLog.End(act!, "failed", "retrying after clearing an interrupted upload"); act = null;
+                        Defer(path, attempts, TimeSpan.FromSeconds(3), bump: true);
+                        return;
+                    }
                     else if (theirs is null || (theirs.QuickXorHash is null && attempts < 4))
                     {
                         // Nothing visible in the cloud under this name: the clash is our own interrupted upload session still holding the name. Wait, do not make a copy.
@@ -332,6 +339,13 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             int pct = (int)(sent * 100 / total) / 10 * 10;
             if (pct > last && pct < 100) { last = pct; Log.Info($"uploading '{name}': {pct}% ({sent / 1048576} of {total / 1048576} MiB)"); }
         };
+    }
+
+    /// <summary>Deletes (recycle bin, If-Match) the empty leftover of an interrupted upload session so the name is free again. False when it could not be removed.</summary>
+    private async Task<bool> TryRemoveEmptyGhostAsync(RemoteItem ghost, string name, CancellationToken ct)
+    {
+        try { await graph.DeleteItemAsync(ghost.Id, ghost.ETag, ct).ConfigureAwait(false); Log.Info($"removed the empty leftover of an interrupted upload of '{name}'"); return true; }
+        catch (HttpRequestException ex) { Log.Warn($"could not remove the empty leftover of '{name}': {ex.Message}"); return false; }
     }
 
     private void Defer(string path, int attempts, TimeSpan wait, bool bump) => index.RescheduleUpload(path, bump ? attempts + 1 : attempts, DateTime.UtcNow.Add(wait).Ticks);
