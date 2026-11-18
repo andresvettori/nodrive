@@ -60,7 +60,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
     private static bool Ignored(string path)
     {
         string n = Path.GetFileName(path);
-        return n.StartsWith("~$", StringComparison.Ordinal) || n.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".part", StringComparison.OrdinalIgnoreCase) || n.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase) || n.Equals("Thumbs.db", StringComparison.OrdinalIgnoreCase);
+        return n.StartsWith("~$", StringComparison.Ordinal) || n.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".part", StringComparison.OrdinalIgnoreCase) || n.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase) || n.Equals(".lock", StringComparison.OrdinalIgnoreCase) || n.Contains("_vti_", StringComparison.OrdinalIgnoreCase) || n[0] == ' ' || n.Equals("Thumbs.db", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsRealLocal(string path)
@@ -400,6 +400,16 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             try { using var probe = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
             catch (IOException) { Defer(path, attempts, TimeSpan.FromSeconds(10), bump: false); return; }          // still open for writing (Office keeps it open while editing)
 
+            // Same content as the cloud copy (a "touch", a save without changes, a time-only difference): do not upload, just mark it in sync. The hash is only computed when the
+            // size is equal and the file is not huge; a different hash (or our hash being wrong) simply falls through to the normal upload.
+            if (cur.Size == fi.Length && fi.Length <= 512L * 1024 * 1024 && cur.QuickXorHash is { } known && known == QuickXorHash.OfFile(path, ct))
+            {
+                if (!PlaceholderWriter.RefreshInSync(path, ToRemote(cur)) && !RemoteApplier.MarkInSync(path)) { ConvertToPlaceholder(path, cur.Id, onDemand: false); }
+                index.RemoveUpload(path);
+                PinWatcher.NotifyShell(path);
+                Log.Info($"'{fi.Name}' has the same content as the cloud copy: marked in sync, nothing uploaded");
+                return;
+            }
             long lengthBefore = fi.Length;
             var stampBefore = fi.LastWriteTimeUtc;
             act = ActivityLog.Begin("update", fi.Name, lengthBefore);
