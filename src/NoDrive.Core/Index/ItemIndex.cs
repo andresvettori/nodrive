@@ -62,7 +62,7 @@ public sealed class ItemIndex : IDisposable, NoDrive.Core.Abstractions.IUploadSe
                 CREATE TABLE IF NOT EXISTS uploads(path TEXT PRIMARY KEY NOT NULL, depth INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL) WITHOUT ROWID;
                 CREATE TABLE IF NOT EXISTS remote_ops(seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, item_id TEXT NOT NULL, target TEXT, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY NOT NULL, v TEXT) WITHOUT ROWID;
-                CREATE TABLE IF NOT EXISTS upload_sessions(k TEXT PRIMARY KEY NOT NULL, url TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL) WITHOUT ROWID;
+                CREATE TABLE IF NOT EXISTS upload_sessions(k TEXT PRIMARY KEY NOT NULL, url TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, expires INTEGER NOT NULL DEFAULT 0) WITHOUT ROWID;
                 """);
             // v4: `local` = a placeholder or file for this item exists on disk (set when we create or link it). Only such items can be judged "deleted locally".
             bool hasLocal = false;
@@ -296,14 +296,14 @@ public sealed class ItemIndex : IDisposable, NoDrive.Core.Abstractions.IUploadSe
     {
         using var c = Open(_path);
         using var cmd = c.CreateCommand();
-        cmd.CommandText = "SELECT url,size,mtime FROM upload_sessions WHERE k=$k";
+        cmd.CommandText = "SELECT url,size,mtime,expires FROM upload_sessions WHERE k=$k";
         cmd.Parameters.AddWithValue("$k", key);
         using var r = cmd.ExecuteReader();
-        return r.Read() ? new NoDrive.Core.Abstractions.SavedUploadSession(r.GetString(0), r.GetInt64(1), r.GetInt64(2)) : null;
+        return r.Read() ? new NoDrive.Core.Abstractions.SavedUploadSession(r.GetString(0), r.GetInt64(1), r.GetInt64(2), r.GetInt64(3)) : null;
     }
 
     public void Remember(string key, NoDrive.Core.Abstractions.SavedUploadSession session) =>
-        ExecWrite("INSERT OR REPLACE INTO upload_sessions(k,url,size,mtime) VALUES($k,$u,$s,$m)", ("$k", key), ("$u", session.Url), ("$s", session.Size), ("$m", session.LastWriteTicks));
+        ExecWrite("INSERT OR REPLACE INTO upload_sessions(k,url,size,mtime,expires) VALUES($k,$u,$s,$m,$x)", ("$k", key), ("$u", session.Url), ("$s", session.Size), ("$m", session.LastWriteTicks), ("$x", session.ExpiresTicks));
 
     public void Forget(string key) => ExecWrite("DELETE FROM upload_sessions WHERE k=$k", ("$k", key));
 

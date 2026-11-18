@@ -12,7 +12,7 @@ public sealed class UploadSessionTests : IDisposable
 {
     private const string Url = "https://upload.example/session1";
     private readonly string _file = Path.Combine(Path.GetTempPath(), "nd-upl-" + Guid.NewGuid().ToString("N") + ".bin");
-    private const long Size = 12 * 1024 * 1024;            // three 5 MiB fragments (5 + 5 + 2)
+    private const long Size = 12 * 1024 * 1024;            // two fragments (10 + 2 MiB)
 
     public UploadSessionTests() { var b = new byte[Size]; new Random(7).NextBytes(b); File.WriteAllBytes(_file, b); }
     public void Dispose() { try { File.Delete(_file); } catch (IOException) { } }
@@ -28,10 +28,12 @@ public sealed class UploadSessionTests : IDisposable
     private sealed class Fake(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         public List<(HttpMethod Method, string Url, ContentRangeHeaderValue? Range)> Log { get; } = [];
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        public List<string> SessionBodies { get; } = [];
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
             Log.Add((r.Method, r.RequestUri!.AbsoluteUri, r.Content?.Headers.ContentRange));
-            return Task.FromResult(respond(r));
+            if (r.Method == HttpMethod.Post && r.Content is not null) { SessionBodies.Add(await r.Content.ReadAsStringAsync(ct).ConfigureAwait(false)); }
+            return respond(r);
         }
     }
 
@@ -114,5 +116,39 @@ public sealed class UploadSessionTests : IDisposable
         });
         await Drive(h, store).UploadNewFileAsync("P", "big.bin", _file, TestContext.Current.CancellationToken);
         Assert.Contains(h.Log, x => x.Method == HttpMethod.Delete && x.Url == Url);
+    }
+
+    [Fact]
+    public async Task The_session_is_created_with_our_modified_time_and_its_expiry_is_saved()
+    {
+        var store = new Store();
+        var h = new Fake(r => r.Method == HttpMethod.Post ? Json("{\"uploadUrl\":\"" + Url + "\",\"expirationDateTime\":\"2030-01-01T00:00:00Z\"}")
+            : r.Content!.Headers.ContentRange!.To == Size - 1 ? Done() : Accepted("10485760-"));
+        string expected = File.GetLastWriteTimeUtc(_file).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
+        var drive = Drive(h, store);
+        await drive.UploadNewFileAsync("P", "big.bin", _file, TestContext.Current.CancellationToken);
+        Assert.Contains("\"lastModifiedDateTime\":\"" + expected + "\"", h.SessionBodies[0]);
+        Assert.Contains("conflictBehavior\":\"fail\"", h.SessionBodies[0]);
+    }
+
+    [Fact]
+    public async Task A_saved_session_past_its_expiry_is_not_asked_about_but_replaced()
+    {
+        var store = new Store();
+        store.Items["new:P/big.bin"] = new SavedUploadSession(Url, Size, File.GetLastWriteTimeUtc(_file).Ticks, DateTime.UtcNow.AddMinutes(-5).Ticks);
+        var h = new Fake(r => r.Method == HttpMethod.Post ? Json("{\"uploadUrl\":\"https://upload.example/session2\"}")
+            : r.Content!.Headers.ContentRange!.To == Size - 1 ? Done() : Accepted("10485760-"));
+        await Drive(h, store).UploadNewFileAsync("P", "big.bin", _file, TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(h.Log, x => x.Method == HttpMethod.Get);                          // no pointless status request
+        Assert.Contains(h.Log, x => x.Method == HttpMethod.Post);
+    }
+
+    [Fact]
+    public async Task A_403_on_a_fragment_forgets_the_session_so_the_retry_creates_a_new_one()
+    {
+        var store = new Store();
+        var h = new Fake(r => r.Method == HttpMethod.Post ? Json("{\"uploadUrl\":\"" + Url + "\"}") : new HttpResponseMessage(HttpStatusCode.Forbidden));
+        await Assert.ThrowsAsync<HttpRequestException>(() => Drive(h, store).UploadNewFileAsync("P", "big.bin", _file, TestContext.Current.CancellationToken));
+        Assert.Empty(store.Items);
     }
 }

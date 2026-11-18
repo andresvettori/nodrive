@@ -1,7 +1,7 @@
 namespace NoDrive.Core.Abstractions;
 
 /// <summary>An upload session that was created but not finished: where to continue it and which local file it belongs to.</summary>
-public readonly record struct SavedUploadSession(string Url, long Size, long LastWriteTicks);
+public readonly record struct SavedUploadSession(string Url, long Size, long LastWriteTicks, long ExpiresTicks = 0);
 
 /// <summary>
 /// Durable memory of open upload sessions, so a retry (after a network cut, a sleep or a restart) CONTINUES the same session instead of starting a new one

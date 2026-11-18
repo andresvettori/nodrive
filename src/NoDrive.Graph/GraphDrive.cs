@@ -98,7 +98,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
 
     /// <summary>Uploads up to this size with one PUT; larger files use a resumable upload session in 5 MiB chunks (a multiple of 320 KiB).</summary>
     public const long SimpleUploadLimit = 4 * 1024 * 1024;
-    private const int ChunkSize = 5 * 1024 * 1024;
+    private const int ChunkSize = 10 * 1024 * 1024;       // a multiple of 320 KiB; 10 MiB halves the round trips (the buffer is above the pool limit: transient, not retained)
 
     private static RemoteItem ToRemote(DriveItemDto dto) => new(dto.Id, dto.Parent?.Id, dto.Name ?? "", dto.Size, dto.LastModified ?? DateTimeOffset.UnixEpoch, dto.Folder is not null, dto.ETag, dto.CTag, dto.File?.Hashes?.QuickXorHash);
 
@@ -130,10 +130,20 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
         var (uploadUrl, start) = await OpenSessionAsync(sessionKey, localPath, size, () =>
         {
             var req = new HttpRequestMessage(HttpMethod.Post, ChildUrl(parentId, name, "/createUploadSession"));
-            req.Content = new StringContent("{\"item\":{\"@microsoft.graph.conflictBehavior\":\"fail\"}}", System.Text.Encoding.UTF8, "application/json");
+            req.Content = new StringContent(SessionBody("fail", localPath), System.Text.Encoding.UTF8, "application/json");
             return req;
         }, ct).ConfigureAwait(false);
         return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct, sessionKey, start).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Body of createUploadSession: the conflict behaviour plus the local last-modified time (whole seconds), so the cloud keeps OUR modified time instead of stamping the upload
+    /// time. That removes the "touch" after an upload and the false "edited" detection that re-uploaded the file.
+    /// </summary>
+    private static string SessionBody(string conflictBehavior, string localPath)
+    {
+        string when = File.GetLastWriteTimeUtc(localPath).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
+        return "{\"item\":{\"@microsoft.graph.conflictBehavior\":\"" + conflictBehavior + "\",\"fileSystemInfo\":{\"lastModifiedDateTime\":\"" + when + "\"}}}";
     }
 
     private enum SessionState { Open, Gone }
@@ -172,21 +182,24 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
         long stamp = File.GetLastWriteTimeUtc(localPath).Ticks;
         if (SessionStore?.Find(key) is { } saved)
         {
-            if (saved.Size == size && saved.LastWriteTicks == stamp)
+            bool expired = saved.ExpiresTicks > 0 && saved.ExpiresTicks < DateTime.UtcNow.AddMinutes(2).Ticks;
+            if (saved.Size == size && saved.LastWriteTicks == stamp && !expired)
             {
                 var (state, next) = await SessionStatusAsync(saved.Url, ct).ConfigureAwait(false);
                 if (state == SessionState.Open && next < size) { return (saved.Url, next); }
             }
-            else { await CancelSessionAsync(saved.Url).ConfigureAwait(false); }
+            else if (!expired) { await CancelSessionAsync(saved.Url).ConfigureAwait(false); }       // changed file: release the name (an expired session is gone anyway)
             SessionStore.Forget(key);
         }
         string url;
+        long expires = 0;
         using (var resp = await SendAsync(create, ct).ConfigureAwait(false))
         {
             var s = await resp.Content.ReadFromJsonAsync(GraphJsonContext.Default.UploadSessionDto, ct).ConfigureAwait(false);
             url = s?.UploadUrl ?? throw new InvalidOperationException("No upload URL returned.");
+            expires = s.Expires?.UtcTicks ?? 0;
         }
-        SessionStore?.Remember(key, new NoDrive.Core.Abstractions.SavedUploadSession(url, size, stamp));
+        SessionStore?.Remember(key, new NoDrive.Core.Abstractions.SavedUploadSession(url, size, stamp, expires));
         return (url, 0);
     }
 
@@ -319,7 +332,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
         {
             var req = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/me/drive/items/{id}/createUploadSession");
             if (!string.IsNullOrEmpty(etag)) { req.Headers.TryAddWithoutValidation("If-Match", etag); }
-            req.Content = new StringContent("{\"item\":{\"@microsoft.graph.conflictBehavior\":\"replace\"}}", System.Text.Encoding.UTF8, "application/json");
+            req.Content = new StringContent(SessionBody("replace", localPath), System.Text.Encoding.UTF8, "application/json");
             return req;
         }, ct).ConfigureAwait(false);
         return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct, sessionKey, start).ConfigureAwait(false);
