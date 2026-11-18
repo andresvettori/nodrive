@@ -136,3 +136,7 @@ Verified 2026-11-16 on the PC after the fixes: the empty Copilot folder became a
 
 ### Bug found in edit tests (2026-11-17): files created locally and edited soon after stayed "syncing"
 - Log: `refresh of <file> -> 0x80070006` (CfUpdatePlaceholder after uploading the edit); upload itself fine. Fix: fallback chain RefreshInSync -> CfSetInSyncState (RemoteApplier.MarkInSync, now returns bool) -> ConvertToPlaceholder. Root cause of 0x80070006 not established; check the log line "converted again" on the PC to learn if the file had lost its placeholder state. Verified edits otherwise OK (Word safe-save, conflict copy uploaded).
+
+### Offline test A passed (beta.110, 2026-11-17)
+- With the engine quit: edit, delete, rename, create all reached the cloud after restart (log 22:29: renamed, uploaded, updated, deleted to recycle bin). Offline reconcile takes ~2 min on startup (5651 folders, ~117 s) with no UI feedback: TODO show "checking local changes..." in the activity page (and consider a faster pass).
+- Open: why CfUpdatePlaceholder after an edit returns 0x80070006 for locally created files (fallback hides it). Pending tests: B (mass-delete guard) and C (Wi-Fi drop / suspend).
