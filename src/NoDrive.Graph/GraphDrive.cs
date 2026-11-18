@@ -140,6 +140,22 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
         return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct, sessionKey).ConfigureAwait(false);
     }
 
+    /// <summary>Where an upload session wants the next fragment to start (first number of nextExpectedRanges), or null when it cannot be read.</summary>
+    private async Task<long?> NextExpectedAsync(string uploadUrl, CancellationToken ct)
+    {
+        try
+        {
+            using var resp = await http.SendAsync(new HttpRequestMessage(HttpMethod.Get, uploadUrl), HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) { return null; }
+            using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            if (!doc.RootElement.TryGetProperty("nextExpectedRanges", out var ranges) || ranges.GetArrayLength() == 0) { return null; }
+            string first = ranges[0].GetString() ?? "";
+            int dash = first.IndexOf('-');
+            return long.TryParse(dash > 0 ? first[..dash] : first, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long start) ? start : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return null; }
+    }
+
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _openSessions = new();
 
     /// <summary>Sends a file to an upload session in 5 MiB fragments (no Authorization header on fragments), resending a fragment after a dropped connection or 5xx.</summary>
@@ -152,6 +168,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
             await using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
             if (fs.Length != size) { throw new IOException("The file changed while uploading."); }
             long sent = 0;
+            int resumes = 0;
             while (sent < size)
             {
                 int n = await fs.ReadAtLeastAsync(buffer.AsMemory(0, (int)Math.Min(ChunkSize, size - sent)), (int)Math.Min(ChunkSize, size - sent), throwOnEndOfStream: true, ct).ConfigureAwait(false);
@@ -165,7 +182,14 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
                     try
                     {
                         using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-                        if (resp.StatusCode == HttpStatusCode.Conflict) { throw new HttpRequestException("Graph 409 Conflict (upload session)", null, HttpStatusCode.Conflict); }
+                        if (resp.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.RequestedRangeNotSatisfiable)
+                        {
+                            // After a network drop the server may already hold this fragment (or more): ask the session where it really is and continue from there. This 409 is about
+                            // the fragment, NOT a clash with another file name, so it must never turn into a conflict copy.
+                            long? next = await NextExpectedAsync(uploadUrl, ct).ConfigureAwait(false);
+                            if (next is { } pos && pos >= 0 && pos < size && resumes++ < 20) { sent = pos; fs.Position = pos; progress?.Invoke(sent, size); break; }
+                            throw new HttpRequestException("Graph 409 Conflict (upload session)", null, HttpStatusCode.Conflict);
+                        }
                         if ((int)resp.StatusCode >= 500 || resp.StatusCode == HttpStatusCode.TooManyRequests)
                         {
                             if (attempt >= _options.MaxAttempts) { throw new HttpRequestException($"Graph {(int)resp.StatusCode} during upload", null, resp.StatusCode); }
