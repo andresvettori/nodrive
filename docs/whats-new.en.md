@@ -11,6 +11,9 @@ The first beta. NoDrive now handles the day-to-day things that used to go wrong.
 - **Report a problem.** Tray icon > Report a problem... creates one file you can send us. See the report guide.
 - **Versions.** The version is shown at the bottom of the NoDrive page, in the tray tooltip and in the installer's file name.
 
+- **Large uploads survive network cuts.** If the connection drops (or the PC sleeps or NoDrive restarts) in the middle of a big upload, NoDrive continues where it stopped instead of starting over or creating a "conflict" copy.
+- **Faster big folders.** A new setting, Bulk download speed (Gentle, Balanced, Turbo), controls how many files "Always keep on this device" downloads at once.
+
 Known limits: the installer is not signed yet, so Windows may warn; online-only pictures show an icon instead of a preview until downloaded.
 
 Earlier milestones and technical details: see CHANGELOG.md in the project.

@@ -25,7 +25,13 @@
 - **Support**: log header (version, commit, session id, Windows, language), 14 days / 60 MB retention, crash notes, Report a problem (tray + Help tab, zip with logs, activity, health report, Windows cloud-files events, names optional), `--report`, `--version`, Support ID in the footer, guides.
 - **Versioning**: `eng/Versioning.props`, CI build number, `BuildInfo`, versioned MSI + SHA-256, tag-driven GitHub releases, `CHANGELOG.md`, `docs/whats-new.*`, `release-process.md`, `qa-plan.md`, bug template.
 
+## Verified on the PC 2026-11-17 (beta.102 to 117)
+- Bulk download: 14 GB / 2594 files in ~50 min at Balanced (beta.102, 2 parallel) and ~13.5 min at Turbo (beta.106, 17.8 MB/s average), memory 53-63 MB, CPU 3-7%, no 429/503, all files complete (a few transient "no progress" retried).
+- Edits of existing files (plain and Word safe-save), conflict copy uploaded; offline changes replayed after a restart (edit, delete, rename, create, 4 of 4); the in-sync fallback after an edit upload (`refresh 0x80070006` still unexplained).
+- Wi-Fi cut during a large upload: FAILED three times with a false conflict copy (root causes: fragment 409 treated as a name clash; abandoned session keeping the name reserved; empty ghost item). Fixes built (hash adoption, empty-ghost removal, fragment resume, persisted sessions with 5 fake-Graph unit tests); NOT yet verified on the PC (test machine unavailable).
+
 ## Not verified yet
+- Wi-Fi cut tests (35 s, 3-5 min, Quit mid-upload, kill) with persisted upload sessions; mass-delete guard test; upload of the same file twice after a conflict rename (should be gone).
 - Everything in "Beta hardening" above on the PC (needs the user to upgrade the soak machine), in particular: edit upload and conflict copy, Office safe-save, offline deletes/renames/edits replayed after a stop, the held-missing banner, sleep/resume, report zip contents, uninstall while queued.
 
 - Upload bandwidth limit with a real upload; Spanish text across all pages.
@@ -88,6 +94,7 @@
 - **Unsigned binaries** can be blocked by Windows Application Control / Smart App Control (seen as 0x800711C7 on freshly built JIT DLLs). The CI AOT exe and MSI run fine on the author's PC; wider distribution needs signing.
 - **Uninstall while work is queued** aborts with a generic Windows Installer error (the reason is in the log and `--pending`).
 - A single download connection reaches about 14 MB/s; parallel segment download is a P2 idea.
+- Offline reconcile takes ~2 min on startup (5651 folders) with no progress shown; the first change goes out only after the walk (idea: show progress, process on the fly, USN journal).
 - Adoption matches files by name, size and modified time (no hash yet); a changed file with identical size and mtime would be linked, not uploaded.
 
 ## Platform and toolchain risks (still valid; see `projectPlan.md` section 7 for mitigations)

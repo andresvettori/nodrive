@@ -72,7 +72,7 @@ Decision records behind this table: [ADR-0001](decisions/ADR-0001.md) cfapi over
 - `memory_bank/`: this documentation (core files, `research/`, `decisions/` with the ADRs; no separate docs folder).
 - `NoDrive.slnx`
 - `src/NoDrive.Engine/`: WinExe, `net11.0-windows10.0.26100.0`, `PublishAot`, CsWin32 `NativeMethods.txt` (Cf*, `Shell_NotifyIconW`, window/message-loop functions), GC settings via `RuntimeHostConfigurationOption` in `eng/LowFootprint.props` (sections 4-5).
-- `src/NoDrive.Graph/`: auth (PKCE), DTOs + `JsonSerializerContext`, delta, download, upload (simple and session), create folder, delete, move. quickXorHash is not implemented.
+- `src/NoDrive.Graph/`: auth (PKCE), DTOs + `JsonSerializerContext`, delta, download, upload (simple and session), create folder, delete, move. `Core/Hashing/QuickXorHash` computes the quickXorHash (used for clash and delete decisions; adoption of identical files still uses name, size and mtime). Open upload sessions persist in the index (`IUploadSessionStore`).
 - `src/NoDrive.Core/`: reconciler, index, state machine, abstractions `IRemoteDrive` / `IPlaceholderStore` (testable on macOS).
 - `tests/NoDrive.Core.Tests/`: unit + property tests against the fake Graph server.
 - `installer/` (WiX MSI), `docs/` (guides EN/ES), `tools/` (icon generator).

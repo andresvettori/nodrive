@@ -348,3 +348,7 @@ feature waits.
 - **Folders converted from plain folders must be told to fill in from the cloud** (`CF_CONVERT_FLAG_ENABLE_ON_DEMAND_POPULATION` or `CfUpdatePlaceholder` with ENABLE_ON_DEMAND_POPULATION); otherwise Windows treats them as complete and cloud-only files never appear. Never drop a journal entry when a conversion fails: retry with backoff.
 
 - **Remote install over SSH:** the MSI's LaunchEngine starts the engine in the SSH session (no desktop, no tray icon). After a silent remote install, quit it and start it in the interactive session through a one-shot scheduled task (Interactive logon, RunLevel Limited), then check `SessionId` is not 0. Put multi-line PowerShell in a .ps1 sent with `mac-put.sh` instead of quoting it inline.
+
+- **Diagnose before fixing, test with a fake before the PC**: the Wi-Fi-cut bug cost four rounds because each fix was a guess. Log what the cloud holds at a decision point, reproduce with a fake Graph unit test (`UploadSessionTests`), then ship. A 409 on a session FRAGMENT is not a name clash; an empty cloud file with our name can be our own abandoned upload session.
+- **Resumable work must be durable**: anything resumable (upload sessions) is journaled BEFORE the first byte and kept on failure, so a retry continues instead of restarting beside an orphan.
+- **If-Match failures are not always real changes**: OneDrive re-processes media and moves the eTag; compare content (size + quickXorHash) before giving up a delete.

@@ -2,17 +2,9 @@
 
 Updated at the end of every session. Read this file after `projectbrief.md` and before touching code. Current status and checklists are in `progress.md`; the plan is in `projectPlan.md`.
 
-## Current focus (2026-11-16, evening): beta hardening built, waiting for the PC
+## Current focus (2026-11-18): persisted upload sessions built, waiting for the test PC
 
-The user asked for beta readiness before distributing to friends and family: reliability features first, then support/logging, then versioning. All three are implemented and CI-green as build `0.9.0-beta.98` (commit 43a6547), but none of it has run on the PC: the user's 24 h soak is running on the previous build and must not be interrupted without asking. Next steps, in order: (1) the user upgrades with the MSI from the CI artifact when the soak ends; (2) run the scenario matrix in `qa-plan.md`, especially edit/conflict, offline reconcile, sleep/resume and the report zip; (3) fix S1/S2 findings; (4) update CHANGELOG, tag `v0.9.0-beta.<build>` per `release-process.md`; (5) code signing decision before wider distribution.
-
-Previous focus (kept for context):
-
-P1 is functionally complete and in daily use on the author's PC. The last session added the installer (WiX MSI), the lifecycle commands, the optional Switch-from-OneDrive assistant and a full documentation pass. What remains is verification and polish, then P2:
-
-1. User checks still open: upload bandwidth limit with a real upload, Spanish text on every page, Switch assistant take-over (needs OneDrive unlinked), installer wizard wording.
-2. Engineering gaps: automated responsiveness harness in CI and a 24 h soak on the AOT build, manual Explorer checklist, post-burst GC, USN reconcile, a clearer message when uninstall is refused, code signing (decision pending).
-3. P2 candidates in the order I would propose: edits to existing files (today they are not uploaded), cloud thumbnails, Known Folder Move support, parallel segment download, socket.io wake-up.
+The beta is running on the user's notebook (builds up to 117 installed; beta.102 to 117 verified in part, see `progress.md`). Verified: big-folder download (Turbo 14 GB in ~13.5 min), edits and offline replay. The last open problem was large uploads cut by Wi-Fi producing false "NoDrive conflict" copies; the fix (persisted/resumable upload sessions in index schema v5, fragment 409 resume, hash adoption, empty-ghost removal) is built and unit-tested (72 tests) but NOT verified on the PC: the test machine is unavailable and must not be contacted until the user says so. Next steps: (1) when the PC is back, install the latest CI build (quit the engine and relaunch it in the interactive session; see `bestPractices.md` on remote installs) and run the Wi-Fi scenarios (35 s cut, 3-5 min cut, Quit mid-upload, kill); (2) mass-delete guard test; (3) show progress during the ~2 min startup reconcile; (4) decide code signing (no work unless a free route exists; SAC users must disable it) and presets follow-ups (adaptive mode only if it proves important); (5) tag `v0.9.0-beta.<build>` per `release-process.md` once QA passes.
 
 ## Architecture in one paragraph (as built)
 

@@ -11,6 +11,9 @@ La primera beta. NoDrive ahora maneja las cosas de todos los días que antes fal
 - **Informar un problema.** Icono de la bandeja > Report a problem... crea un archivo que podés enviarnos. Mirá la guía de informes.
 - **Versiones.** La versión aparece al pie de la página de NoDrive, en el texto del icono de la bandeja y en el nombre del instalador.
 
+- **Las subidas grandes sobreviven a cortes de red.** Si la conexión se cae (o el equipo se suspende o NoDrive se reinicia) a mitad de una subida grande, NoDrive continúa donde quedó, sin empezar de nuevo ni crear una copia de "conflicto".
+- **Carpetas grandes más rápido.** Un ajuste nuevo, Velocidad de descarga masiva (Suave, Equilibrada, Turbo), controla cuántos archivos baja a la vez "Mantener siempre en este dispositivo".
+
 Límites conocidos: el instalador todavía no está firmado, por eso Windows puede avisar; las imágenes solo en línea muestran un icono en lugar de una vista previa hasta descargarlas.
 
 Hitos anteriores y detalles técnicos: mirá CHANGELOG.md en el proyecto.
