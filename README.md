@@ -1,6 +1,6 @@
 # NoDrive
 
-A deliberately small OneDrive client for Windows 11.
+A deliberately lightweight OneDrive client for Windows 11.
 
 - One provider (personal OneDrive), one platform (Windows), one job: make your OneDrive files appear
   in File Explorer as on-demand placeholders, download on open, upload on drop.
