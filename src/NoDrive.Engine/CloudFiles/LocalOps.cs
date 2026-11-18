@@ -79,7 +79,18 @@ internal sealed class LocalOps(ItemIndex index, GraphDrive graph, string syncRoo
             if (asDelete)
             {
                 if (!MayDelete(op)) { return false; }
-                try { await graph.DeleteItemAsync(op.ItemId, it.ETag, ct).ConfigureAwait(false); }
+                try
+                {
+                    try { await graph.DeleteItemAsync(op.ItemId, it.ETag, ct).ConfigureAwait(false); }
+                    catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+                    {
+                        // The eTag also moves when OneDrive only post-processes a file (video metadata, thumbnails). If the CONTENT is the one we know (same size and hash),
+                        // delete with the fresh eTag; a real change by someone else still keeps the file.
+                        var cloud = await graph.GetItemAsync(op.ItemId, ct).ConfigureAwait(false);
+                        if (cloud.QuickXorHash is { } h && h == it.QuickXorHash && cloud.Size == it.Size) { await graph.DeleteItemAsync(op.ItemId, cloud.ETag, ct).ConfigureAwait(false); }
+                        else { throw; }
+                    }
+                }
                 catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
                 {
                     Log.Warn($"'{it.Name}' changed in the cloud since; the local delete is not sent and the file will come back");
