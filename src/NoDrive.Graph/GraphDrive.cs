@@ -123,6 +123,8 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
             return await ReadItemAsync(resp, ct).ConfigureAwait(false);
         }
 
+        string sessionKey = parentId + "/" + name;
+        if (_openSessions.TryRemove(sessionKey, out var abandoned)) { await CancelSessionAsync(abandoned).ConfigureAwait(false); }      // our own interrupted attempt still holds the name: release it first
         string uploadUrl;
         using (var resp = await SendAsync(() =>
         {
@@ -135,11 +137,13 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
             uploadUrl = s?.UploadUrl ?? throw new InvalidOperationException("No upload URL returned.");
         }
 
-        return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct).ConfigureAwait(false);
+        return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct, sessionKey).ConfigureAwait(false);
     }
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _openSessions = new();
+
     /// <summary>Sends a file to an upload session in 5 MiB fragments (no Authorization header on fragments), resending a fragment after a dropped connection or 5xx.</summary>
-    private async Task<RemoteItem> UploadSessionAsync(string uploadUrl, string localPath, long size, Action<long, long>? progress, CancellationToken ct)
+    private async Task<RemoteItem> UploadSessionAsync(string uploadUrl, string localPath, long size, Action<long, long>? progress, CancellationToken ct, string? key = null)
     {
         var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(ChunkSize);
         bool finished = false;
@@ -186,7 +190,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
         finally
         {
             System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
-            if (!finished) { await CancelSessionAsync(uploadUrl).ConfigureAwait(false); }
+            if (!finished && !await CancelSessionAsync(uploadUrl).ConfigureAwait(false) && key is not null) { _openSessions[key] = uploadUrl; }       // no network right now: cancel it before the next attempt
         }
     }
 
@@ -194,15 +198,16 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
     /// Best effort: tells OneDrive to drop an abandoned upload session. A live session keeps the file name reserved, so the retry would otherwise hit a
     /// 409 name clash against our own earlier attempt. Short timeout; failure (no network) is fine, the caller handles the clash.
     /// </summary>
-    private async Task CancelSessionAsync(string uploadUrl)
+    private async Task<bool> CancelSessionAsync(string uploadUrl)
     {
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             using var req = new HttpRequestMessage(HttpMethod.Delete, uploadUrl);
             using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+            return (int)resp.StatusCode < 500;
         }
-        catch (Exception) { }
+        catch (Exception) { return false; }
     }
 
     /// <summary>The child of <paramref name="parentId"/> with this exact name, or null when there is none (used to recognise our own earlier upload after a timeout).</summary>

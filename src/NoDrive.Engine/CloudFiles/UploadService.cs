@@ -265,7 +265,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                         File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path));
                         Log.Info($"'{name}' was already in the cloud with the same content (an earlier attempt finished): linked, no conflict copy");
                     }
-                    else if (theirs is null)
+                    else if (theirs is null || (theirs.QuickXorHash is null && attempts < 4))
                     {
                         // Nothing visible in the cloud under this name: the clash is our own interrupted upload session still holding the name. Wait, do not make a copy.
                         Log.Info($"'{name}': the name is still reserved by an interrupted upload; retrying later");
