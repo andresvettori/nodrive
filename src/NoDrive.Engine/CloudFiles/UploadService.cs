@@ -258,6 +258,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                     if (twin is { } t1) { index.RemoveOps(t1.Id, "delete"); }       // keep the cloud original when the replace cannot be done safely
                     // A timeout can hide an upload that actually finished: if the cloud file with this name has our exact content, it IS our file (link it, no copy).
                     var theirs = await graph.GetChildByNameAsync(parentId, name, ct).ConfigureAwait(false);
+                    Log.Info($"name clash on '{name}' (attempt {attempts}): cloud has {(theirs is null ? "nothing visible" : $"{theirs.Size:N0} bytes, hash {theirs.QuickXorHash ?? "none"}, modified {theirs.ModifiedUtc:u}")}; local is {new FileInfo(path).Length:N0} bytes");
                     if (theirs is { IsFolder: false } c && c.Size == new FileInfo(path).Length && c.QuickXorHash is { } cloudHash && cloudHash == QuickXorHash.OfFile(path, ct))
                     {
                         item = c;
