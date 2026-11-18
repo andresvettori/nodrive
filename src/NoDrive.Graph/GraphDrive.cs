@@ -185,6 +185,17 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
         finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
     }
 
+    /// <summary>The child of <paramref name="parentId"/> with this exact name, or null when there is none (used to recognise our own earlier upload after a timeout).</summary>
+    public async Task<RemoteItem?> GetChildByNameAsync(string parentId, string name, CancellationToken ct)
+    {
+        try
+        {
+            using var resp = await SendAsync(HttpMethod.Get, $"{_options.BaseUrl}/me/drive/items/{Uri.EscapeDataString(parentId)}:/{Uri.EscapeDataString(name)}", ct).ConfigureAwait(false);
+            return await ReadItemAsync(resp, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound) { return null; }
+    }
+
     /// <summary>The current state of one item (used to refresh a stale index entry after a version conflict).</summary>
     public async Task<RemoteItem> GetItemAsync(string itemId, CancellationToken ct)
     {

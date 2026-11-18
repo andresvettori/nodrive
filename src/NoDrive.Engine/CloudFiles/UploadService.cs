@@ -1,3 +1,4 @@
+using NoDrive.Core.Hashing;
 using System.Collections.Concurrent;
 using System.Net;
 using NoDrive.Core.Index;
@@ -255,11 +256,22 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                 catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed)
                 {
                     if (twin is { } t1) { index.RemoveOps(t1.Id, "delete"); }       // keep the cloud original when the replace cannot be done safely
-                    string copy = ConflictName(name);
-                    item = await graph.UploadNewFileAsync(parentId, copy, path, ct, ProgressLogger(copy, act)).ConfigureAwait(false);
-                    finalPath = Path.Combine(Path.GetDirectoryName(path)!, copy);
-                    File.Move(path, finalPath);
-                    Log.Warn($"name clash for '{name}': uploaded as '{copy}'");
+                    // A timeout can hide an upload that actually finished: if the cloud file with this name has our exact content, it IS our file (link it, no copy).
+                    var theirs = await graph.GetChildByNameAsync(parentId, name, ct).ConfigureAwait(false);
+                    if (theirs is { IsFolder: false } c && c.Size == new FileInfo(path).Length && c.QuickXorHash is { } cloudHash && cloudHash == QuickXorHash.OfFile(path, ct))
+                    {
+                        item = c;
+                        File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path));
+                        Log.Info($"'{name}' was already in the cloud with the same content (an earlier attempt finished): linked, no conflict copy");
+                    }
+                    else
+                    {
+                        string copy = ConflictName(name);
+                        item = await graph.UploadNewFileAsync(parentId, copy, path, ct, ProgressLogger(copy, act)).ConfigureAwait(false);
+                        finalPath = Path.Combine(Path.GetDirectoryName(path)!, copy);
+                        File.Move(path, finalPath);
+                        Log.Warn($"name clash for '{name}': uploaded as '{copy}'");
+                    }
                 }
                 if (File.Exists(finalPath) && File.GetLastWriteTimeUtc(finalPath) != stamp) { Log.Warn($"{name} changed while uploading; the uploaded copy is the earlier version and the file stays a plain local file"); index.RemoveUpload(path); ActivityLog.End(act!, "skipped", "changed while uploading"); act = null; return; }
                 }
@@ -353,6 +365,18 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             try { item = await graph.UpdateFileAsync(cur.Id, cur.ETag, path, ct, ProgressLogger(fi.Name, act)).ConfigureAwait(false); }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
             {
+                var latest = await graph.GetItemAsync(cur.Id, ct).ConfigureAwait(false);
+                if (latest.Size == lengthBefore && latest.QuickXorHash is { } lh && lh == QuickXorHash.OfFile(path, ct))
+                {
+                    // Our own earlier attempt had in fact finished (timeout hid the answer): the cloud already holds this exact content.
+                    index.ApplyPage([DeltaChange.Upsert(latest)], "upload.last", latest.Id, index.Generation);
+                    if (!PlaceholderWriter.RefreshInSync(path, latest) && !RemoteApplier.MarkInSync(path)) { ConvertToPlaceholder(path, latest.Id, onDemand: false); }
+                    index.RemoveUpload(path);
+                    ActivityLog.End(act, "ok", "already uploaded"); act = null;
+                    PinWatcher.NotifyShell(path);
+                    Log.Info($"'{fi.Name}' was already updated in the cloud by an earlier attempt: no conflict copy");
+                    return;
+                }
                 string copyPath = Path.Combine(Path.GetDirectoryName(path)!, ConflictName(fi.Name));
                 File.Copy(path, copyPath);                                                   // the user's version, as a plain new file: uploaded like any new file
                 var cloud = await graph.GetItemAsync(cur.Id, ct).ConfigureAwait(false);
