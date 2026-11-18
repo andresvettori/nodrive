@@ -31,6 +31,8 @@ internal sealed class StateDto
     public CoexistenceDto Coexistence { get; set; } = new();
     public int HeldMissing { get; set; }
     public string LastReconcile { get; set; } = "";
+    public int ReconcileDone { get; set; }
+    public int ReconcileTotal { get; set; }
     public string SupportId { get; set; } = "";
     public string Version { get; set; } = "";
     public string Status { get; set; } = "";
@@ -247,6 +249,8 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
             BytesDown = ActivityLog.BytesDown,
             BytesUp = ActivityLog.BytesUp,
             HeldMissing = service.Reconciler?.HeldCount ?? 0,
+            ReconcileDone = service.Reconciler?.ProgressDone ?? 0,
+            ReconcileTotal = service.Reconciler?.ProgressTotal ?? 0,
             LastReconcile = service.Reconciler is { LastRunUtc: { } lr } r ? $"{lr:O}|{r.LastSummary}" : "",
             SupportId = Diagnostics.SessionId,
             Coexistence = ToDto(Infrastructure.Coexistence.Detect(paths.SyncRoot)),

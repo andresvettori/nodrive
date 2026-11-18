@@ -1,6 +1,7 @@
 using NoDrive.Core.Index;
 using NoDrive.Core.Model;
 using NoDrive.Core.Names;
+using NoDrive.Core.Sync;
 using NoDrive.Engine.Infrastructure;
 
 namespace NoDrive.Engine.CloudFiles;
@@ -23,6 +24,11 @@ internal sealed class OfflineReconciler(ItemIndex index, PopulationState populat
     public DateTime? LastRunUtc { get; private set; }
     public string LastSummary { get; private set; } = "";
 
+    /// <summary>Folders examined so far and in total while a run is in progress (both 0 when idle); shown on the page so the start-up check is not silent.</summary>
+    public int ProgressDone => Volatile.Read(ref _done);
+    public int ProgressTotal => Volatile.Read(ref _total);
+    private int _done, _total;
+
     public void RequestRun() => _poke.Release();
 
     public void Dispose() { _run.Dispose(); _poke.Dispose(); }
@@ -31,7 +37,7 @@ internal sealed class OfflineReconciler(ItemIndex index, PopulationState populat
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(20), ct).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(8), ct).ConfigureAwait(false);
             while (!ct.IsCancellationRequested)
             {
                 try { await RunAsync(ct).ConfigureAwait(false); }
@@ -53,8 +59,11 @@ internal sealed class OfflineReconciler(ItemIndex index, PopulationState populat
             var missing = new List<(string Id, string Name, string FolderId)>();
             var unknownPlaceholders = new List<string>();
             var plain = new List<string>();
-            foreach (string folderId in population.PopulatedSet())
+            var folderIds = population.PopulatedSet().ToList();
+            Volatile.Write(ref _done, 0); Volatile.Write(ref _total, folderIds.Count);
+            foreach (string folderId in folderIds)
             {
+                Volatile.Write(ref _done, folders);
                 ct.ThrowIfCancellationRequested();
                 string? dir = population.PathOfFolder(folderId, syncRoot);
                 if (dir is null || !Directory.Exists(dir)) { continue; }
@@ -85,6 +94,8 @@ internal sealed class OfflineReconciler(ItemIndex index, PopulationState populat
                     else { plain.Add(info.FullName); }
                 }
                 if (++folders % 50 == 0) { await Task.Delay(20, ct).ConfigureAwait(false); }
+                // Hand the changes found so far to the upload queue right away instead of waiting for the end of the walk: the first change leaves in seconds, not minutes.
+                if (plain.Count > 0 && (plain.Count >= 50 || folders % 100 == 0)) { queuedPlain += Flush(plain); }
             }
 
             // Placeholders that are not where the index expects them were renamed or moved while we were stopped: replay as a rename (the identity inside the placeholder is the cloud id).
@@ -97,11 +108,11 @@ internal sealed class OfflineReconciler(ItemIndex index, PopulationState populat
                 renamed++;
             }
 
-            if (plain.Count > 0) { index.EnqueueUploads(plain.Where(p => !ShouldIgnore(p)), DateTime.UtcNow.AddSeconds(5).Ticks); queuedPlain = plain.Count; }
+            queuedPlain += Flush(plain);
 
             long local = index.CountLocal();
-            long limit = Math.Max(50, local / 20);
-            if (missing.Count > limit)
+            long limit = MissingGuard.Limit(local);
+            if (MissingGuard.ShouldHold(missing.Count, local))
             {
                 _held = missing;
                 Log.Warn($"reconcile: {missing.Count} items are missing on this PC (limit {limit}); nothing was deleted in the cloud");
@@ -117,13 +128,17 @@ internal sealed class OfflineReconciler(ItemIndex index, PopulationState populat
             Log.Info("reconcile: " + LastSummary);
             if (edited + queuedPlain + renamed > 0 || (missing.Count > 0 && _held.Count == 0)) { ActivityLog.Add("sync", "NoDrive", "ok", detail: "caught up with changes made while it was stopped: " + LastSummary); }
         }
-        finally { _run.Release(); }
+        finally { Volatile.Write(ref _total, 0); Volatile.Write(ref _done, 0); _run.Release(); }
     }
 
-    private static bool ShouldIgnore(string path)
+    /// <summary>Queues the collected paths for upload (skipping names that are never uploaded), empties the list and returns how many were queued.</summary>
+    private int Flush(List<string> plain)
     {
-        string n = Path.GetFileName(path);
-        return n.StartsWith("~$", StringComparison.Ordinal) || n.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || n.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase) || n.Equals("Thumbs.db", StringComparison.OrdinalIgnoreCase);
+        var send = plain.Where(p => !OneDriveNames.IsNeverUploaded(Path.GetFileName(p), string.Equals(Path.GetDirectoryName(p), syncRoot.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))).ToList();
+        int n = plain.Count;
+        plain.Clear();
+        if (send.Count > 0) { index.EnqueueUploads(send, DateTime.UtcNow.AddSeconds(5).Ticks); }
+        return n;
     }
 
     /// <summary>The user says the missing items should come back: forget they were deleted and let Windows fill the folders in from the cloud again.</summary>

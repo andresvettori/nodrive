@@ -1,3 +1,4 @@
+using NoDrive.Core.Sync;
 using NoDrive.Core.Hashing;
 using System.Collections.Concurrent;
 using System.Net;
@@ -256,34 +257,38 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                     // A timeout can hide an upload that actually finished: if the cloud file with this name has our exact content, it IS our file (link it, no copy).
                     var theirs = await graph.GetChildByNameAsync(parentId, name, ct).ConfigureAwait(false);
                     Log.Info($"name clash on '{name}' (attempt {attempts}): cloud has {(theirs is null ? "nothing visible" : $"{theirs.Size:N0} bytes, hash {theirs.QuickXorHash ?? "none"}, modified {theirs.ModifiedUtc:u}")}; local is {new FileInfo(path).Length:N0} bytes");
-                    if (theirs is { IsFolder: false } c && c.Size == new FileInfo(path).Length && c.QuickXorHash is { } cloudHash && cloudHash == QuickXorHash.OfFile(path, ct))
+                    long localSize = new FileInfo(path).Length;
+                    var action = ClashPolicy.Decide(localSize, theirs is not null, theirs?.IsFolder ?? false, theirs?.Size ?? 0, theirs?.QuickXorHash, attempts, () => QuickXorHash.OfFile(path, ct));
+                    if (action == ClashAction.ClearEmptyLeftover && !await TryRemoveEmptyGhostAsync(theirs!, name, ct).ConfigureAwait(false))
                     {
-                        item = c;
-                        File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path));
-                        Log.Info($"'{name}' was already in the cloud with the same content (an earlier attempt finished): linked, no conflict copy");
+                        action = ClashPolicy.Decide(localSize, true, false, theirs!.Size, theirs.QuickXorHash, attempts, () => QuickXorHash.OfFile(path, ct), leftoverRemovalFailed: true);
                     }
-                    else if (theirs is { IsFolder: false, Size: 0 } ghost && new FileInfo(path).Length > 0 && attempts < 4 && await TryRemoveEmptyGhostAsync(ghost, name, ct).ConfigureAwait(false))
+                    switch (action)
                     {
-                        // An empty cloud file with our name that our index never saw is the leftover of an upload session we abandoned (OneDrive keeps it for hours): it was removed, try again.
-                        ActivityLog.End(act!, "failed", "retrying after clearing an interrupted upload"); act = null;
-                        Defer(path, attempts, TimeSpan.FromSeconds(3), bump: true);
-                        return;
-                    }
-                    else if (theirs is null || (theirs.QuickXorHash is null && attempts < 4))
-                    {
-                        // Nothing visible in the cloud under this name: the clash is our own interrupted upload session still holding the name. Wait, do not make a copy.
-                        Log.Info($"'{name}': the name is still reserved by an interrupted upload; retrying later");
-                        ActivityLog.End(act!, "failed", "waiting for an interrupted upload to expire"); act = null;
-                        Defer(path, attempts, TimeSpan.FromMinutes(2), bump: true);
-                        return;
-                    }
-                    else
-                    {
-                        string copy = ConflictName(name);
-                        item = await graph.UploadNewFileAsync(parentId, copy, path, ct, ProgressLogger(copy, act)).ConfigureAwait(false);
-                        finalPath = Path.Combine(Path.GetDirectoryName(path)!, copy);
-                        File.Move(path, finalPath);
-                        Log.Warn($"name clash for '{name}': uploaded as '{copy}'");
+                        case ClashAction.LinkExisting:
+                            item = theirs!;
+                            File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path));
+                            Log.Info($"'{name}' was already in the cloud with the same content (an earlier attempt finished): linked, no conflict copy");
+                            break;
+                        case ClashAction.ClearEmptyLeftover:
+                            // An empty cloud file with our name that our index never saw is the leftover of an upload session we abandoned (OneDrive keeps it for hours): it was removed, try again.
+                            ActivityLog.End(act!, "failed", "retrying after clearing an interrupted upload"); act = null;
+                            Defer(path, attempts, TimeSpan.FromSeconds(3), bump: true);
+                            return;
+                        case ClashAction.WaitForReservedName:
+                            Log.Info($"'{name}': the name is still reserved by an interrupted upload; retrying later");
+                            ActivityLog.End(act!, "failed", "waiting for an interrupted upload to expire"); act = null;
+                            Defer(path, attempts, TimeSpan.FromMinutes(2), bump: true);
+                            return;
+                        default:
+                        {
+                            string copy = ConflictName(name);
+                            item = await graph.UploadNewFileAsync(parentId, copy, path, ct, ProgressLogger(copy, act)).ConfigureAwait(false);
+                            finalPath = Path.Combine(Path.GetDirectoryName(path)!, copy);
+                            File.Move(path, finalPath);
+                            Log.Warn($"name clash for '{name}': uploaded as '{copy}'");
+                            break;
+                        }
                     }
                 }
                 if (File.Exists(finalPath) && File.GetLastWriteTimeUtc(finalPath) != stamp) { Log.Warn($"{name} changed while uploading; the uploaded copy is the earlier version and the file stays a plain local file"); index.RemoveUpload(path); ActivityLog.End(act!, "skipped", "changed while uploading"); act = null; return; }
@@ -366,8 +371,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
 
     private void Defer(string path, int attempts, TimeSpan wait, bool bump) => index.RescheduleUpload(path, bump ? attempts + 1 : attempts, DateTime.UtcNow.Add(wait).Ticks);
 
-    private static bool IsEdited(IndexedItem item, FileInfo fi) =>
-        item.Size != fi.Length || Math.Abs(item.ModifiedUtcTicks - fi.LastWriteTimeUtc.Ticks) > 2 * TimeSpan.TicksPerSecond;
+    private static bool IsEdited(IndexedItem item, FileInfo fi) => ChangeDetection.IsEdited(item.Size, item.ModifiedUtcTicks, fi.Length, fi.LastWriteTimeUtc.Ticks);
 
     /// <summary>A downloaded placeholder file whose size or modified time no longer match the cloud version we know: the user edited it.</summary>
     private bool IsEditedPlaceholder(string path)
@@ -399,7 +403,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
 
             // Same content as the cloud copy (a "touch", a save without changes, a time-only difference): do not upload, just mark it in sync. The hash is only computed when the
             // size is equal and the file is not huge; a different hash (or our hash being wrong) simply falls through to the normal upload.
-            if (cur.Size == fi.Length && fi.Length <= 512L * 1024 * 1024 && cur.QuickXorHash is { } known && known == QuickXorHash.OfFile(path, ct))
+            if (ChangeDetection.LocalEqualsCloud(cur.Size, cur.QuickXorHash, fi.Length, () => QuickXorHash.OfFile(path, ct)))
             {
                 if (!PlaceholderWriter.RefreshInSync(path, ToRemote(cur)) && !RemoteApplier.MarkInSync(path)) { ConvertToPlaceholder(path, cur.Id, onDemand: false); }
                 index.RemoveUpload(path);

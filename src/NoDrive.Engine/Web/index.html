@@ -84,6 +84,7 @@ a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:12px;box-shadow:var(--shadow);opacity:0;transition:opacity .25s;pointer-events:none}
 .toast.show{opacity:1}
 .banner{background:color-mix(in srgb,var(--warn) 14%,var(--card));border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));border-radius:12px;padding:10px 14px;margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.banner.info{background:var(--card);border-color:var(--line)}
 @media (max-width:560px){.tile .v{font-size:20px}main{padding:14px}}
 </style>
 </head>
@@ -216,6 +217,7 @@ en: {
   info:"About this setup", iFolder:"NoDrive folder", iData:"Data folder", iConfig:"Config file", iClient:"Sign-in app ID", iVersion:"Version", iMemory:"Memory in use", iUptime:"Running for",
   iLang:"Windows language", iRegion:"Regional format", iZone:"Time zone",
   rpH:"Report a problem", rpIntro:"Something not working? NoDrive can collect what we need to find the cause.", rpStep1:"Press the button below. NoDrive creates one zip file on your Desktop and opens the folder.", rpStep2:"Write down what you were doing when the problem happened.", rpStep3:"Send the zip and your note to the person who gave you NoDrive.", rpNames:"Include file names (recommended: it helps find the problem faster)", rpBtn:"Create report", rpDone:p=>`Created: ${p}`, rpFail:"Could not create the report.", supportId:"Support ID",
+  checking:(d,n)=>`Checking changes made while NoDrive was stopped: ${d} of ${n} folders…`,
   heldMissing:n=>`${n} items are missing from this PC. NoDrive did not delete them in the cloud, in case this was not on purpose.`, restoreMissing:"Bring them back", deleteMissing:"Delete them in the cloud too",
   open:"Open", swTab:"Switch from OneDrive", swIntro:"Optional. NoDrive already works side by side with OneDrive. Use this guide only if you want NoDrive to take over the folder OneDrive uses today. Nothing changes until the last step, and no file is deleted or overwritten.",
   swH1:"1. Where you are now", swKfmOn:f=>`Folder Backup is on for ${f}.`, swKfmOff:"Folder Backup is off for Desktop, Documents and Pictures.", swSynced:"NoDrive has nothing waiting to sync.", swNotSynced:"NoDrive still has changes waiting to sync. Let it finish first.",
@@ -250,6 +252,7 @@ es: {
   info:"Sobre esta instalación", iFolder:"Carpeta NoDrive", iData:"Carpeta de datos", iConfig:"Archivo de configuración", iClient:"ID de la app de inicio de sesión", iVersion:"Versión", iMemory:"Memoria en uso", iUptime:"En ejecución desde hace",
   iLang:"Idioma de Windows", iRegion:"Formato regional", iZone:"Zona horaria",
   rpH:"Informar un problema", rpIntro:"¿Algo no funciona? NoDrive puede reunir lo necesario para encontrar la causa.", rpStep1:"Presioná el botón de abajo. NoDrive crea un archivo zip en tu Escritorio y abre la carpeta.", rpStep2:"Anotá qué estabas haciendo cuando ocurrió el problema.", rpStep3:"Enviá el zip y tu nota a la persona que te dio NoDrive.", rpNames:"Incluir nombres de archivos (recomendado: ayuda a encontrar el problema más rápido)", rpBtn:"Crear informe", rpDone:p=>`Creado: ${p}`, rpFail:"No se pudo crear el informe.", supportId:"ID de soporte",
+  checking:(d,n)=>`Revisando cambios hechos mientras NoDrive estaba detenido: ${d} de ${n} carpetas…`,
   heldMissing:n=>`Faltan ${n} elementos en esta PC. NoDrive no los eliminó en la nube, por si no fue a propósito.`, restoreMissing:"Recuperarlos", deleteMissing:"Eliminarlos también en la nube",
   open:"Abrir", swTab:"Pasarse desde OneDrive", swIntro:"Opcional. NoDrive ya funciona en paralelo con OneDrive. Usá esta guía solo si querés que NoDrive tome la carpeta que hoy usa OneDrive. No cambia nada hasta el último paso y no se borra ni se sobrescribe ningún archivo.",
   swH1:"1. Dónde estás ahora", swKfmOn:f=>`La copia de seguridad de carpetas está activa para ${f}.`, swKfmOff:"La copia de seguridad de carpetas está desactivada para Escritorio, Documentos e Imágenes.", swSynced:"NoDrive no tiene nada pendiente de sincronizar.", swNotSynced:"NoDrive todavía tiene cambios pendientes. Dejá que termine primero.",
@@ -364,7 +367,7 @@ function hero(){
   $("heroTitle").textContent = title; $("heroSub").textContent = sub;
   const b = $("heroBtn"); b.hidden = !btn; if (btn){ b.textContent = btn[0]; b.onclick = btn[1]; }
   $("pauseBtn").textContent = S.paused ? t("resume") : t("pause");
-  $("banner").innerHTML = (S.heldDeletes > 0 ? `<div class="banner"><span>${t("held", S.heldDeletes)}</span><button class="btn" id="allowBtn">${t("allow")}</button></div>` : "") +
+  $("banner").innerHTML = (S.reconcileTotal > 0 ? `<div class="banner info"><span>${t("checking", S.reconcileDone, S.reconcileTotal)}</span></div>` : "") + (S.heldDeletes > 0 ? `<div class="banner"><span>${t("held", S.heldDeletes)}</span><button class="btn" id="allowBtn">${t("allow")}</button></div>` : "") +
     (S.heldMissing > 0 ? `<div class="banner"><span>${t("heldMissing", S.heldMissing)}</span><button class="btn primary" id="restoreBtn">${t("restoreMissing")}</button><button class="btn" id="delMissBtn">${t("deleteMissing")}</button></div>` : "");
   if (S.heldDeletes > 0) $("allowBtn").onclick = () => api("/api/allow-deletes", {}).then(poll);
   if (S.heldMissing > 0) { $("restoreBtn").onclick = () => api("/api/reconcile/restore", {}).then(poll); $("delMissBtn").onclick = () => { if (confirm(t("deleteMissing") + "?")) api("/api/reconcile/delete", {}).then(poll); }; }
