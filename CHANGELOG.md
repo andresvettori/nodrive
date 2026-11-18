@@ -11,6 +11,7 @@ Versions before `0.9.0-beta` were development milestones, not numbered builds; t
 - After a start, NoDrive shows "Checking changes made while it was stopped: N of M folders" on the page and begins uploading what it finds right away instead of at the end of the check.
 
 ### Fixed
+- Saving a Word or PowerPoint document no longer replaces its cloud item with a new one: the save is applied as an update of the same file, so its version history and share links are kept.
 - A cloud item that appears created and then deleted in the same update could be left in the folder as if it still existed; the last change for each item now wins.
 - Edits that do not change the content (a save without changes) are no longer uploaded again; names OneDrive reserves (`.lock`, `_vti_`, a root `forms` folder, names starting with a space) are skipped instead of failing to upload.
 - **Large uploads survive network cuts**: the upload session is saved and continued after a cut, a sleep or a restart instead of starting again next to an orphaned session; a 409 on a fragment no longer turns the file into a "NoDrive conflict" copy; identical content already in the cloud is linked instead of copied; the empty leftover of an interrupted upload is cleared automatically.

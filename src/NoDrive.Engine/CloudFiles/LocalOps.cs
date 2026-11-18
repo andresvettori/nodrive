@@ -1,3 +1,4 @@
+using NoDrive.Core.Names;
 using NoDrive.Core.Sync;
 using System.Collections.Concurrent;
 using System.Net;
@@ -36,9 +37,22 @@ internal sealed class LocalOps(ItemIndex index, GraphDrive graph, string syncRoo
     public void AllowDeletes() { _allowUntil = DateTime.UtcNow.AddMinutes(10); s_signal.Release(); }
 
     /// <summary>Called from a cfapi callback: O(1), no I/O, never blocks.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> s_replaced = new();
+
+    /// <summary>The cloud item was just updated in place by a save: a late "delete" for the same id (the application removing its backup copy) must not touch it.</summary>
+    public static void NoteReplaced(string itemId)
+    {
+        s_replaced[itemId] = Environment.TickCount64;
+        if (s_replaced.Count > 256) { foreach (var kv in s_replaced) { if (Environment.TickCount64 - kv.Value > 60_000) { s_replaced.TryRemove(kv.Key, out _); } } }
+    }
+
     public static void Post(string kind, string itemId, string? target)
     {
         if (itemId.Length == 0 || s_inbox.Count >= InboxLimit) { return; }
+        // Word and PowerPoint save by renaming the ORIGINAL to a temporary name (~WRL0001.tmp), writing the new file under the real name and deleting the temporary. A rename to a name NoDrive
+        // never uploads means the file is going away: treat it as a (delayed) delete so the new file is applied as an UPDATE of the same cloud item (versions and share links are kept).
+        if (kind == "rename" && target is not null && OneDriveNames.IsNeverUploaded(Path.GetFileName(target), atRoot: false)) { kind = "delete"; target = null; }
+        if (kind == "delete" && s_replaced.TryGetValue(itemId, out long when) && Environment.TickCount64 - when < 60_000) { return; }
         s_inbox.Enqueue((kind, itemId, target));
         s_signal.Release();
     }

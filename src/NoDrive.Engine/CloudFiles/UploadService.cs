@@ -244,8 +244,11 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                 {
                     if (replaceExisting)
                     {
-                        item = await graph.UpdateFileAsync(twin!.Value.Id, twin.Value.ETag, path, ct, ProgressLogger(name, act)).ConfigureAwait(false);
-                        index.RemoveOps(twin.Value.Id, "delete");
+                        // Cancel the pending delete BEFORE the (maybe long) upload: the application is replacing the file, not removing it, and the delete must not fire mid-upload.
+                        // If the update fails, the next attempt is an ordinary edit (the local file is newer), so nothing is lost by cancelling early.
+                        index.RemoveOps(twin!.Value.Id, "delete");
+                        LocalOps.NoteReplaced(twin.Value.Id);
+                        item = await graph.UpdateFileAsync(twin.Value.Id, twin.Value.ETag, path, ct, ProgressLogger(name, act)).ConfigureAwait(false);
                         File.SetLastWriteTimeUtc(path, item.ModifiedUtc.UtcDateTime);
                         stamp = File.GetLastWriteTimeUtc(path);
                     }
