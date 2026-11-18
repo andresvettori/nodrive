@@ -255,9 +255,12 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
                         if (sent >= size) { var done = await ReadItemAsync(resp, ct).ConfigureAwait(false); finished = true; SessionStore?.Forget(key ?? ""); return done; }
                         break;
                     }
-                    catch (HttpRequestException ex) when (ex.StatusCode is null && attempt < _options.MaxAttempts)
+                    catch (Exception ex) when (attempt < _options.MaxAttempts && (ex is HttpRequestException { StatusCode: null } || (ex is TaskCanceledException or TimeoutException && !ct.IsCancellationRequested)))
                     {
-                        await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, 3 * attempt)), ct).ConfigureAwait(false);       // dropped connection: resend the same chunk
+                        // Dropped connection or an HTTP timeout (a Wi-Fi cut makes the request hang until the 100 s client timeout): wait, then ask the session where it really is. The server
+                        // may have received this fragment although the answer was lost; resend only what it does not have. If it cannot be asked yet, resend the same chunk.
+                        await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, 3 * attempt)), ct).ConfigureAwait(false);
+                        if (await NextExpectedAsync(uploadUrl, ct).ConfigureAwait(false) is { } pos && pos >= 0 && pos < size && pos != sent) { sent = pos; fs.Position = pos; progress?.Invoke(sent, size); break; }
                     }
                 }
             }

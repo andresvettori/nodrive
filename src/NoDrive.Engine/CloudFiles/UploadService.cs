@@ -405,7 +405,12 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             // size is equal and the file is not huge; a different hash (or our hash being wrong) simply falls through to the normal upload.
             if (ChangeDetection.LocalEqualsCloud(cur.Size, cur.QuickXorHash, fi.Length, () => QuickXorHash.OfFile(path, ct)))
             {
-                if (!PlaceholderWriter.RefreshInSync(path, ToRemote(cur)) && !RemoteApplier.MarkInSync(path)) { ConvertToPlaceholder(path, cur.Id, onDemand: false); }
+                if (!PlaceholderWriter.RefreshInSync(path, ToRemote(cur)))
+                {
+                    // Make the local time equal to the cloud's so the next start-up check does not flag the same file again, then mark it in sync.
+                    try { File.SetLastWriteTimeUtc(path, new DateTime(cur.ModifiedUtcTicks, DateTimeKind.Utc)); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+                    if (!RemoteApplier.MarkInSync(path)) { ConvertToPlaceholder(path, cur.Id, onDemand: false); }
+                }
                 index.RemoveUpload(path);
                 PinWatcher.NotifyShell(path);
                 Log.Info($"'{fi.Name}' has the same content as the cloud copy: marked in sync, nothing uploaded");

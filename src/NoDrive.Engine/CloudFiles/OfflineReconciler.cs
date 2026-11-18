@@ -49,9 +49,16 @@ internal sealed class OfflineReconciler(ItemIndex index, PopulationState populat
         catch (OperationCanceledException) { }
     }
 
-    public async Task RunAsync(CancellationToken ct)
+    /// <summary>
+    /// Runs the check on its own below-normal-priority thread: the walk is CPU-bound (thousands of folders), and at normal priority it competed with the user's programs for a
+    /// couple of minutes. Memory is compacted afterwards so the burst does not leave the process larger than before.
+    /// </summary>
+    public Task RunAsync(CancellationToken ct) => Task.Factory.StartNew(() => RunCore(ct), ct, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+    private void RunCore(CancellationToken ct)
     {
-        if (!await _run.WaitAsync(0, ct).ConfigureAwait(false)) { return; }
+        if (!_run.Wait(0, ct)) { return; }
+        Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
         try
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -93,7 +100,7 @@ internal sealed class OfflineReconciler(ItemIndex index, PopulationState populat
                     if ((info.Attributes & FileAttributes.ReparsePoint) != 0) { unknownPlaceholders.Add(info.FullName); }
                     else { plain.Add(info.FullName); }
                 }
-                if (++folders % 50 == 0) { await Task.Delay(20, ct).ConfigureAwait(false); }
+                if (++folders % 50 == 0) { Thread.Sleep(20); }
                 // Hand the changes found so far to the upload queue right away instead of waiting for the end of the walk: the first change leaves in seconds, not minutes.
                 if (plain.Count > 0 && (plain.Count >= 50 || folders % 100 == 0)) { queuedPlain += Flush(plain); }
             }
@@ -128,7 +135,7 @@ internal sealed class OfflineReconciler(ItemIndex index, PopulationState populat
             Log.Info("reconcile: " + LastSummary);
             if (edited + queuedPlain + renamed > 0 || (missing.Count > 0 && _held.Count == 0)) { ActivityLog.Add("sync", "NoDrive", "ok", detail: "caught up with changes made while it was stopped: " + LastSummary); }
         }
-        finally { Volatile.Write(ref _total, 0); Volatile.Write(ref _done, 0); _run.Release(); }
+        finally { Volatile.Write(ref _total, 0); Volatile.Write(ref _done, 0); _run.Release(); GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true); }
     }
 
     /// <summary>Queues the collected paths for upload (skipping names that are never uploaded), empties the list and returns how many were queued.</summary>

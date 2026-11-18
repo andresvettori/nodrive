@@ -133,7 +133,9 @@ internal static unsafe class PlaceholderWriter
         HANDLE h = default;
         fixed (char* p = path)
         {
-            HRESULT open = PInvoke.CfOpenFileWithOplock(new PCWSTR(p), CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_WRITE_ACCESS, &h);
+            // Exclusive first (the way remote updates, which work, open the file), shared when something else holds it.
+            HRESULT open = PInvoke.CfOpenFileWithOplock(new PCWSTR(p), CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_WRITE_ACCESS | CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_EXCLUSIVE, &h);
+            if (open.Failed) { open = PInvoke.CfOpenFileWithOplock(new PCWSTR(p), CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_WRITE_ACCESS, &h); }
             if (open.Failed) { Log.Warn($"refresh: open {path} -> 0x{open.Value:X8}"); return false; }
         }
         try

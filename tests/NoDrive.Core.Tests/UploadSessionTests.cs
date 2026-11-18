@@ -151,4 +151,22 @@ public sealed class UploadSessionTests : IDisposable
         await Assert.ThrowsAsync<HttpRequestException>(() => Drive(h, store).UploadNewFileAsync("P", "big.bin", _file, TestContext.Current.CancellationToken));
         Assert.Empty(store.Items);
     }
+
+    [Fact]
+    public async Task A_timeout_on_a_fragment_asks_the_session_and_resends_only_what_the_server_lacks()
+    {
+        var store = new Store();
+        int puts = 0;
+        var h = new Fake(r =>
+        {
+            if (r.Method == HttpMethod.Post) { return Json("{\"uploadUrl\":\"" + Url + "\"}"); }
+            if (r.Method == HttpMethod.Get) { return Json("{\"nextExpectedRanges\":[\"10485760-\"]}"); }       // the server DID get the first 10 MiB although the answer was lost
+            if (++puts == 1) { throw new TaskCanceledException("net_http_request_timedout"); }
+            return Done();
+        });
+        var item = await Drive(h, store).UploadNewFileAsync("P", "big.bin", _file, TestContext.Current.CancellationToken);
+        Assert.Equal("I1", item.Id);
+        Assert.Equal(2, h.Log.Count(x => x.Method == HttpMethod.Put));
+        Assert.Equal(10485760, h.Log.Last(x => x.Method == HttpMethod.Put).Range!.From);        // the second request did not resend the first fragment
+    }
 }
