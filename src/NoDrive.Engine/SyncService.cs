@@ -140,6 +140,7 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         var policy = new HydrationPolicy();
         var hydrator = new Hydrator(graph, policy, new FailureMemory(policy.FailureMemory)) { Limiter = ActivityLog.Download };
         graph.UploadLimiter = ActivityLog.Upload;
+        graph.SessionStore = _index;
         graph.OnBytesUploaded = ActivityLog.AddUp;
         ActivityLog.ApplyLimits(config);
 

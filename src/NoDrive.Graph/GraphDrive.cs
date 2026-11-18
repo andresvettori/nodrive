@@ -37,6 +37,9 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
     /// <summary>Optional upload rate limit shared by all uploads.</summary>
     public NoDrive.Core.Net.BandwidthLimiter? UploadLimiter { get; set; }
 
+    /// <summary>Durable store for open upload sessions. When set, an interrupted upload is CONTINUED by the next attempt instead of being restarted.</summary>
+    public NoDrive.Core.Abstractions.IUploadSessionStore? SessionStore { get; set; }
+
     /// <summary>Reports the bytes that went out, for the activity counters.</summary>
     public Action<long>? OnBytesUploaded { get; set; }
     private readonly ThrottleGate _gate = gate ?? new ThrottleGate();
@@ -123,51 +126,81 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
             return await ReadItemAsync(resp, ct).ConfigureAwait(false);
         }
 
-        string sessionKey = parentId + "/" + name;
-        if (_openSessions.TryRemove(sessionKey, out var abandoned)) { await CancelSessionAsync(abandoned).ConfigureAwait(false); }      // our own interrupted attempt still holds the name: release it first
-        string uploadUrl;
-        using (var resp = await SendAsync(() =>
+        string sessionKey = "new:" + parentId + "/" + name;
+        var (uploadUrl, start) = await OpenSessionAsync(sessionKey, localPath, size, () =>
         {
             var req = new HttpRequestMessage(HttpMethod.Post, ChildUrl(parentId, name, "/createUploadSession"));
             req.Content = new StringContent("{\"item\":{\"@microsoft.graph.conflictBehavior\":\"fail\"}}", System.Text.Encoding.UTF8, "application/json");
             return req;
-        }, ct).ConfigureAwait(false))
-        {
-            var s = await resp.Content.ReadFromJsonAsync(GraphJsonContext.Default.UploadSessionDto, ct).ConfigureAwait(false);
-            uploadUrl = s?.UploadUrl ?? throw new InvalidOperationException("No upload URL returned.");
-        }
-
-        return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct, sessionKey).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
+        return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct, sessionKey, start).ConfigureAwait(false);
     }
 
-    /// <summary>Where an upload session wants the next fragment to start (first number of nextExpectedRanges), or null when it cannot be read.</summary>
+    private enum SessionState { Open, Gone }
+
+    /// <summary>Asks the upload session where to continue (first number of nextExpectedRanges). Gone = it no longer exists (expired, cancelled or already completed). Other failures throw.</summary>
+    private async Task<(SessionState State, long Next)> SessionStatusAsync(string uploadUrl, CancellationToken ct)
+    {
+        using var resp = await http.SendAsync(new HttpRequestMessage(HttpMethod.Get, uploadUrl), HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
+        if (resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone) { return (SessionState.Gone, 0); }
+        resp.EnsureSuccessStatusCode();
+        using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        if (!doc.RootElement.TryGetProperty("nextExpectedRanges", out var ranges) || ranges.GetArrayLength() == 0) { return (SessionState.Gone, 0); }
+        string first = ranges[0].GetString() ?? "";
+        int dash = first.IndexOf('-');
+        return long.TryParse(dash > 0 ? first[..dash] : first, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long start) ? (SessionState.Open, start) : (SessionState.Gone, 0);
+    }
+
     private async Task<long?> NextExpectedAsync(string uploadUrl, CancellationToken ct)
     {
-        try
-        {
-            using var resp = await http.SendAsync(new HttpRequestMessage(HttpMethod.Get, uploadUrl), HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
-            if (!resp.IsSuccessStatusCode) { return null; }
-            using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
-            if (!doc.RootElement.TryGetProperty("nextExpectedRanges", out var ranges) || ranges.GetArrayLength() == 0) { return null; }
-            string first = ranges[0].GetString() ?? "";
-            int dash = first.IndexOf('-');
-            return long.TryParse(dash > 0 ? first[..dash] : first, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long start) ? start : null;
-        }
+        try { var (state, next) = await SessionStatusAsync(uploadUrl, ct).ConfigureAwait(false); return state == SessionState.Open ? next : null; }
         catch (Exception ex) when (ex is not OperationCanceledException) { return null; }
     }
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _openSessions = new();
+    private async Task DropSessionAsync(string? key, string uploadUrl)
+    {
+        if (key is not null) { SessionStore?.Forget(key); }
+        await CancelSessionAsync(uploadUrl).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Continues the saved session for this upload when it is still valid for the same local file, otherwise cancels it and creates a new one (saved before any byte is sent).
+    /// A network failure while asking about a saved session throws: the saved session is kept and the next attempt tries again.
+    /// </summary>
+    private async Task<(string Url, long Start)> OpenSessionAsync(string key, string localPath, long size, Func<HttpRequestMessage> create, CancellationToken ct)
+    {
+        long stamp = File.GetLastWriteTimeUtc(localPath).Ticks;
+        if (SessionStore?.Find(key) is { } saved)
+        {
+            if (saved.Size == size && saved.LastWriteTicks == stamp)
+            {
+                var (state, next) = await SessionStatusAsync(saved.Url, ct).ConfigureAwait(false);
+                if (state == SessionState.Open && next < size) { return (saved.Url, next); }
+            }
+            else { await CancelSessionAsync(saved.Url).ConfigureAwait(false); }
+            SessionStore.Forget(key);
+        }
+        string url;
+        using (var resp = await SendAsync(create, ct).ConfigureAwait(false))
+        {
+            var s = await resp.Content.ReadFromJsonAsync(GraphJsonContext.Default.UploadSessionDto, ct).ConfigureAwait(false);
+            url = s?.UploadUrl ?? throw new InvalidOperationException("No upload URL returned.");
+        }
+        SessionStore?.Remember(key, new NoDrive.Core.Abstractions.SavedUploadSession(url, size, stamp));
+        return (url, 0);
+    }
 
     /// <summary>Sends a file to an upload session in 5 MiB fragments (no Authorization header on fragments), resending a fragment after a dropped connection or 5xx.</summary>
-    private async Task<RemoteItem> UploadSessionAsync(string uploadUrl, string localPath, long size, Action<long, long>? progress, CancellationToken ct, string? key = null)
+    private async Task<RemoteItem> UploadSessionAsync(string uploadUrl, string localPath, long size, Action<long, long>? progress, CancellationToken ct, string? key = null, long start = 0)
     {
         var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(ChunkSize);
         bool finished = false;
         try
         {
             await using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
-            if (fs.Length != size) { throw new IOException("The file changed while uploading."); }
-            long sent = 0;
+            if (fs.Length != size) { await DropSessionAsync(key, uploadUrl).ConfigureAwait(false); throw new IOException("The file changed while uploading."); }
+            long sent = start;
+            if (start > 0) { fs.Position = start; progress?.Invoke(sent, size); }
             int resumes = 0;
             while (sent < size)
             {
@@ -200,7 +233,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
                         sent += n;
                         OnBytesUploaded?.Invoke(n);
                         progress?.Invoke(sent, size);
-                        if (sent >= size) { var done = await ReadItemAsync(resp, ct).ConfigureAwait(false); finished = true; return done; }
+                        if (sent >= size) { var done = await ReadItemAsync(resp, ct).ConfigureAwait(false); finished = true; SessionStore?.Forget(key ?? ""); return done; }
                         break;
                     }
                     catch (HttpRequestException ex) when (ex.StatusCode is null && attempt < _options.MaxAttempts)
@@ -214,7 +247,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
         finally
         {
             System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
-            if (!finished && !await CancelSessionAsync(uploadUrl).ConfigureAwait(false) && key is not null) { _openSessions[key] = uploadUrl; }       // no network right now: cancel it before the next attempt
+            if (!finished && (SessionStore is null || key is null)) { await CancelSessionAsync(uploadUrl).ConfigureAwait(false); }       // nobody will continue it: release the name; with a store the session is kept and continued
         }
     }
 
@@ -275,19 +308,15 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
             progress?.Invoke(size, size);
             return await ReadItemAsync(resp, ct).ConfigureAwait(false);
         }
-        string uploadUrl;
-        using (var resp = await SendAsync(() =>
+        string sessionKey = "upd:" + itemId;
+        var (uploadUrl, start) = await OpenSessionAsync(sessionKey, localPath, size, () =>
         {
             var req = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/me/drive/items/{id}/createUploadSession");
             if (!string.IsNullOrEmpty(etag)) { req.Headers.TryAddWithoutValidation("If-Match", etag); }
             req.Content = new StringContent("{\"item\":{\"@microsoft.graph.conflictBehavior\":\"replace\"}}", System.Text.Encoding.UTF8, "application/json");
             return req;
-        }, ct).ConfigureAwait(false))
-        {
-            var s = await resp.Content.ReadFromJsonAsync(GraphJsonContext.Default.UploadSessionDto, ct).ConfigureAwait(false);
-            uploadUrl = s?.UploadUrl ?? throw new InvalidOperationException("No upload URL returned.");
-        }
-        return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
+        return await UploadSessionAsync(uploadUrl, localPath, size, progress, ct, sessionKey, start).ConfigureAwait(false);
     }
 
     /// <summary>Creates a folder; an existing name fails with Conflict (never merged or renamed by the server).</summary>

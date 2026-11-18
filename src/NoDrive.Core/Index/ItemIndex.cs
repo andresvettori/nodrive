@@ -11,9 +11,9 @@ namespace NoDrive.Core.Index;
 /// </summary>
 public sealed record RemoteOp(long Seq, string Kind, string ItemId, string? Target, int Attempts);
 
-public sealed class ItemIndex : IDisposable
+public sealed class ItemIndex : IDisposable, NoDrive.Core.Abstractions.IUploadSessionStore
 {
-    private const int SchemaVersion = 4;
+    private const int SchemaVersion = 5;
     private static readonly string[] UpsertParameters = ["$id", "$p", "$n", "$s", "$m", "$f", "$e", "$c", "$q", "$g"];
     private readonly string _path;
     private readonly SqliteConnection _writer;
@@ -62,6 +62,7 @@ public sealed class ItemIndex : IDisposable
                 CREATE TABLE IF NOT EXISTS uploads(path TEXT PRIMARY KEY NOT NULL, depth INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL) WITHOUT ROWID;
                 CREATE TABLE IF NOT EXISTS remote_ops(seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, item_id TEXT NOT NULL, target TEXT, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY NOT NULL, v TEXT) WITHOUT ROWID;
+                CREATE TABLE IF NOT EXISTS upload_sessions(k TEXT PRIMARY KEY NOT NULL, url TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL) WITHOUT ROWID;
                 """);
             // v4: `local` = a placeholder or file for this item exists on disk (set when we create or link it). Only such items can be judged "deleted locally".
             bool hasLocal = false;
@@ -288,6 +289,23 @@ public sealed class ItemIndex : IDisposable
     }
 
     public void RescheduleUpload(string path, int attempts, long dueTicks) => ExecWrite("UPDATE uploads SET attempts=$a,due=$t WHERE path=$p", ("$a", attempts), ("$t", dueTicks), ("$p", path));
+
+    // ---------------- open upload sessions (resume after a cut or a restart) ----------------
+
+    public NoDrive.Core.Abstractions.SavedUploadSession? Find(string key)
+    {
+        using var c = Open(_path);
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT url,size,mtime FROM upload_sessions WHERE k=$k";
+        cmd.Parameters.AddWithValue("$k", key);
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? new NoDrive.Core.Abstractions.SavedUploadSession(r.GetString(0), r.GetInt64(1), r.GetInt64(2)) : null;
+    }
+
+    public void Remember(string key, NoDrive.Core.Abstractions.SavedUploadSession session) =>
+        ExecWrite("INSERT OR REPLACE INTO upload_sessions(k,url,size,mtime) VALUES($k,$u,$s,$m)", ("$k", key), ("$u", session.Url), ("$s", session.Size), ("$m", session.LastWriteTicks));
+
+    public void Forget(string key) => ExecWrite("DELETE FROM upload_sessions WHERE k=$k", ("$k", key));
 
     public void RemoveUpload(string path) => ExecWrite("DELETE FROM uploads WHERE path=$p", ("$p", path));
 
