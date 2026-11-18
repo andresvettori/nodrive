@@ -303,6 +303,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                 return;
             }
             index.MarkLocal(item.Id);
+            if (!isDir && !adopted) { VerifyHashSample(finalPath, item); }
             if (isDir) { if (!adopted) { population.Set(item.Id, true); } QueueChildren(finalPath); }
             index.RemoveUpload(path);
             if (act is not null) { ActivityLog.End(act, "ok", finalPath != path ? "conflict copy" : null); act = null; }
@@ -339,6 +340,24 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
             int pct = (int)(sent * 100 / total) / 10 * 10;
             if (pct > last && pct < 100) { last = pct; Log.Info($"uploading '{name}': {pct}% ({sent / 1048576} of {total / 1048576} MiB)"); }
         };
+    }
+
+    private static int s_hashChecks;
+
+    /// <summary>
+    /// Diagnostic only (never changes behaviour): for the first uploads of each run, compare OneDrive's quickXorHash with ours, so a wrong implementation shows up in the log
+    /// instead of silently disabling the "identical content" shortcuts. Bounded: 50 files per run, up to 256 MiB each.
+    /// </summary>
+    private static void VerifyHashSample(string path, RemoteItem item)
+    {
+        try
+        {
+            if (item.QuickXorHash is not { } cloud || new FileInfo(path).Length is > 256L * 1024 * 1024 || System.Threading.Interlocked.Increment(ref s_hashChecks) > 50) { return; }
+            string local = QuickXorHash.OfFile(path);
+            if (local == cloud) { Log.Info($"hash check ok for '{Path.GetFileName(path)}'"); }
+            else { Log.Warn($"hash check MISMATCH for '{Path.GetFileName(path)}': cloud {cloud}, local {local}"); }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     /// <summary>Deletes (recycle bin, If-Match) the empty leftover of an interrupted upload session so the name is free again. False when it could not be removed.</summary>

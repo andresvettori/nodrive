@@ -229,6 +229,12 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
                             await Task.Delay(resp.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(Math.Min(30, 3 * attempt)), ct).ConfigureAwait(false);
                             continue;
                         }
+                        if (resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+                        {
+                            // The session (or the token inside its URL) expired: forget it so the next attempt creates a new one. Status null = an ordinary retry with back-off.
+                            if (key is not null) { SessionStore?.Forget(key); }
+                            throw new HttpRequestException($"The upload session is no longer valid (HTTP {(int)resp.StatusCode}); a new one will be created");
+                        }
                         resp.EnsureSuccessStatusCode();
                         sent += n;
                         OnBytesUploaded?.Invoke(n);
