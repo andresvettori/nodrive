@@ -163,18 +163,19 @@ internal sealed unsafe class RemoteApplier(ItemIndex index, PopulationState popu
         return UpdateFile(path, new IndexedItem(cloud.Id, cloud.ParentId, cloud.Name, cloud.Size, cloud.ModifiedUtc.UtcTicks, false, cloud.ETag, cloud.CTag, cloud.QuickXorHash, false));
     }
 
-    internal static void MarkInSync(string path)
+    internal static bool MarkInSync(string path)
     {
         HANDLE h = default;
         fixed (char* p = path)
         {
             HRESULT open = PInvoke.CfOpenFileWithOplock(new PCWSTR(p), CF_OPEN_FILE_FLAGS.CF_OPEN_FILE_FLAG_WRITE_ACCESS, &h);
-            if (open.Failed) { Log.Warn($"mark in sync: open {path} -> 0x{open.Value:X8}"); return; }
+            if (open.Failed) { Log.Warn($"mark in sync: open {path} -> 0x{open.Value:X8}"); return false; }
         }
         try
         {
             HRESULT hr = PInvoke.CfSetInSyncState(h, CF_IN_SYNC_STATE.CF_IN_SYNC_STATE_IN_SYNC, CF_SET_IN_SYNC_FLAGS.CF_SET_IN_SYNC_FLAG_NONE, null);
             if (hr.Failed) { Log.Warn($"mark in sync: {path} -> 0x{hr.Value:X8}"); }
+            return hr.Succeeded;
         }
         finally { PInvoke.CfCloseHandle(h); }
     }

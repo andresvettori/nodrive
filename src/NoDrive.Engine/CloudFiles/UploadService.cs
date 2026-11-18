@@ -372,7 +372,11 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                 Defer(path, attempts, TimeSpan.FromSeconds(5), bump: false);                  // the index now holds the new eTag, so the next round is an ordinary edit
                 return;
             }
-            PlaceholderWriter.RefreshInSync(path, item);
+            // The metadata refresh can fail (0x80070006 seen on files created locally and edited soon after): never leave the icon on "syncing" because of it.
+            if (!PlaceholderWriter.RefreshInSync(path, item) && !RemoteApplier.MarkInSync(path))
+            {
+                if (ConvertToPlaceholder(path, item.Id, onDemand: false)) { Log.Info($"'{fi.Name}' converted again to a placeholder to mark it in sync"); }
+            }
             index.RemoveUpload(path);
             ActivityLog.End(act, "ok"); act = null;
             PinWatcher.NotifyShell(path);

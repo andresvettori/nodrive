@@ -133,3 +133,6 @@ Verified 2026-11-16 on the PC after the fixes: the empty Copilot folder became a
 ### Turbo vs baseline (beta.106, 2026-11-17)
 - Fotos/Familia/2015 at Turbo: 18:17:23 -> 18:30:55 (~13.5 min, ~17.8 MB/s avg, peaks 25-30), memory 53-63 MB, CPU 3-7%, 0 HTTP 429/503, 2594/2594 done, 6 transient "no progress" retried OK. Baseline beta.102 was ~50 min. Balanced on 106 not measured.
 - Decision (user): leave presets as they are; adaptive mode only if it proves important. No code-signing work unless a free route exists. Next: verify edits of existing files (Word safe-save, conflict copy) and offline reconcile on the PC with a small test folder.
+
+### Bug found in edit tests (2026-11-17): files created locally and edited soon after stayed "syncing"
+- Log: `refresh of <file> -> 0x80070006` (CfUpdatePlaceholder after uploading the edit); upload itself fine. Fix: fallback chain RefreshInSync -> CfSetInSyncState (RemoteApplier.MarkInSync, now returns bool) -> ConvertToPlaceholder. Root cause of 0x80070006 not established; check the log line "converted again" on the PC to learn if the file had lost its placeholder state. Verified edits otherwise OK (Word safe-save, conflict copy uploaded).
