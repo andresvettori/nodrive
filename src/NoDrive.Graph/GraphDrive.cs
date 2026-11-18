@@ -142,6 +142,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
     private async Task<RemoteItem> UploadSessionAsync(string uploadUrl, string localPath, long size, Action<long, long>? progress, CancellationToken ct)
     {
         var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(ChunkSize);
+        bool finished = false;
         try
         {
             await using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
@@ -171,7 +172,7 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
                         sent += n;
                         OnBytesUploaded?.Invoke(n);
                         progress?.Invoke(sent, size);
-                        if (sent >= size) { return await ReadItemAsync(resp, ct).ConfigureAwait(false); }
+                        if (sent >= size) { var done = await ReadItemAsync(resp, ct).ConfigureAwait(false); finished = true; return done; }
                         break;
                     }
                     catch (HttpRequestException ex) when (ex.StatusCode is null && attempt < _options.MaxAttempts)
@@ -182,7 +183,26 @@ public sealed class GraphDrive(HttpClient http, AccessTokenProvider accessToken,
             }
             throw new InvalidOperationException("Upload ended without a final response.");
         }
-        finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+            if (!finished) { await CancelSessionAsync(uploadUrl).ConfigureAwait(false); }
+        }
+    }
+
+    /// <summary>
+    /// Best effort: tells OneDrive to drop an abandoned upload session. A live session keeps the file name reserved, so the retry would otherwise hit a
+    /// 409 name clash against our own earlier attempt. Short timeout; failure (no network) is fine, the caller handles the clash.
+    /// </summary>
+    private async Task CancelSessionAsync(string uploadUrl)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var req = new HttpRequestMessage(HttpMethod.Delete, uploadUrl);
+            using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+        }
+        catch (Exception) { }
     }
 
     /// <summary>The child of <paramref name="parentId"/> with this exact name, or null when there is none (used to recognise our own earlier upload after a timeout).</summary>
