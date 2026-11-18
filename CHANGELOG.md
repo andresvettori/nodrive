@@ -8,8 +8,6 @@ Versions before `0.9.0-beta` were development milestones, not numbered builds; t
 
 ### Changed
 - **Bulk download speed** setting (Settings page, applied immediately): Gentle (2 files at a time), Balanced (4, default) or Turbo (8) for "Always keep on this device" on big folders. Each small file costs about a second of latency, so more streams make folders with thousands of small files much faster. Also `bulkSpeed` in `config.json`.
-
-### Changed
 - After a start, NoDrive shows "Checking changes made while it was stopped: N of M folders" on the page and begins uploading what it finds right away instead of at the end of the check.
 
 ### Fixed
