@@ -64,6 +64,8 @@ internal static class Lifecycle
 
     public static int Uninstall(EnginePaths paths, bool force, bool deleteData, bool deleteRoot, int waitSeconds)
     {
+        // Look at the journal BEFORE stopping the engine: a refused uninstall must leave NoDrive running (a stopped provider makes every placeholder unreadable in Explorer).
+        if (!force && PendingExitCode(paths) != 0) { Console.WriteLine("Unsynced changes would be lost. Wait for NoDrive to finish (the tray icon or the settings page shows what is pending), or use --force."); return 3; }
         if (Quit(waitSeconds) != 0) { Console.WriteLine("NoDrive is still running; close it first."); return 1; }
         if (!force && PendingExitCode(paths) != 0) { Console.WriteLine("Unsynced changes would be lost. Start NoDrive and wait for it to finish, or use --force."); return 3; }
         SyncRootRegistrar.Unregister();
