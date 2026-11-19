@@ -1,5 +1,5 @@
 # Builds the unsigned MSIX for the Microsoft Store (the Store signs it). Run on Windows with the Windows SDK (makeappx).
-# Identity values come from Partner Center > Product identity; defaults are placeholders that Store will reject.
+# Identity values from Partner Center > Product identity for "NoDrive Client" (public data, they are visible in any package); env vars override them.
 param(
   [Parameter(Mandatory)] [string] $EngineDir,                 # folder with the published NoDrive.Engine.exe
   [Parameter(Mandatory)] [string] $Version,                   # 4-part, e.g. 0.9.149.0
@@ -9,9 +9,9 @@ param(
   [string] $PublisherDisplay = $env:MSIX_PUBLISHER_DISPLAY
 )
 $ErrorActionPreference = 'Stop'
-if (-not $IdentityName) { $IdentityName = 'NoDrive.Placeholder' }
-if (-not $Publisher) { $Publisher = 'CN=Placeholder' }
-if (-not $PublisherDisplay) { $PublisherDisplay = 'NoDrive' }
+if (-not $IdentityName) { $IdentityName = '59627SpeedofLight.NoDriveClient' }
+if (-not $Publisher) { $Publisher = 'CN=F14B1C2B-B74B-41D8-A576-56289025EA66' }
+if (-not $PublisherDisplay) { $PublisherDisplay = 'Speed of Light' }
 $stage = Join-Path ([IO.Path]::GetTempPath()) "nodrive-msix-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory $stage | Out-Null
 Copy-Item "$EngineDir/NoDrive.Engine.exe" $stage
