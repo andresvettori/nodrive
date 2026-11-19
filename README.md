@@ -2,6 +2,8 @@
 
 A deliberately lightweight OneDrive client for Windows 11.
 
+Website: <https://andresvettori.github.io/nodrive/> (what it is, downloads, guides in English and Spanish).
+
 - One provider (personal OneDrive), one platform (Windows), one job: make your OneDrive files appear
   in File Explorer as on-demand placeholders, download on open, upload on drop.
 - Built on the Windows Cloud Files API (the same platform OneDrive uses), so Explorer shows the
