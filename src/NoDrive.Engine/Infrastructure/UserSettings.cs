@@ -34,13 +34,31 @@ internal static class UserSettings
     {
         get
         {
+            if (PackageIdentity.IsPackaged) { return StartupTaskState() == Windows.ApplicationModel.StartupTaskState.Enabled; }
             using var key = Registry.CurrentUser.OpenSubKey(RunKey);
             return key?.GetValue(RunName) is string;
         }
     }
 
+    /// <summary>The Store build's startup task (declared in the package manifest); the user can also switch it in Settings > Apps > Startup.</summary>
+    private static Windows.ApplicationModel.StartupTaskState? StartupTaskState()
+    {
+        try { return Windows.ApplicationModel.StartupTask.GetAsync("NoDriveStartup").AsTask().GetAwaiter().GetResult().State; }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) { Log.Warn($"startup task state unavailable: {ex.Message}"); return null; }
+    }
+
     public static void SetAutostart(bool enabled)
     {
+        if (PackageIdentity.IsPackaged)
+        {
+            try
+            {
+                var task = Windows.ApplicationModel.StartupTask.GetAsync("NoDriveStartup").AsTask().GetAwaiter().GetResult();
+                if (enabled) { _ = task.RequestEnableAsync().AsTask().GetAwaiter().GetResult(); } else { task.Disable(); }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) { Log.Warn($"autostart change failed: {ex.Message}"); }
+            return;
+        }
         try
         {
             using var key = Registry.CurrentUser.CreateSubKey(RunKey);

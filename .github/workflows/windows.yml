@@ -129,6 +129,17 @@ jobs:
 
       # Publish the freshly built binaries to an orphan branch so they can be fetched with plain git over SSH
       # (private repo: artifact downloads need a browser login). The branch is force-pushed on every push to main.
+      - name: Build MSIX (Microsoft Store; unsigned, the Store signs it)
+        shell: pwsh
+        env:
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
+          MSIX_PUBLISHER_DISPLAY: ${{ vars.MSIX_PUBLISHER_DISPLAY }}
+        run: |
+          $parts = $env:NoDriveMsiVersion -split '\.'
+          $msixVersion = "$($parts[0]).$($parts[1]).$($parts[2]).0"   # the Store reserves the 4th number
+          pwsh tools/build-msix.ps1 -EngineDir artifacts/engine-win-x64 -Version $msixVersion -Output "artifacts/installer/NoDrive-$($env:NoDriveVersion)-x64.msix"
+
       - name: Publish binaries to the ci-binaries branch
         if: github.ref == 'refs/heads/main' && always()
         shell: pwsh

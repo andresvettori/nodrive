@@ -6,6 +6,9 @@ Versions before `0.9.0-beta` were development milestones, not numbered builds; t
 
 ## [Unreleased]
 
+### Added
+- Microsoft Store package (MSIX, built by CI as `NoDrive-<version>-x64.msix`, signed by the Store): same engine, start with Windows through the package's startup task. Not yet published.
+
 ### Changed
 - The website (andresvettori.github.io/nodrive) is linked from the NoDrive page footer, every guide, and the Apps list (Settings > Apps > NoDrive).
 
