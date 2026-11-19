@@ -61,18 +61,6 @@ internal static partial class SupportBundle
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { return "not available: " + ex.Message; }
     }
 
-    /// <summary>Best-effort masking of names and paths when the user prefers to leave them out.</summary>
-    internal static string Mask(string text, bool includeNames, EnginePaths paths)
-    {
-        if (includeNames) { return text; }
-        text = text.Replace(paths.SyncRoot, "<sync folder>", StringComparison.OrdinalIgnoreCase);
-        text = QuotedName().Replace(text, "'...'");
-        return PathPattern().Replace(text, "<path>");
-    }
-
-    [GeneratedRegex("'[^'\r\n]{1,300}'")]
-    private static partial Regex QuotedName();
-
-    [GeneratedRegex(@"[A-Za-z]:\\[^\s'""<>|]+")]
-    private static partial Regex PathPattern();
+    /// <summary>Best-effort masking of names and paths when the user prefers to leave them out (see <see cref="NoDrive.Core.Support.LogMasker"/>).</summary>
+    internal static string Mask(string text, bool includeNames, EnginePaths paths) => includeNames ? text : NoDrive.Core.Support.LogMasker.Mask(text, paths.SyncRoot);
 }
