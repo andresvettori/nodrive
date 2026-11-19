@@ -67,19 +67,34 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
         catch (Exception) { return false; }
     }
 
+    private int _scanning;
+
+    /// <summary>Walks the populated folders for local items that are not in the cloud yet, without blocking the upload loop (the walk takes about two minutes on 5,000 folders).</summary>
+    private void StartScan(CancellationToken ct)
+    {
+        if (Interlocked.Exchange(ref _scanning, 1) == 1) { return; }
+        _ = Task.Run(async () =>
+        {
+            try { await ScanPopulatedAsync(ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+            catch (Exception ex) { Log.Warn($"upload scan failed: {ex.Message}"); }
+            finally { Volatile.Write(ref _scanning, 0); }
+        }, CancellationToken.None);
+    }
+
     private async Task LoopAsync(CancellationToken ct)
     {
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
-            await ScanPopulatedAsync(ct).ConfigureAwait(false);                       // files added while the engine was off
+            StartScan(ct);                                                          // files added while the engine was off: in the background, the loop below must not wait for the walk
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
                     if (UserSettings.Paused) { await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false); continue; }
                     if (index.GetMeta("adopt.pending") == "1" && index.CountUploads() == 0 && _active.Count == 0) { index.SetMeta("adopt.pending", null); ActivityLog.Add("sync", "NoDrive", "ok", detail: "folder linked"); Log.Info("adoption finished"); }
-                    if (_rescan) { _rescan = false; await ScanPopulatedAsync(ct).ConfigureAwait(false); }
+                    if (_rescan && Volatile.Read(ref _scanning) == 0) { _rescan = false; StartScan(ct); }
                     FlushSeen();
                     foreach (var done in _active.Where(kv => kv.Value.IsCompleted).Select(kv => kv.Key).ToList()) { _active.Remove(done); }
                     if (_active.Count < Lanes)
