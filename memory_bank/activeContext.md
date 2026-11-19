@@ -184,3 +184,9 @@ Verified 2026-11-16 on the PC after the fixes: the empty Copilot folder became a
 - Campaign: 1 GiB test PASSED (upload 135 s, download 55 s = 18.6 MB/s, engine private memory 23 MB at rest, 45 MB peak, 40 MB afterwards, 0 warnings; the hash self-check is skipped above 256 MiB by design). Upload limit PASSED after the clock fix (20 MiB with a 1024 KiB/s limit took 13.7 s: the limiter is bursty at 10 MiB-chunk granularity; consider sub-chunk throttling). Masked support report PASSED (0 known names left). Upload sessions expire about 15 minutes after the last activity on this account (expirationDateTime), not days: a longer outage always creates a new session, whose ghost is then cleared by the name-clash path (seen working).
 - Campaign: uninstall with a pending upload is REFUSED (msiexec /x exit 1603, product stays installed) but the engine was left STOPPED (QuitEngine ran before the check, and `--uninstall` quit the engine before looking at the journal). Fixed: `Lifecycle.Uninstall` checks the journal first (engine keeps running), then quits and re-checks. Verify with the next build.
 - Campaign: 230 small files uploaded in 110 s without warnings; deleting them all: the mass-delete guard sent exactly 200 cloud deletes then held 30 (`mass delete guard: 200 deletions in 10 min`, `--pending` = 30 delete operations). The window releases them by itself after 10 minutes. Waiting for the user to press "Allow them" on the page / tray "Allow held deletions" to verify the button (needs the user, before the window expires).
+
+### Campaign notes (2026-11-19, beta.148)
+- Mass-delete guard: "Allow them" released the 30 held deletes (14:23), pending 0. Verified.
+- Uninstall refused with a pending 1.5 GB upload; engine stayed running (same pid). Fix verified on beta.148. Test files removed.
+- Soak baseline: beta.148, 44 MB private at 14:4x (record again after 24 h).
+- Still needs the user: sleep/resume, reboot with queued work, standard-user install.
