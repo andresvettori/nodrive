@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NoDrive privacy policy</title>
+<meta name="description" content="NoDrive privacy policy: no servers, no telemetry, talks only to Microsoft.">
+<link rel="icon" href="favicon.ico">
+<style>
+:root{--bg:#f7f8fa;--card:#fff;--text:#1b2230;--muted:#5a6578;--line:#e1e5ec;--accent:#2563eb;--accent-text:#fff;--soft:#eaf0fe;--warn:#8a5a00;--warn-bg:#fff6e0}
+@media (prefers-color-scheme:dark){:root{--bg:#10141b;--card:#171c26;--text:#e7ebf2;--muted:#9aa5b8;--line:#272f3d;--accent:#6c9cff;--accent-text:#0b1020;--soft:#1b2640;--warn:#f0c46a;--warn-bg:#2a2210}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent)}
+.wrap{max-width:900px;margin:0 auto;padding:0 16px}
+header.top{border-bottom:1px solid var(--line);background:var(--card)}
+header.top .wrap{display:flex;align-items:center;gap:16px;min-height:56px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:1.15rem;display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none}
+.brand svg{width:26px;height:26px}
+nav{display:flex;gap:16px;flex:1;flex-wrap:wrap}
+nav a{color:var(--muted);text-decoration:none;font-size:.95rem}
+nav a:hover{color:var(--accent)}
+button.lang{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:8px;padding:5px 12px;cursor:pointer;font:inherit;font-size:.9rem}
+.hero{padding:56px 0 32px}
+.hero h1{font-size:clamp(1.9rem,4.5vw,2.8rem);line-height:1.15;margin:0 0 14px}
+.hero p.lead{font-size:1.15rem;color:var(--muted);max-width:640px;margin:0 0 24px}
+.cta{display:flex;gap:12px;flex-wrap:wrap}
+.btn{display:inline-block;padding:11px 20px;border-radius:10px;text-decoration:none;font-weight:600;border:1px solid var(--line);color:var(--text);background:var(--card)}
+.btn.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.badge{display:inline-block;background:var(--soft);color:var(--accent);padding:3px 10px;border-radius:999px;font-size:.82rem;font-weight:600;margin-bottom:14px}
+section{padding:28px 0}
+section h2{font-size:1.45rem;margin:0 0 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.card h3{margin:0 0 6px;font-size:1.02rem}
+.card p{margin:0;color:var(--muted);font-size:.95rem}
+a.card{text-decoration:none;color:inherit;display:block}
+a.card:hover{border-color:var(--accent)}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:12px 16px;font-size:.93rem}
+ol.steps{padding-left:22px;margin:0}
+ol.steps li{margin:6px 0}
+.num{display:flex;gap:28px;flex-wrap:wrap;margin-top:6px}
+.num div{min-width:130px}
+.num b{display:block;font-size:1.6rem}
+.num span{color:var(--muted);font-size:.9rem}
+footer{border-top:1px solid var(--line);margin-top:24px;padding:22px 0;color:var(--muted);font-size:.9rem}
+footer a{color:var(--muted)}
+html[data-lang=en] [lang=es]{display:none}
+html[data-lang=es] [lang=en]{display:none}
+
+.prose{max-width:760px;padding:32px 0}
+.prose h1{font-size:2rem;margin:0 0 6px}.prose h2{font-size:1.2rem;margin:28px 0 8px}.prose p,.prose li{color:var(--text)}.prose ul{padding-left:22px}.prose .meta{color:var(--muted);font-size:.92rem}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="./"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 25a6 6 0 0 1-.7-11.95A8 8 0 0 1 23.6 11.6 6.5 6.5 0 0 1 23.5 25z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg>NoDrive</a>
+  <nav><a href="./"><span lang="en">Home</span><span lang="es">Inicio</span></a><a href="https://github.com/andresvettori/nodrive">GitHub</a></nav>
+  <button class="lang" id="langBtn" type="button" aria-label="Language / Idioma">ES</button>
+</div></header>
+<main class="wrap prose">
+<div lang="en">
+<h1>Privacy policy</h1>
+<p class="meta">Last updated: 19 November 2026</p>
+<h2>In short</h2>
+<p>NoDrive has no servers and collects nothing about you. It talks only to Microsoft, to sign you in and to read and write <em>your own</em> OneDrive files on your behalf. It has no telemetry, no analytics, no advertising and no third-party services.</p>
+<h2>What NoDrive can access</h2>
+<p>When you sign in with your personal Microsoft account, you grant NoDrive two permissions: <code>Files.ReadWrite</code> (read, create, change and delete files in your OneDrive) and <code>offline_access</code> (stay signed in without asking you again). NoDrive uses them only to show your files in File Explorer, download them when you open them and upload what you save. It does not read your email, contacts, calendar or anything outside OneDrive.</p>
+<h2>Network connections</h2>
+<p>NoDrive connects only to Microsoft services: <code>login.microsoftonline.com</code> (sign-in), <code>graph.microsoft.com</code> (your OneDrive file list and changes) and the Microsoft content servers that Graph points to for downloading and uploading file data. Nothing is sent to the author of NoDrive or to anyone else.</p>
+<h2>What is stored on your PC</h2>
+<p>Everything NoDrive stores is in <code>%LOCALAPPDATA%\NoDrive</code> on your own computer:</p><ul><li>your settings (<code>config.json</code>);</li><li>an index of your OneDrive file names, sizes and dates (<code>index.db</code>), used to work without asking the cloud each time;</li><li>your sign-in token (<code>token.bin</code>), encrypted with Windows DPAPI so only your Windows account can read it;</li><li>logs and a recent-activity list. Logs are deleted automatically after 14 days or 60 MB, and contain file names and error messages, not file contents.</li></ul><p>Your files themselves are in the NoDrive folder in your user profile, as with any OneDrive client.</p>
+<h2>Reports you create</h2>
+<p>"Report a problem" creates one zip file on your Desktop with logs, recent activity and a health report. <strong>It is never sent automatically.</strong> You decide whether to send it to anyone. You can choose to leave file names out. The report can include Windows version, NoDrive version and file names if you did not leave them out.</p>
+<h2>The local settings page</h2>
+<p>NoDrive shows a settings and activity page in your browser. It runs only on your own computer (<code>127.0.0.1</code>) and is protected so that other websites and other users of the PC cannot drive it.</p>
+<h2>Your choices</h2>
+<ul><li><strong>Stop NoDrive from accessing your account:</strong> remove it at <a href="https://account.live.com/consent/Manage">account.live.com/consent/Manage</a>.</li><li><strong>Remove everything stored locally:</strong> uninstall NoDrive (Settings &gt; Apps) and delete the folder <code>%LOCALAPPDATA%\NoDrive</code>. Files you downloaded stay in your NoDrive folder until you delete them.</li><li>Your files stay in your OneDrive; NoDrive does not copy them anywhere else.</li></ul>
+<h2>Children</h2>
+<p>NoDrive is a general-purpose file tool and is not directed to children.</p>
+<h2>Changes to this policy</h2>
+<p>If this policy changes, the new version is published on this page with a new date. The full history is in the project repository.</p>
+<h2>Contact</h2>
+<p>For questions about this policy open an issue in the <a href="https://github.com/andresvettori/nodrive/issues">project repository</a>. To report a security problem privately, see the <a href="https://github.com/andresvettori/nodrive/security/policy">security policy</a>. NoDrive is an independent open-source project and is not affiliated with or endorsed by Microsoft.</p>
+</div>
+<div lang="es">
+<h1>Política de privacidad</h1>
+<p class="meta">Última actualización: 19 de noviembre de 2026</p>
+<h2>En resumen</h2>
+<p>NoDrive no tiene servidores y no recopila nada sobre ti. Solo se comunica con Microsoft, para iniciar tu sesión y para leer y escribir <em>tus propios</em> archivos de OneDrive en tu nombre. No tiene telemetría, análisis, publicidad ni servicios de terceros.</p>
+<h2>A qué puede acceder NoDrive</h2>
+<p>Cuando inicias sesión con tu cuenta personal de Microsoft, das a NoDrive dos permisos: <code>Files.ReadWrite</code> (leer, crear, modificar y borrar archivos de tu OneDrive) y <code>offline_access</code> (mantener la sesión iniciada sin volver a pedírtelo). NoDrive los usa solo para mostrar tus archivos en el Explorador, descargarlos cuando los abres y subir lo que guardas. No lee tu correo, contactos, calendario ni nada fuera de OneDrive.</p>
+<h2>Conexiones de red</h2>
+<p>NoDrive se conecta solo a servicios de Microsoft: <code>login.microsoftonline.com</code> (inicio de sesión), <code>graph.microsoft.com</code> (la lista y los cambios de tus archivos de OneDrive) y los servidores de contenido de Microsoft a los que Graph dirige la descarga y la subida de datos. No se envía nada al autor de NoDrive ni a nadie más.</p>
+<h2>Qué se guarda en tu PC</h2>
+<p>Todo lo que NoDrive guarda está en <code>%LOCALAPPDATA%\NoDrive</code>, en tu propio equipo:</p><ul><li>tus ajustes (<code>config.json</code>);</li><li>un índice con los nombres, tamaños y fechas de tus archivos de OneDrive (<code>index.db</code>), para trabajar sin consultar la nube cada vez;</li><li>tu token de inicio de sesión (<code>token.bin</code>), cifrado con DPAPI de Windows para que solo tu cuenta de Windows pueda leerlo;</li><li>registros y una lista de actividad reciente. Los registros se borran solos a los 14 días o a los 60 MB, y contienen nombres de archivo y mensajes de error, no el contenido de los archivos.</li></ul><p>Tus archivos están en la carpeta NoDrive de tu perfil de usuario, como con cualquier cliente de OneDrive.</p>
+<h2>Informes que creas</h2>
+<p>"Reportar un problema" crea un archivo zip en tu Escritorio con registros, actividad reciente y un informe de estado. <strong>Nunca se envía automáticamente.</strong> Tú decides si lo envías a alguien. Puedes elegir omitir los nombres de archivo. El informe puede incluir la versión de Windows, la versión de NoDrive y nombres de archivo si no los omitiste.</p>
+<h2>La página local de ajustes</h2>
+<p>NoDrive muestra una página de ajustes y actividad en tu navegador. Funciona solo en tu propio equipo (<code>127.0.0.1</code>) y está protegida para que otros sitios web y otros usuarios del PC no puedan manejarla.</p>
+<h2>Tus opciones</h2>
+<ul><li><strong>Impedir que NoDrive acceda a tu cuenta:</strong> quítalo en <a href="https://account.live.com/consent/Manage">account.live.com/consent/Manage</a>.</li><li><strong>Eliminar todo lo guardado en local:</strong> desinstala NoDrive (Configuración &gt; Aplicaciones) y borra la carpeta <code>%LOCALAPPDATA%\NoDrive</code>. Los archivos que descargaste quedan en tu carpeta NoDrive hasta que los borres.</li><li>Tus archivos siguen en tu OneDrive; NoDrive no los copia a ningún otro lugar.</li></ul>
+<h2>Menores</h2>
+<p>NoDrive es una herramienta de archivos de uso general y no está dirigida a menores.</p>
+<h2>Cambios en esta política</h2>
+<p>Si esta política cambia, la nueva versión se publica en esta página con una fecha nueva. El historial completo está en el repositorio del proyecto.</p>
+<h2>Contacto</h2>
+<p>Para preguntas sobre esta política abre una incidencia en el <a href="https://github.com/andresvettori/nodrive/issues">repositorio del proyecto</a>. Para reportar un problema de seguridad en privado, mira la <a href="https://github.com/andresvettori/nodrive/security/policy">política de seguridad</a>. NoDrive es un proyecto independiente de código abierto y no está afiliado a Microsoft ni respaldado por Microsoft.</p>
+</div>
+</main>
+<footer><div class="wrap">
+  <span lang="en">NoDrive is an independent open-source project (MIT licence).</span>
+  <span lang="es">NoDrive es un proyecto independiente de código abierto (licencia MIT).</span>
+</div></footer>
+<script>
+(function () {
+  var root = document.documentElement, btn = document.getElementById("langBtn");
+  function set(l) {
+    root.setAttribute("data-lang", l); root.setAttribute("lang", l);
+    btn.textContent = l === "es" ? "EN" : "ES";
+    try { localStorage.setItem("nodrive-lang", l); } catch (e) {}
+  }
+  var saved = null; try { saved = localStorage.getItem("nodrive-lang"); } catch (e) {}
+  set(saved || ((navigator.language || "en").toLowerCase().indexOf("es") === 0 ? "es" : "en"));
+  btn.addEventListener("click", function () { set(root.getAttribute("data-lang") === "es" ? "en" : "es"); });
+})();
+</script>
+</body>
+</html>

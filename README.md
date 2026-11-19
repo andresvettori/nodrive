@@ -185,7 +185,7 @@ If something goes wrong: tray icon > **Report a problem...** creates one zip wit
 
 ## Contributing and security
 
-Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) (build, tests, the rules that are never traded for a feature). To report a vulnerability privately, see [SECURITY.md](SECURITY.md).
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) (build, tests, the rules that are never traded for a feature). To report a vulnerability privately, see [SECURITY.md](SECURITY.md). Privacy policy: <https://andresvettori.github.io/nodrive/privacy.html>.
 
 ## Licence
 
