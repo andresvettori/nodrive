@@ -249,6 +249,7 @@ internal sealed class UploadService(ItemIndex index, GraphDrive graph, Populatio
                         index.RemoveOps(twin!.Value.Id, "delete");
                         LocalOps.NoteReplaced(twin.Value.Id);
                         item = await graph.UpdateFileAsync(twin.Value.Id, twin.Value.ETag, path, ct, ProgressLogger(name, act)).ConfigureAwait(false);
+                        Log.Info($"'{name}' replaced in place: same cloud item, its version history and share links are kept");
                         File.SetLastWriteTimeUtc(path, item.ModifiedUtc.UtcDateTime);
                         stamp = File.GetLastWriteTimeUtc(path);
                     }
