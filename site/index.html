@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NoDrive: a lightweight OneDrive client</title>
+<meta name="description" content="NoDrive is a deliberately lightweight OneDrive (personal) client for Windows 11: files on demand in File Explorer, tiny memory use, built to never freeze Explorer.">
+<link rel="icon" href="favicon.ico">
+<style>
+:root{--bg:#f7f8fa;--card:#fff;--text:#1b2230;--muted:#5a6578;--line:#e1e5ec;--accent:#2563eb;--accent-text:#fff;--soft:#eaf0fe;--warn:#8a5a00;--warn-bg:#fff6e0}
+@media (prefers-color-scheme:dark){:root{--bg:#10141b;--card:#171c26;--text:#e7ebf2;--muted:#9aa5b8;--line:#272f3d;--accent:#6c9cff;--accent-text:#0b1020;--soft:#1b2640;--warn:#f0c46a;--warn-bg:#2a2210}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent)}
+.wrap{max-width:900px;margin:0 auto;padding:0 16px}
+header.top{border-bottom:1px solid var(--line);background:var(--card)}
+header.top .wrap{display:flex;align-items:center;gap:16px;min-height:56px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:1.15rem;display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none}
+.brand svg{width:26px;height:26px}
+nav{display:flex;gap:16px;flex:1;flex-wrap:wrap}
+nav a{color:var(--muted);text-decoration:none;font-size:.95rem}
+nav a:hover{color:var(--accent)}
+button.lang{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:8px;padding:5px 12px;cursor:pointer;font:inherit;font-size:.9rem}
+.hero{padding:56px 0 32px}
+.hero h1{font-size:clamp(1.9rem,4.5vw,2.8rem);line-height:1.15;margin:0 0 14px}
+.hero p.lead{font-size:1.15rem;color:var(--muted);max-width:640px;margin:0 0 24px}
+.cta{display:flex;gap:12px;flex-wrap:wrap}
+.btn{display:inline-block;padding:11px 20px;border-radius:10px;text-decoration:none;font-weight:600;border:1px solid var(--line);color:var(--text);background:var(--card)}
+.btn.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.badge{display:inline-block;background:var(--soft);color:var(--accent);padding:3px 10px;border-radius:999px;font-size:.82rem;font-weight:600;margin-bottom:14px}
+section{padding:28px 0}
+section h2{font-size:1.45rem;margin:0 0 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.card h3{margin:0 0 6px;font-size:1.02rem}
+.card p{margin:0;color:var(--muted);font-size:.95rem}
+a.card{text-decoration:none;color:inherit;display:block}
+a.card:hover{border-color:var(--accent)}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:12px 16px;font-size:.93rem}
+ol.steps{padding-left:22px;margin:0}
+ol.steps li{margin:6px 0}
+.num{display:flex;gap:28px;flex-wrap:wrap;margin-top:6px}
+.num div{min-width:130px}
+.num b{display:block;font-size:1.6rem}
+.num span{color:var(--muted);font-size:.9rem}
+footer{border-top:1px solid var(--line);margin-top:24px;padding:22px 0;color:var(--muted);font-size:.9rem}
+footer a{color:var(--muted)}
+html[data-lang=en] [lang=es]{display:none}
+html[data-lang=es] [lang=en]{display:none}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="#top"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 25a6 6 0 0 1-.7-11.95A8 8 0 0 1 23.6 11.6 6.5 6.5 0 0 1 23.5 25z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg>NoDrive</a>
+  <nav>
+    <a href="#features"><span lang="en">Features</span><span lang="es">Características</span></a>
+    <a href="#download"><span lang="en">Download</span><span lang="es">Descargar</span></a>
+    <a href="#docs"><span lang="en">Guides</span><span lang="es">Guías</span></a>
+    <a href="https://github.com/andresvettori/nodrive">GitHub</a>
+  </nav>
+  <button class="lang" id="langBtn" type="button" aria-label="Language / Idioma">ES</button>
+</div></header>
+
+<main class="wrap" id="top">
+  <div class="hero">
+    <span class="badge">0.9.0 beta</span>
+    <div lang="en">
+      <h1>A OneDrive client that stays out of your way.</h1>
+      <p class="lead">NoDrive shows your personal OneDrive in File Explorer as on-demand files, downloads them when you open them and uploads what you save. One account, one platform, one job, with a tiny footprint.</p>
+    </div>
+    <div lang="es">
+      <h1>Un cliente de OneDrive que no estorba.</h1>
+      <p class="lead">NoDrive muestra tu OneDrive personal en el Explorador de archivos como archivos a petición, los descarga cuando los abres y sube lo que guardas. Una cuenta, una plataforma, un trabajo, con un consumo mínimo.</p>
+    </div>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/andresvettori/nodrive/releases/latest"><span lang="en">Download the latest beta</span><span lang="es">Descargar la última beta</span></a>
+      <a class="btn" href="https://github.com/andresvettori/nodrive/blob/main/docs/install.en.md" id="installLink"><span lang="en">Install guide</span><span lang="es">Guía de instalación</span></a>
+    </div>
+    <div class="num">
+      <div><b>~40 MB</b><span lang="en">memory at rest</span><span lang="es">de memoria en reposo</span></div>
+      <div><b>0 I/O</b><span lang="en">inside Explorer callbacks, by design</span><span lang="es">dentro de las llamadas del Explorador, por diseño</span></div>
+      <div><b>Win 11</b><span lang="en">Native AOT, no runtime to install</span><span lang="es">Native AOT, sin runtime que instalar</span></div>
+    </div>
+  </div>
+
+  <section id="features">
+    <h2><span lang="en">What it does</span><span lang="es">Qué hace</span></h2>
+    <div class="grid">
+      <div class="card"><h3><span lang="en">Files on demand</span><span lang="es">Archivos a petición</span></h3><p><span lang="en">Your whole drive appears in Explorer with the usual status icons and the "Always keep on this device / Free up space" options. Files download when you open them.</span><span lang="es">Todo tu OneDrive aparece en el Explorador con los iconos de estado de siempre y las opciones "Mantener siempre en este dispositivo / Liberar espacio". Los archivos se descargan al abrirlos.</span></p></div>
+      <div class="card"><h3><span lang="en">Light by design</span><span lang="es">Liviano por diseño</span></h3><p><span lang="en">Memory does not grow with the number of files (tested with 90,000 items). It never does network or disk work inside Explorer's callbacks, so Explorer does not wait for it.</span><span lang="es">La memoria no crece con la cantidad de archivos (probado con 90.000 elementos). Nunca hace trabajo de red o de disco dentro de las llamadas del Explorador, así que este no espera por él.</span></p></div>
+      <div class="card"><h3><span lang="en">Careful with your data</span><span lang="es">Cuidadoso con tus datos</span></h3><p><span lang="en">Conflict copies instead of overwrites, deletes go to the OneDrive recycle bin, mass deletions are held until you allow them, and interrupted uploads continue where they stopped.</span><span lang="es">Copias de conflicto en vez de sobrescribir, los borrados van a la papelera de OneDrive, los borrados masivos esperan tu permiso y las subidas interrumpidas continúan donde quedaron.</span></p></div>
+      <div class="card"><h3><span lang="en">Works with your apps</span><span lang="es">Funciona con tus programas</span></h3><p><span lang="en">Word, Excel and PowerPoint saves update the same file, keeping its version history. Edits made while NoDrive was closed are caught up when it starts.</span><span lang="es">Los guardados de Word, Excel y PowerPoint actualizan el mismo archivo y conservan su historial de versiones. Los cambios hechos con NoDrive cerrado se recuperan al iniciar.</span></p></div>
+      <div class="card"><h3><span lang="en">Simple settings page</span><span lang="es">Página de ajustes simple</span></h3><p><span lang="en">A local page in English and Spanish shows live transfers and activity, and lets you set bandwidth limits and the bulk download speed.</span><span lang="es">Una página local en español e inglés muestra las transferencias y la actividad en vivo, y permite ajustar los límites de ancho de banda y la velocidad de descarga masiva.</span></p></div>
+      <div class="card"><h3><span lang="en">Open source</span><span lang="es">Código abierto</span></h3><p><span lang="en">MIT licence, built in the open. Reading the code and sending fixes is welcome.</span><span lang="es">Licencia MIT, desarrollado en abierto. Leer el código y enviar correcciones es bienvenido.</span></p></div>
+    </div>
+  </section>
+
+  <section id="download">
+    <h2><span lang="en">Download and install</span><span lang="es">Descargar e instalar</span></h2>
+    <ol class="steps" lang="en">
+      <li>Open the <a href="https://github.com/andresvettori/nodrive/releases/latest">latest release</a> and download the <code>NoDrive-…-x64.msi</code> file. The release page also lists its SHA-256.</li>
+      <li>Run it. It installs for your user only, with no administrator rights.</li>
+      <li>Sign in with your Microsoft account when asked. NoDrive then appears in File Explorer.</li>
+    </ol>
+    <ol class="steps" lang="es">
+      <li>Abre la <a href="https://github.com/andresvettori/nodrive/releases/latest">última versión</a> y descarga el archivo <code>NoDrive-…-x64.msi</code>. La página de la versión también indica su SHA-256.</li>
+      <li>Ejecútalo. Se instala solo para tu usuario, sin permisos de administrador.</li>
+      <li>Inicia sesión con tu cuenta Microsoft cuando te lo pida. NoDrive aparece entonces en el Explorador de archivos.</li>
+    </ol>
+    <p class="note" lang="en"><b>Beta.</b> The installer is not code-signed yet, so Windows may warn you, and a PC with Smart App Control turned on will block it. See the <a href="https://github.com/andresvettori/nodrive/blob/main/docs/troubleshooting.en.md">troubleshooting guide</a>. If you already use the OneDrive app, read the <a href="https://github.com/andresvettori/nodrive/blob/main/docs/onedrive-coexistence.en.md">coexistence guide</a> first.</p>
+    <p class="note" lang="es"><b>Beta.</b> El instalador todavía no está firmado, por eso Windows puede avisarte, y un PC con Smart App Control activado lo bloqueará. Mira la <a href="https://github.com/andresvettori/nodrive/blob/main/docs/troubleshooting.es.md">guía de solución de problemas</a>. Si ya usas la aplicación OneDrive, lee antes la <a href="https://github.com/andresvettori/nodrive/blob/main/docs/onedrive-coexistence.es.md">guía de convivencia</a>.</p>
+  </section>
+
+  <section id="docs">
+    <h2><span lang="en">Guides</span><span lang="es">Guías</span></h2>
+    <div class="grid" lang="en">
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/install.en.md"><h3>Install</h3><p>Requirements and first start.</p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/configure.en.md"><h3>Configure</h3><p>Settings, limits and download modes.</p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/onedrive-coexistence.en.md"><h3>OneDrive coexistence</h3><p>Using NoDrive next to the OneDrive app, or switching.</p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/troubleshooting.en.md"><h3>Troubleshooting</h3><p>Common problems and fixes.</p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/report-a-problem.en.md"><h3>Report a problem</h3><p>Create one file with logs to send for support.</p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/whats-new.en.md"><h3>What's new</h3><p>Changes in the latest beta.</p></a>
+    </div>
+    <div class="grid" lang="es">
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/install.es.md"><h3>Instalación</h3><p>Requisitos y primer inicio.</p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/configure.es.md"><h3>Configuración</h3><p>Ajustes, límites y modos de descarga.</p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/onedrive-coexistence.es.md"><h3>Convivencia con OneDrive</h3><p>Usar NoDrive junto a la aplicación OneDrive, o reemplazarla.</p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/troubleshooting.es.md"><h3>Solución de problemas</h3><p>Problemas comunes y cómo resolverlos.</p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/report-a-problem.es.md"><h3>Reportar un problema</h3><p>Crea un archivo con registros para enviar a soporte.</p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/docs/whats-new.es.md"><h3>Novedades</h3><p>Cambios de la última beta.</p></a>
+    </div>
+  </section>
+
+  <section>
+    <h2><span lang="en">Project</span><span lang="es">Proyecto</span></h2>
+    <div class="grid">
+      <a class="card" href="https://github.com/andresvettori/nodrive"><h3>GitHub</h3><p><span lang="en">Source code, issues and releases.</span><span lang="es">Código fuente, incidencias y versiones.</span></p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/CHANGELOG.md"><h3>Changelog</h3><p><span lang="en">Every change, newest first.</span><span lang="es">Todos los cambios, del más nuevo al más antiguo.</span></p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/blob/main/CONTRIBUTING.md"><h3><span lang="en">Contributing</span><span lang="es">Contribuir</span></h3><p><span lang="en">How to build, test and send changes.</span><span lang="es">Cómo compilar, probar y enviar cambios.</span></p></a>
+      <a class="card" href="https://github.com/andresvettori/nodrive/security/policy"><h3><span lang="en">Security</span><span lang="es">Seguridad</span></h3><p><span lang="en">How to report a vulnerability privately.</span><span lang="es">Cómo reportar una vulnerabilidad en privado.</span></p></a>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  <span lang="en">NoDrive is an independent open-source project (MIT licence). It is not affiliated with or endorsed by Microsoft. OneDrive and Windows are trademarks of Microsoft.</span>
+  <span lang="es">NoDrive es un proyecto independiente de código abierto (licencia MIT). No está afiliado a Microsoft ni respaldado por Microsoft. OneDrive y Windows son marcas de Microsoft.</span>
+</div></footer>
+
+<script>
+(function () {
+  var root = document.documentElement, btn = document.getElementById("langBtn");
+  function set(l) {
+    root.setAttribute("data-lang", l); root.setAttribute("lang", l);
+    btn.textContent = l === "es" ? "EN" : "ES";
+    var a = document.getElementById("installLink"); if (a) { a.href = a.href.replace(/install\.(en|es)\.md/, "install." + l + ".md"); }
+    try { localStorage.setItem("nodrive-lang", l); } catch (e) {}
+  }
+  var saved = null; try { saved = localStorage.getItem("nodrive-lang"); } catch (e) {}
+  set(saved || ((navigator.language || "en").toLowerCase().indexOf("es") === 0 ? "es" : "en"));
+  btn.addEventListener("click", function () { set(root.getAttribute("data-lang") === "es" ? "en" : "es"); });
+})();
+</script>
+</body>
+</html>
