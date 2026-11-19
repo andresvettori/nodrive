@@ -181,6 +181,10 @@ Versions look like `0.9.0-beta.142` (the number after `beta` is the build). The 
 
 If something goes wrong: tray icon > **Report a problem...** creates one zip with logs and a health report to send to whoever supports you ([guide](docs/report-a-problem.en.md)).
 
+## Contributing and security
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) (build, tests, the rules that are never traded for a feature). To report a vulnerability privately, see [SECURITY.md](SECURITY.md).
+
 ## Licence
 
 MIT. Third-party code is used only under permissive licences; see
