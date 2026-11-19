@@ -13,6 +13,8 @@
     <MediaTemplate EmbedCab="yes" />
     <Property Id="AUTOSTART" Value="1" />
     <Property Id="ARPCOMMENTS" Value="NoDrive $(DisplayVersion)" />
+    <Property Id="ARPURLINFOABOUT" Value="https://andresvettori.github.io/nodrive/" />
+    <Property Id="ARPHELPLINK" Value="https://andresvettori.github.io/nodrive/" />
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="ProgramsDir" Name="Programs">

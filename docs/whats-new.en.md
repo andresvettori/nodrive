@@ -20,3 +20,6 @@ The first beta. NoDrive now handles the day-to-day things that used to go wrong.
 Known limits: the installer is not signed yet, so Windows may warn; online-only pictures show an icon instead of a preview until downloaded.
 
 Earlier milestones and technical details: see CHANGELOG.md in the project.
+
+---
+Website: <https://andresvettori.github.io/nodrive/>

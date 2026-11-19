@@ -10,3 +10,6 @@ NoDrive inicia sesión con una app de cliente público registrada en Microsoft E
 6. Copiá el **ID de aplicación (cliente)** en `clientId` de `%LOCALAPPDATA%\NoDrive\config.json`, reiniciá NoDrive e iniciá sesión de nuevo.
 
 Una cuenta personal de Microsoft no puede crear registros de aplicaciones por sí sola: creá antes un tenant gratuito de Entra.
+
+---
+Sitio web: <https://andresvettori.github.io/nodrive/>

@@ -12,3 +12,6 @@
 - **The settings page says it is out of date**: NoDrive restarted; open the page again from the tray icon.
 - **Anything else**: create a report and send it (see the report-a-problem guide): tray icon > Report a problem...
 - **"An Application Control policy has blocked this file"**: Windows Smart App Control only runs signed or well-known programs and NoDrive is not signed yet. Ask whoever gave you NoDrive for a signed build; do not try to bypass the block.
+
+---
+Website: <https://andresvettori.github.io/nodrive/>

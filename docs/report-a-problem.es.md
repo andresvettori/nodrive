@@ -13,3 +13,6 @@ Qué contiene el zip: un informe de estado, los registros de NoDrive de los últ
 Sin el icono de la bandeja: abrí PowerShell y ejecutá `& "$env:LOCALAPPDATA\Programs\NoDrive\NoDrive.Engine.exe" --report`. `--doctor` muestra el informe de estado en pantalla.
 
 El **ID de soporte** al pie de cada página de NoDrive también aparece en el registro: mencionalo en tu mensaje.
+
+---
+Sitio web: <https://andresvettori.github.io/nodrive/>

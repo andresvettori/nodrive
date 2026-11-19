@@ -13,3 +13,6 @@ What is in the zip: a health report, the last 7 days of NoDrive logs, the list o
 Without the tray icon: open PowerShell and run `& "$env:LOCALAPPDATA\Programs\NoDrive\NoDrive.Engine.exe" --report`. `--doctor` prints the health report on screen.
 
 The **Support ID** at the bottom of every NoDrive page also appears in the log: quote it in your message.
+
+---
+Website: <https://andresvettori.github.io/nodrive/>

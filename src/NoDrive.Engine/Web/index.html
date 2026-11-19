@@ -192,6 +192,7 @@ a.link:hover{border-color:var(--brand)}a.link b{display:block;margin-bottom:4px}
 
 <script>
 "use strict";
+const SITE = "https://andresvettori.github.io/nodrive/";
 const DOCS = "https://github.com/andresvettori/nodrive/blob/main/docs/";
 const I18N = {
 en: {
@@ -371,7 +372,8 @@ function hero(){
     (S.heldMissing > 0 ? `<div class="banner"><span>${t("heldMissing", S.heldMissing)}</span><button class="btn primary" id="restoreBtn">${t("restoreMissing")}</button><button class="btn" id="delMissBtn">${t("deleteMissing")}</button></div>` : "");
   if (S.heldDeletes > 0) $("allowBtn").onclick = () => api("/api/allow-deletes", {}).then(poll);
   if (S.heldMissing > 0) { $("restoreBtn").onclick = () => api("/api/reconcile/restore", {}).then(poll); $("delMissBtn").onclick = () => { if (confirm(t("deleteMissing") + "?")) api("/api/reconcile/delete", {}).then(poll); }; }
-  $("footer").textContent = `NoDrive ${S.version} · ${t("supportId")} ${S.supportId}`;
+  $("footer").textContent = `NoDrive ${S.version} · ${t("supportId")} ${S.supportId} · `;
+  { const a = document.createElement("a"); a.href = SITE; a.target = "_blank"; a.rel = "noopener"; a.textContent = lang === "es" ? "Sitio web" : "Website"; $("footer").appendChild(a); }
   $("rpSteps").innerHTML = ["rpStep1", "rpStep2", "rpStep3"].map(k => `<li>${esc(t(k))}</li>`).join("");
 }
 

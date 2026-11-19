@@ -10,3 +10,6 @@ NoDrive signs in with a public client app registered in Microsoft Entra. A defau
 6. Copy the **Application (client) ID** into `clientId` in `%LOCALAPPDATA%\NoDrive\config.json`, then restart NoDrive and sign in again.
 
 A personal Microsoft account cannot create app registrations by itself: create a free Entra tenant first.
+
+---
+Website: <https://andresvettori.github.io/nodrive/>

@@ -13,3 +13,6 @@ Notes
 - Windows may block unsigned programs (Smart App Control, Application Control). If the installer or NoDrive is blocked, tell the author: a signed release is planned.
 - To update, run the newer MSI over the old one: NoDrive stops, the files are replaced and your sync folder and settings stay.
 - To remove NoDrive: Settings > Apps > NoDrive > Uninstall. Downloaded files stay in the folder. See the troubleshooting guide if the uninstall is refused.
+
+---
+Website: <https://andresvettori.github.io/nodrive/>

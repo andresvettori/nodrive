@@ -20,3 +20,6 @@ La primera beta. NoDrive ahora maneja las cosas de todos los días que antes fal
 Límites conocidos: el instalador todavía no está firmado, por eso Windows puede avisar; las imágenes solo en línea muestran un icono en lugar de una vista previa hasta descargarlas.
 
 Hitos anteriores y detalles técnicos: mirá CHANGELOG.md en el proyecto.
+
+---
+Sitio web: <https://andresvettori.github.io/nodrive/>

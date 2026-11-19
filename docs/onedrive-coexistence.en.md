@@ -20,3 +20,6 @@ To let NoDrive take over, first stop the backup in OneDrive: OneDrive icon > Set
 Do this gradually: nothing in NoDrive deletes data without going to the OneDrive recycle bin.
 
 The settings page has an optional **Switch from OneDrive** tab that checks your folder against the cloud (read-only), walks you through the OneDrive steps, and lets NoDrive take over the folder. It never runs unless you open it.
+
+---
+Website: <https://andresvettori.github.io/nodrive/>

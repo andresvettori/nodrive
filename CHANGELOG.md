@@ -6,6 +6,9 @@ Versions before `0.9.0-beta` were development milestones, not numbered builds; t
 
 ## [Unreleased]
 
+### Changed
+- The website (andresvettori.github.io/nodrive) is linked from the NoDrive page footer, every guide, and the Apps list (Settings > Apps > NoDrive).
+
 ## [0.9.0-beta] - 2026-11-19
 
 First beta: feature complete for personal use on Windows 11, hardened for reliability.

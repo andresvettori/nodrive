@@ -20,3 +20,6 @@ Para que NoDrive tome el control, primero detené el respaldo en OneDrive: icono
 Hacelo de a poco: nada en NoDrive borra datos sin pasar por la papelera de OneDrive.
 
 La página de ajustes tiene una pestaña opcional **Pasarse desde OneDrive** que compara tu carpeta con la nube (solo lectura), te guía por los pasos en OneDrive y permite que NoDrive tome la carpeta. Nunca se ejecuta si no la abrís.
+
+---
+Sitio web: <https://andresvettori.github.io/nodrive/>

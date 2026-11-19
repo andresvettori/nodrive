@@ -13,3 +13,6 @@ Notas
 - Windows puede bloquear programas sin firmar (Smart App Control, Control de aplicaciones). Si el instalador o NoDrive se bloquea, avisale al autor: se planea una versión firmada.
 - Para actualizar, ejecutá el MSI nuevo sobre el anterior: NoDrive se detiene, se reemplazan los archivos y se conservan tu carpeta y tus ajustes.
 - Para quitar NoDrive: Configuración > Aplicaciones > NoDrive > Desinstalar. Los archivos descargados quedan en la carpeta. Si se rechaza la desinstalación, mirá la guía de solución de problemas.
+
+---
+Sitio web: <https://andresvettori.github.io/nodrive/>

@@ -15,3 +15,6 @@ Menú de la bandeja: Open NoDrive…, Pause/Resume syncing, Start with Windows, 
 Pestaña Actividad: transferencias en curso con progreso y la actividad reciente (podés mostrar los últimos 25, 50, 100, 200 o 400 elementos; se conservan al reiniciar NoDrive). La pestaña **Pasarse desde OneDrive** es opcional y no hace nada si no la usás. La página solo se abre desde el icono de la bandeja; si dice que está desactualizada, NoDrive se reinició: abrila de nuevo desde el icono.
 
 Velocidad de descarga masiva (Ajustes): cuántos archivos se descargan a la vez cuando mantenés una carpeta en este dispositivo. Suave 2, Equilibrada 4 (por defecto), Turbo 8. Se aplica al instante. Turbo usa casi toda tu conexión; usá el límite de descarga si la compartís.
+
+---
+Sitio web: <https://andresvettori.github.io/nodrive/>
