@@ -44,4 +44,18 @@ public class BandwidthLimiterTests
         l.Reserve(1000, 0);                                                     // 10 s at the new rate
         Assert.True(l.Reserve(1, 0) >= TimeSpan.FromSeconds(9));
     }
+
+    [Fact]
+    public async Task WaitAsync_with_a_limit_returns_in_a_sensible_time_whatever_the_machine_uptime_is()
+    {
+        // Regression: the clock conversion used to overflow after ~26 h of uptime and the first wait became practically infinite.
+        var l = new NoDrive.Core.Net.BandwidthLimiter { BytesPerSecond = 1_000_000 };
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await l.WaitAsync(1000, TestContext.Current.CancellationToken);
+        await l.WaitAsync(100_000, TestContext.Current.CancellationToken);             // about 0.1 s of transfer time
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), $"waited {sw.Elapsed}");
+        // 10^13 timestamp units at 10 MHz = 11.5 days of uptime; the old product 10^13 * 10^7 overflowed a long (9.2 * 10^18).
+        Assert.Equal(10_000_000_000_000L, NoDrive.Core.Net.BandwidthLimiter.ToTicks(10_000_000_000_000L, 10_000_000L));
+        Assert.Equal(TimeSpan.FromDays(30).Ticks, NoDrive.Core.Net.BandwidthLimiter.ToTicks(25_920_000_000_000L, 10_000_000L));
+    }
 }

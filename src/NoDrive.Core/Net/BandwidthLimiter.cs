@@ -35,10 +35,21 @@ public sealed class BandwidthLimiter
         }
     }
 
+    private static readonly long Origin = Stopwatch.GetTimestamp();
+
+    /// <summary>
+    /// Monotonic time in TimeSpan ticks since the first use. NOT `GetTimestamp() * TicksPerSecond / Frequency`: the raw timestamp counts from boot and that product overflows a
+    /// long after about 26 hours of uptime, which turned every wait into a practically infinite one (found on the test PC, 2026-11-19).
+    /// </summary>
+    internal static long NowTicks() => ToTicks(Stopwatch.GetTimestamp() - Origin, Stopwatch.Frequency);
+
+    /// <summary>Converts a Stopwatch timestamp to TimeSpan ticks without overflowing a long (decimal arithmetic).</summary>
+    public static long ToTicks(long timestamp, long frequency) => (long)((decimal)timestamp * TimeSpan.TicksPerSecond / frequency);
+
     /// <summary>Waits until <paramref name="bytes"/> may be transferred.</summary>
     public ValueTask WaitAsync(long bytes, CancellationToken ct)
     {
-        var wait = Reserve(bytes, Stopwatch.GetTimestamp() * TimeSpan.TicksPerSecond / Stopwatch.Frequency);
+        var wait = Reserve(bytes, NowTicks());
         return wait <= TimeSpan.Zero ? ValueTask.CompletedTask : new ValueTask(Task.Delay(wait, ct));
     }
 }
