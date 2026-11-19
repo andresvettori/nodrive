@@ -9,6 +9,9 @@ The first beta. NoDrive now handles the day-to-day things that used to go wrong.
 - **Sleep and network.** When the PC wakes up or the internet comes back, NoDrive checks right away.
 - **Safer.** Requests that get stuck are failed quickly so Explorer never freezes, a damaged database is rebuilt, and downloads stop with a clear message when the disk is almost full.
 - **Report a problem.** Tray icon > Report a problem... creates one file you can send us. See the report guide.
+- **Big uploads survive network cuts, sleep and restarts.** The upload continues where it stopped instead of starting over, and never ends as a false conflict copy.
+- **Office documents keep their history.** Saving Word, Excel or PowerPoint updates the same cloud file.
+- **Safer deletes.** A burst of more than 200 deletions is held until you allow it.
 - **Versions.** The version is shown at the bottom of the NoDrive page, in the tray tooltip and in the installer's file name.
 
 - **Large uploads survive network cuts.** If the connection drops (or the PC sleeps or NoDrive restarts) in the middle of a big upload, NoDrive continues where it stopped instead of starting over or creating a "conflict" copy.

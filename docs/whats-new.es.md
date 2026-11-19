@@ -9,6 +9,9 @@ La primera beta. NoDrive ahora maneja las cosas de todos los días que antes fal
 - **Suspensión y red.** Cuando la PC despierta o vuelve internet, NoDrive revisa de inmediato.
 - **Más seguro.** Las solicitudes trabadas se cancelan rápido para que el Explorador nunca se congele, una base de datos dañada se reconstruye y las descargas se detienen con un mensaje claro cuando el disco está casi lleno.
 - **Informar un problema.** Icono de la bandeja > Report a problem... crea un archivo que podés enviarnos. Mirá la guía de informes.
+- **Las subidas grandes sobreviven a cortes de red, suspensión y reinicios.** La subida continúa donde quedó y nunca termina como una falsa copia de conflicto.
+- **Los documentos de Office conservan su historial.** Guardar Word, Excel o PowerPoint actualiza el mismo archivo en la nube.
+- **Borrados más seguros.** Una ráfaga de más de 200 borrados queda retenida hasta que la permitas.
 - **Versiones.** La versión aparece al pie de la página de NoDrive, en el texto del icono de la bandeja y en el nombre del instalador.
 
 - **Las subidas grandes sobreviven a cortes de red.** Si la conexión se cae (o el equipo se suspende o NoDrive se reinicia) a mitad de una subida grande, NoDrive continúa donde quedó, sin empezar de nuevo ni crear una copia de "conflicto".

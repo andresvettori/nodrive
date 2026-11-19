@@ -13,7 +13,7 @@ Website: <https://andresvettori.github.io/nodrive/> (what it is, downloads, guid
   is about 15 to 30 MB and does not grow with the number of files (measured with 90,000 items). It is
   designed never to block Explorer.
 
-**Status (2026-11-16): `0.9.0-beta`, in daily use on the author's PC; friends-and-family distribution is being prepared.** Browsing, on-demand download, keep and
+**Status (2026-11-19): `0.9.0-beta`, first public beta; QA gate passed on the author's PC (see the release notes for known gaps).** Browsing, on-demand download, keep and
 free up space, remote changes mirrored into folders you have opened, upload of new files and folders,
 delete and rename from Explorer, sign-in recovery, tray menu, a local settings and activity page
 (English and Spanish), bandwidth limits, a per-user MSI installer, and an optional "Switch from

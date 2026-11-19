@@ -161,3 +161,6 @@
 | 2026-11-16 | Beta hardening before distribution: edits, offline reconcile, resilience, support report, versioning before friends and family get the MSI | User's call: reliability and supportability first; features frozen | plan E11, E12, `release-process.md` |
 | 2026-11-16 | Offline reconcile uses an on-disk flag in the index instead of the NTFS USN journal | Reading the USN journal needs elevation; the flag makes "deleted while stopped" provable | plan E8 |
 | 2026-11-16 | Optional "Switch from OneDrive" assistant; the installer stays side-by-side only | User approval; never unlinks, uninstalls or changes Folder Backup itself | plan P1.5 |
+
+## Release 0.9.0-beta.149 (2026-11-19)
+Tagged after the delegated QA campaign (see activeContext). Known gaps listed in CHANGELOG. The 24 h soak runs on beta.148; check memory after 24 h.
