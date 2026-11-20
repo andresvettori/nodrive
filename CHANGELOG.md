@@ -7,6 +7,9 @@ Versions before `0.9.0-beta` were development milestones, not numbered builds; t
 ## [Unreleased]
 
 ### Added
+- Store build: removing NoDrive from Windows leaves Explorer clean (the sync root is unregistered after a real removal, never on update, shutdown or sign-out), a "Prepare to uninstall" button in Help, and a self-heal when reinstalling over a stale registration.
+
+### Added
 - Microsoft Store package (MSIX, built by CI as `NoDrive-<version>-x64.msix`, signed by the Store): same engine, start with Windows through the package's startup task. Not yet published. Because Windows runs no code of ours when a Store app is removed, the Help page has "Prepare to uninstall" (checks pending work, disconnects from Explorer, stops; files stay).
 
 ### Changed

@@ -190,3 +190,9 @@ Verified 2026-11-16 on the PC after the fixes: the empty Copilot folder became a
 - Uninstall refused with a pending 1.5 GB upload; engine stayed running (same pid). Fix verified on beta.148. Test files removed.
 - Soak baseline: beta.148, 44 MB private at 14:4x (record again after 24 h).
 - Still needs the user: sleep/resume, reboot with queued work, standard-user install.
+
+## 2026-11-19 - Store (MSIX) uninstall clean-up
+- MSIX has no uninstall hook. Update and removal send identical messages (WM_QUERYENDSESSION, WM_ENDSESSION flags=0x1 ENDSESSION_CLOSEAPP, WM_CLOSE); shutdown/restart/logoff do not carry 0x1.
+- `PackageRemoval` (Infrastructure): on 0x1 with no pending work the engine copies its exe to %TEMP% and starts it through Task Scheduler (outside the package, which would otherwise kill it) as `--cleanup-after-removal <PFN>`; the helper waits and unregisters the sync root only if the package stays absent (~1 min). Measured on the PC (loose-registered package, beta.161): update = no action; removal = key removed. `StorageProviderSyncRootManager.Unregister` and `CfUnregisterSyncRoot` (0x8007007B) fail from outside the package, so the helper deletes the HKLM sync root key as last resort.
+- Stale registration on reinstall (0x80070186) is self-healed in `SyncService`.
+- Not verified with a real Store-signed install (OS may auto-unregister there); startup-task autostart still unverified. Page button "Prepare to uninstall" remains as the explicit path.

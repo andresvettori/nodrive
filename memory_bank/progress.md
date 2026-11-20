@@ -164,3 +164,5 @@
 
 ## Release 0.9.0-beta.149 (2026-11-19)
 Tagged after the delegated QA campaign (see activeContext). Known gaps listed in CHANGELOG. The 24 h soak runs on beta.148; check memory after 24 h.
+
+- Store build: MSIX packaging, Prepare-to-uninstall button, stale-registration self-heal and automatic removal clean-up done and measured (see activeContext 2026-11-19). Open: real Store install check, startup-task autostart.
