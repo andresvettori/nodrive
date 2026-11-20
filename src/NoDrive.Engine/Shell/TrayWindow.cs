@@ -200,7 +200,8 @@ internal static unsafe class TrayWindow
                 if ((nuint)wParam is 0x12 or 0x7) { s_onResume?.Invoke(); }   // PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND
                 return new LRESULT(1);
             case PInvoke.WM_QUERYENDSESSION:
-                Log.Info("shutdown message: WM_QUERYENDSESSION");
+                Log.Info($"shutdown message: WM_QUERYENDSESSION (flags=0x{(ulong)lParam.Value:X})");
+                PackageRemoval.OnCloseRequested((nuint)lParam.Value);
                 return new LRESULT(1);
             case PInvoke.WM_ENDSESSION:
                 Log.Info($"shutdown message: WM_ENDSESSION (ending={wParam.Value != 0}, flags=0x{(ulong)lParam.Value:X})");

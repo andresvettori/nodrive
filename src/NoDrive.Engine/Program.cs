@@ -17,12 +17,14 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        if (ArgValue(args, "--cleanup-after-removal") is { } family) { return PackageRemoval.Watch(family); }   // Store build: helper outside the package, see PackageRemoval
         string? rootArg = ArgValue(args, "--sync-root"), dataArg = ArgValue(args, "--data-dir");
         var bootPaths = EnginePaths.Create(rootArg, dataArg);
         Log.Init(bootPaths.LogDir);
         var config = EngineConfig.Load(bootPaths.ConfigPath);
         var paths = EnginePaths.Create(rootArg ?? config.SyncRoot, dataArg);
 
+        PackageRemoval.Init(paths);
         if (args.Contains("--quit")) { return Lifecycle.Quit(int.TryParse(ArgValue(args, "--wait"), out int w) ? w : 20); }
         if (args.Contains("--pending")) { return Lifecycle.PendingExitCode(paths); }
         if (args.Contains("--uninstall")) { return Lifecycle.Uninstall(paths, args.Contains("--force"), args.Contains("--delete-data"), args.Contains("--delete-root"), int.TryParse(ArgValue(args, "--wait"), out int w2) ? w2 : 20); }
