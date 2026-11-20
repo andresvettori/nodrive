@@ -7,7 +7,7 @@ Versions before `0.9.0-beta` were development milestones, not numbered builds; t
 ## [Unreleased]
 
 ### Added
-- Microsoft Store package (MSIX, built by CI as `NoDrive-<version>-x64.msix`, signed by the Store): same engine, start with Windows through the package's startup task. Not yet published.
+- Microsoft Store package (MSIX, built by CI as `NoDrive-<version>-x64.msix`, signed by the Store): same engine, start with Windows through the package's startup task. Not yet published. Because Windows runs no code of ours when a Store app is removed, the Help page has "Prepare to uninstall" (checks pending work, disconnects from Explorer, stops; files stay).
 
 ### Changed
 - The website (andresvettori.github.io/nodrive) is linked from the NoDrive page footer, every guide, and the Apps list (Settings > Apps > NoDrive).

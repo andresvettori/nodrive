@@ -39,6 +39,7 @@ internal sealed class StateDto
     public bool Paused { get; set; }
     public bool NeedsSignIn { get; set; }
     public bool Autostart { get; set; }
+    public bool Packaged { get; set; }
     public int HeldDeletes { get; set; }
     public string RootPath { get; set; } = "";
     public string DataDir { get; set; } = "";
@@ -210,6 +211,7 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
                         break;
                     }
                 case ("POST", "/api/signin"): service.RequestSignIn(); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
+                case ("POST", "/api/prepare-uninstall"): Json(ctx, PrepareUninstall(), WebJson.Default.SaveResultDto); break;
                 case ("POST", "/api/allow-deletes"): service.AllowDeletes(); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
                 case ("POST", "/api/open-folder"): OpenFolder(paths.SyncRoot); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
                 case ("POST", "/api/open-data-folder"): OpenFolder(paths.DataDir); Json(ctx, new SaveResultDto { Ok = true }, WebJson.Default.SaveResultDto); break;
@@ -237,6 +239,7 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
             Paused = UserSettings.Paused,
             NeedsSignIn = service.NeedsSignIn,
             Autostart = UserSettings.AutostartEnabled,
+            Packaged = PackageIdentity.IsPackaged,
             HeldDeletes = service.HeldDeletes,
             RootPath = paths.SyncRoot,
             DataDir = paths.DataDir,
@@ -333,6 +336,17 @@ internal sealed class WebUi(SyncService service, EngineConfig config, EnginePath
         ctx.Response.AppendHeader("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'");
         ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
         ctx.Response.Close();
+    }
+
+    /// <summary>Store (MSIX) build: Windows runs no code of ours when the package is removed, so this does what the MSI uninstaller does (refuse while work is pending, quit, unregister the sync root); the user then removes the app.</summary>
+    private SaveResultDto PrepareUninstall()
+    {
+        var (uploads, ops) = Lifecycle.Pending(paths);
+        if (uploads + ops > 0) { return new SaveResultDto { Ok = false, Error = "pending" }; }
+        if (Environment.ProcessPath is not { } exe) { return new SaveResultDto { Ok = false, Error = "no exe" }; }
+        Log.Info("prepare uninstall: starting the clean-up process");
+        Process.Start(new ProcessStartInfo(exe, "--uninstall") { UseShellExecute = false, CreateNoWindow = true });
+        return new SaveResultDto { Ok = true };
     }
 
     private static void OpenFolder(string folder)

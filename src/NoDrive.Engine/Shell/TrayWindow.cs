@@ -1,3 +1,4 @@
+using NoDrive.Engine.Infrastructure;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Windows.Win32;
@@ -192,14 +193,17 @@ internal static unsafe class TrayWindow
                 else if (mouse is PInvoke.WM_RBUTTONUP or PInvoke.WM_CONTEXTMENU or PInvoke.WM_LBUTTONUP) { ShowMenu(); }
                 return new LRESULT(0);
             case PInvoke.WM_CLOSE:
+                Log.Info("shutdown message: WM_CLOSE");
                 PInvoke.DestroyWindow(hwnd);
                 return new LRESULT(0);
             case 0x0218:                                                   // WM_POWERBROADCAST
                 if ((nuint)wParam is 0x12 or 0x7) { s_onResume?.Invoke(); }   // PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND
                 return new LRESULT(1);
             case PInvoke.WM_QUERYENDSESSION:
+                Log.Info("shutdown message: WM_QUERYENDSESSION");
                 return new LRESULT(1);
             case PInvoke.WM_ENDSESSION:
+                Log.Info($"shutdown message: WM_ENDSESSION (ending={wParam.Value != 0})");
                 s_onQuit?.Invoke();
                 return new LRESULT(0);
             case PInvoke.WM_DESTROY:
