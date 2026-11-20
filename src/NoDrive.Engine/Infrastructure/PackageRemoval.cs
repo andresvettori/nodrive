@@ -83,7 +83,7 @@ internal static partial class PackageRemoval
             if (absent < 12) { return 0; }
             SyncRootRegistrar.Unregister();
             NavigationPane.RemoveLegacyEntry();
-            Note("package removed: sync root unregistered");
+            Note($"package removed: sync root unregistered (still registered afterwards: {SyncRootRegistrar.IsRegistered()})");
             return 0;
         }
         finally
