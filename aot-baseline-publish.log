@@ -1,0 +1,8 @@
+  Determining projects to restore...
+  Restored D:\a\nodrive\nodrive\spikes\aot-baseline\aot-baseline.csproj (in 17 ms).
+  2 of 3 projects are up-to-date for restore.
+  NoDrive.Core -> D:\a\nodrive\nodrive\src\NoDrive.Core\bin\Release\net11.0\NoDrive.Core.dll
+  NoDrive.Graph -> D:\a\nodrive\nodrive\src\NoDrive.Graph\bin\Release\net11.0\NoDrive.Graph.dll
+  aot-baseline -> D:\a\nodrive\nodrive\spikes\aot-baseline\bin\Release\net11.0-windows\win-x64\aot-baseline.dll
+  Generating native code
+  aot-baseline -> D:\a\nodrive\nodrive\artifacts\spikes\aot-baseline\

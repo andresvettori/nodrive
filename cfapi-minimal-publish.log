@@ -1,0 +1,8 @@
+  Determining projects to restore...
+  Restored D:\a\nodrive\nodrive\spikes\cfapi-minimal\cfapi-minimal.csproj (in 17 ms).
+  2 of 3 projects are up-to-date for restore.
+  NoDrive.Core -> D:\a\nodrive\nodrive\src\NoDrive.Core\bin\Release\net11.0\NoDrive.Core.dll
+  NoDrive.Graph -> D:\a\nodrive\nodrive\src\NoDrive.Graph\bin\Release\net11.0\NoDrive.Graph.dll
+  cfapi-minimal -> D:\a\nodrive\nodrive\spikes\cfapi-minimal\bin\Release\net11.0-windows10.0.26100.0\win-x64\cfapi-minimal.dll
+  Generating native code
+  cfapi-minimal -> D:\a\nodrive\nodrive\artifacts\spikes\cfapi-minimal\

@@ -1,0 +1,93 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v11.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v11.0": {
+      "graph-smoke/0.9.0-beta.165": {
+        "dependencies": {
+          "NoDrive.Graph": "0.9.0-beta.165"
+        },
+        "runtime": {
+          "graph-smoke.dll": {}
+        }
+      },
+      "Microsoft.Data.Sqlite.Core/11.0.0": {
+        "dependencies": {
+          "SQLitePCLRaw.core": "3.0.5"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Data.Sqlite.dll": {
+            "assemblyVersion": "11.0.0.0",
+            "fileVersion": "11.0.26.53018",
+            "localPath": "Microsoft.Data.Sqlite.dll"
+          }
+        }
+      },
+      "SQLitePCLRaw.core/3.0.5": {
+        "runtime": {
+          "lib/net8.0/SQLitePCLRaw.core.dll": {
+            "assemblyVersion": "3.0.5.3129",
+            "fileVersion": "3.0.5.3129",
+            "localPath": "SQLitePCLRaw.core.dll"
+          }
+        }
+      },
+      "NoDrive.Core/0.9.0-beta.165": {
+        "dependencies": {
+          "Microsoft.Data.Sqlite.Core": "11.0.0"
+        },
+        "runtime": {
+          "NoDrive.Core.dll": {
+            "assemblyVersion": "0.9.0.0",
+            "fileVersion": "0.9.0.165"
+          }
+        }
+      },
+      "NoDrive.Graph/0.9.0-beta.165": {
+        "dependencies": {
+          "NoDrive.Core": "0.9.0-beta.165"
+        },
+        "runtime": {
+          "NoDrive.Graph.dll": {
+            "assemblyVersion": "0.9.0.0",
+            "fileVersion": "0.9.0.165"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "graph-smoke/0.9.0-beta.165": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.Data.Sqlite.Core/11.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-aWaF2LDjuFZwE9UsAGRYGNyS48xqaXoKPAjwpJI85fsaM/43s5NTRnl4xtqbTGKq8of2M/W8mo7DJk7v4zzHGQ==",
+      "path": "microsoft.data.sqlite.core/11.0.0",
+      "hashPath": "microsoft.data.sqlite.core.11.0.0.nupkg.sha512"
+    },
+    "SQLitePCLRaw.core/3.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-k81AYXXRCw3Zj8rOhyBoCsx/U97KYDFI2CSKr/ijl5BwpsW/hX/4kBiDmerFaoust8nxBwa0IHQFw8MmSHRtnQ==",
+      "path": "sqlitepclraw.core/3.0.5",
+      "hashPath": "sqlitepclraw.core.3.0.5.nupkg.sha512"
+    },
+    "NoDrive.Core/0.9.0-beta.165": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "NoDrive.Graph/0.9.0-beta.165": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
