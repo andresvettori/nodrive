@@ -29,6 +29,7 @@ The sections below are the original design (2026-11-13). The engine as implement
 | `Switching/SwitchAssistant` | Read-only scan of a folder against the index; take-over of a folder with adoption (ADR-0013) | New, optional |
 | `Infrastructure/Coexistence` | Detects OneDrive process/account/Folder Backup (read-only) | Replaces the planned refuse-to-start guard |
 | `src/NoDrive.Graph/GraphDrive` | delta, item GET, download URL, upload (simple and sessions, resumable through `IUploadSessionStore`), get by name, create folder, delete, move; throttle gate | `Core/Hashing/QuickXorHash` computes the OneDrive hash locally (used to recognise identical content; not yet checked against a real OneDrive value) |
+| `Infrastructure/PackageIdentity`, `PackageRemoval` | Store build: package detection; removal clean-up via a helper outside the package (ADR-0014) | New |
 | `installer/NoDrive.wxs` | WiX v5 per-user MSI (ADR-0012) | New |
 
 Data files under `%LOCALAPPDATA%\NoDrive`: `config.json`, `index.db` (+wal/shm), `token.bin`, `activity.jsonl`, `paused.flag`, `restarts.txt`, `logs\`. Index tables: `items` (with `local`), `uploads`, `remote_ops`, `upload_sessions` (open resumable upload sessions), `meta` (schema version 5). Where the original text below says PROGRESSIVE, PARTIAL, `NoDrive.Settings.exe`, "refuse to start" or "watcher via ReadDirectoryChangesW + USN", read the table above.

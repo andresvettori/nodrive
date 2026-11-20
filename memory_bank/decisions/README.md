@@ -18,6 +18,7 @@ One ADR per default decision taken in the approved plan of 2026-11-13. ADRs are 
 | [ADR-0011](ADR-0011.md) | Settings and activity UI as a local web page served by the engine | Accepted 2026-11-15 |
 | [ADR-0012](ADR-0012.md) | WiX v5 per-user MSI installer (MSIX later) | Accepted 2026-11-16 |
 | [ADR-0013](ADR-0013.md) | Coexistence with the OneDrive app; adoption of identical files by name, size and modified time | Accepted 2026-11-16 (amends ADR-0008) |
+| [ADR-0014](ADR-0014.md) | Microsoft Store distribution as MSIX with a removal clean-up helper | Accepted 2026-11-19 |
 | [ADR-0008](ADR-0008.md) | Coexistence with OneDrive.exe: detection of a linked personal account and its folder, refuse-to-run rule, adoption of the existing sync folder | Accepted 2026-11-13 |
 
 ## Conventions

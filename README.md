@@ -136,6 +136,8 @@ Settings > Apps > NoDrive > Uninstall. The installer quits NoDrive, checks that 
 in the folder as ordinary files; online-only placeholders are removed by Windows (the cloud copies are untouched). If you install
 again later, NoDrive links those files back to their cloud copies instead of creating duplicates.
 
+**Microsoft Store build (MSIX, "NoDrive Client")**: Windows runs no uninstall step for a package and sends the same close messages for an update and a removal. So when the package is asked to close (not on shutdown, restart or sign-out, and only with nothing pending) the engine starts a small helper outside the package; the helper waits about a minute, and only if the package is gone for good it removes the sync root (falling back to deleting the registry key). Updates are left alone. **Help > Prepare to uninstall** does the same on demand, before removing the app. Reinstalling over a stale registration is self-healed.
+
 Command line (the installer uses these): `NoDrive.Engine.exe --version`, `--doctor` (health checks), `--report` (support zip), `--quit`, `--pending` (exit code 3 when work is queued),
 `--uninstall [--force] [--delete-data] [--delete-root]`, `--status`, `--cleanup`, and the options `--sync-root <path>` and
 `--data-dir <path>`.

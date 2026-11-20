@@ -13,6 +13,7 @@ Notes
 - Windows may block unsigned programs (Smart App Control, Application Control). If the installer or NoDrive is blocked, tell the author: a signed release is planned.
 - To update, run the newer MSI over the old one: NoDrive stops, the files are replaced and your sync folder and settings stay.
 - To remove NoDrive: Settings > Apps > NoDrive > Uninstall. Downloaded files stay in the folder. See the troubleshooting guide if the uninstall is refused.
+- **Microsoft Store version**: install and update from the Store (updates are automatic). To remove it use Settings > Apps > NoDrive Client > Uninstall. Windows cannot refuse that, so NoDrive cleans up by itself after a real removal (never on an update, shutdown or sign-out) unless something is still waiting to upload. To be sure nothing is left behind, open NoDrive's page > Help > **Prepare to uninstall** first: it checks that nothing is waiting, then removes NoDrive's Explorer entry while keeping your downloaded files. If you reinstall later, NoDrive links the files back to their cloud copies.
 
 ---
 Website: <https://andresvettori.github.io/nodrive/>
