@@ -82,6 +82,13 @@ internal static partial class PackageRemoval
             }
             if (absent < 12) { return 0; }
             SyncRootRegistrar.Unregister();
+            if (SyncRootRegistrar.IsRegistered())
+            {
+                // The registration was made from inside the package, which the unpackaged API call may not be allowed to remove: try the Win32 call, then the registry key itself.
+                var hr = Windows.Win32.PInvoke.CfUnregisterSyncRoot(SyncRootRegistrar.RegisteredPath() ?? "");
+                Note($"CfUnregisterSyncRoot: 0x{hr.Value:X}");
+                if (SyncRootRegistrar.IsRegistered()) { Note($"registry removal: {SyncRootRegistrar.TryDeleteKey()}"); }
+            }
             NavigationPane.RemoveLegacyEntry();
             Note($"package removed: sync root unregistered (still registered afterwards: {SyncRootRegistrar.IsRegistered()})");
             return 0;

@@ -129,6 +129,13 @@ internal static class SyncRootRegistrar
         catch (Exception ex) { Log.Warn($"Unregister: {ex.Message}"); }
     }
 
+    /// <summary>Last resort for a registration the API will not remove: deletes the sync root key. Returns "ok" or the reason.</summary>
+    public static string TryDeleteKey()
+    {
+        try { Registry.LocalMachine.DeleteSubKeyTree(KeyPath, throwOnMissingSubKey: false); return IsRegistered() ? "still there" : "ok"; }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException) { return ex.Message; }
+    }
+
     /// <summary>True when <paramref name="path"/> already lies inside some other provider's sync root (for example OneDrive's folder).</summary>
     public static unsafe bool IsInsideForeignSyncRoot(string path, out string providerName)
     {
