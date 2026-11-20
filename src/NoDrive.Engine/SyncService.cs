@@ -145,7 +145,17 @@ internal sealed class SyncService(EngineConfig config, EnginePaths paths) : IDis
         ActivityLog.ApplyLimits(config);
 
         _indexReady = _index.GetMeta(DeltaIngestor.DeltaKey) is not null && _index.GetMeta(DeltaIngestor.NextKey) is null;
-        CloudProvider.Start(paths.SyncRoot, new ProviderServices(_index, hydrator, population, locks, _callers, () => _indexReady && !Adopting, config.HydrationWorkers, new ReadAheadPlanner()));
+        var services = new ProviderServices(_index, hydrator, population, locks, _callers, () => _indexReady && !Adopting, config.HydrationWorkers, new ReadAheadPlanner());
+        try { CloudProvider.Start(paths.SyncRoot, services); }
+        catch (System.Runtime.InteropServices.COMException ex) when (ex.HResult == unchecked((int)0x80070186))
+        {
+            // A registration left behind by a removed Store package (or another install) that Windows no longer ties to this process: register again once (downloaded files stay; placeholders are re-adopted).
+            Log.Warn($"could not connect to the sync root ({ex.HResult:X8}); registering it again");
+            SyncRootRegistrar.Unregister();
+            var (_, again) = await SyncRootRegistrar.EnsureRegisteredAsync(paths.SyncRoot, config.HydrationPolicy).ConfigureAwait(false);
+            Log.Info($"sync root {paths.SyncRoot}: {again}");
+            CloudProvider.Start(paths.SyncRoot, services);
+        }
         PinWatcher.Start(paths.SyncRoot, config.BulkParallelism);
         _ = Task.Run(() => ReportLoopAsync(ct), CancellationToken.None);
 

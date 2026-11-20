@@ -203,7 +203,7 @@ internal static unsafe class TrayWindow
                 Log.Info("shutdown message: WM_QUERYENDSESSION");
                 return new LRESULT(1);
             case PInvoke.WM_ENDSESSION:
-                Log.Info($"shutdown message: WM_ENDSESSION (ending={wParam.Value != 0})");
+                Log.Info($"shutdown message: WM_ENDSESSION (ending={wParam.Value != 0}, flags=0x{(ulong)lParam.Value:X})");
                 s_onQuit?.Invoke();
                 return new LRESULT(0);
             case PInvoke.WM_DESTROY:
