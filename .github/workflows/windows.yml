@@ -127,6 +127,20 @@ jobs:
           New-Item -ItemType Directory -Force artifacts/installer-release | Out-Null
           Copy-Item "artifacts/installer/$msiName", artifacts/installer/SHA256SUMS.txt artifacts/installer-release/
 
+      # ARM64 (Windows on Arm): cross-compiled on the x64 runner. Never blocks the x64 build; the binaries are untested until run on an ARM64 PC or VM.
+      - name: Build ARM64 engine, MSI and MSIX (Native AOT, cross-compiled)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          dotnet publish src/NoDrive.Engine -c Release -r win-arm64 -p:PublishAot=true -o artifacts/engine-win-arm64
+          if ($LASTEXITCODE -ne 0) { throw 'arm64 publish failed' }
+          $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
+          $msiName = "NoDrive-$($env:NoDriveVersion)-arm64.msi"
+          wix build installer/NoDrive.wxs -ext WixToolset.UI.wixext -arch arm64 -d EnginePath=artifacts/engine-win-arm64 -d Version=$($env:NoDriveMsiVersion) -d DisplayVersion=$($env:NoDriveVersion) -o "artifacts/installer/$msiName"
+          if ($LASTEXITCODE -ne 0) { throw 'arm64 wix build failed' }
+          $parts = $env:NoDriveMsiVersion -split '\.'
+          pwsh tools/build-msix.ps1 -EngineDir artifacts/engine-win-arm64 -Arch arm64 -Version "$($parts[0]).$($parts[1]).$($parts[2]).0" -Output "artifacts/installer/NoDrive-$($env:NoDriveVersion)-arm64.msix"
+
       # Publish the freshly built binaries to an orphan branch so they can be fetched with plain git over SSH
       # (private repo: artifact downloads need a browser login). The branch is force-pushed on every push to main.
       - name: Build MSIX (Microsoft Store; unsigned, the Store signs it)
