@@ -98,7 +98,14 @@ internal static class SyncRootRegistrar
         }
         else { outcome = "already registered (not re-registered: that would reset the shell flags)"; }
 
-        if (ReadFlags() != ShellIntegrationFlags)
+        if (PackageIdentity.IsPackaged)
+        {
+            // Store build: HKLM writes from inside the package go to a private copy that Explorer never reads, and reading it back looks fine. Write the real key from outside the package, every start (idempotent).
+            string cmd = $"reg.exe add \"HKLM\\{KeyPath}\" /v Flags /t REG_DWORD /d {ShellIntegrationFlags} /f";
+            try { await Task.Run(() => PackageRemoval.RunOutsidePackage("NoDriveShellFlags", cmd)); outcome += $"; shell flags {ShellIntegrationFlags} written outside the package"; }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { outcome += $"; shell flags NOT applied ({ex.Message})"; }
+        }
+        else if (ReadFlags() != ShellIntegrationFlags)
         {
             outcome += TryApplyFlags(out string why) ? $"; shell flags set to {ShellIntegrationFlags}" : $"; shell flags NOT applied ({why}): Explorer verbs and Status column will be limited";
         }

@@ -43,6 +43,16 @@ internal static partial class PackageRemoval
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException) { Log.Warn($"could not start the clean-up watcher: {ex.Message}"); }
     }
 
+    /// <summary>Runs a command line through a one-shot scheduled task so it executes outside the package (no registry virtualization, not killed with the package). Waits briefly for it.</summary>
+    public static void RunOutsidePackage(string taskName, string commandLine)
+    {
+        string tr = commandLine.Replace("\"", "\\\"");
+        Run("schtasks.exe", $"/Create /TN {taskName} /TR \"{tr}\" /SC ONCE /ST 00:00 /F");
+        Run("schtasks.exe", $"/Run /TN {taskName}");
+        Thread.Sleep(3000);
+        Run("schtasks.exe", $"/Delete /TN {taskName} /F");
+    }
+
     private static void Run(string file, string args)
     {
         using var p = Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true });
