@@ -185,7 +185,11 @@ jobs:
         run: |
           pwsh tools/release-notes.ps1 -Version $env:NoDriveVersion | Set-Content notes.md
           $pre = if ($env:NoDriveChannel) { '--prerelease' } else { '' }
-          gh release create $env:GITHUB_REF_NAME "artifacts/installer/NoDrive-$($env:NoDriveVersion)-x64.msi" artifacts/installer/SHA256SUMS.txt --title "NoDrive $($env:NoDriveVersion)" --notes-file notes.md $pre
+          $arm = "artifacts/installer/NoDrive-$($env:NoDriveVersion)-arm64.msi"
+          $assets = @("artifacts/installer/NoDrive-$($env:NoDriveVersion)-x64.msi")
+          if (Test-Path $arm) { $assets += $arm }
+          Get-ChildItem artifacts/installer -Filter "NoDrive-$($env:NoDriveVersion)-*.msi" | ForEach-Object { $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(); "$h  $($_.Name)" } | Set-Content artifacts/installer/SHA256SUMS.txt
+          gh release create $env:GITHUB_REF_NAME @assets artifacts/installer/SHA256SUMS.txt --title "NoDrive $($env:NoDriveVersion)" --notes-file notes.md $pre
       - uses: actions/upload-artifact@v7
         if: always()
         with:
