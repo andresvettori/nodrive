@@ -1,0 +1,7 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+D:\a\nodrive\nodrive\spikes\scale-500k\FakeGraphServer.cs(64,17): warning CA2016: Forward the 'ct' parameter to the 'Run' method or pass in 'CancellationToken.None' explicitly to indicate intentionally not propagating the token (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca2016) [D:\a\nodrive\nodrive\spikes\scale-500k\scale-500k.csproj]
+D:\a\nodrive\nodrive\spikes\scale-500k\FakeGraphServer.cs(12,23): warning CA1001: Type 'FakeGraphServer' owns disposable field(s) '_listener' but is not disposable (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1001) [D:\a\nodrive\nodrive\spikes\scale-500k\scale-500k.csproj]
+  scale-500k -> D:\a\nodrive\nodrive\spikes\scale-500k\bin\Release\net11.0\win-x64\scale-500k.dll
+  Generating native code
+  scale-500k -> D:\a\nodrive\nodrive\artifacts\spikes\scale-500k\
