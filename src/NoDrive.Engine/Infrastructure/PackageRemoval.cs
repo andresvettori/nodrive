@@ -43,14 +43,16 @@ internal static partial class PackageRemoval
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException) { Log.Warn($"could not start the clean-up watcher: {ex.Message}"); }
     }
 
-    /// <summary>Runs a command line through a one-shot scheduled task so it executes outside the package (no registry virtualization, not killed with the package). Waits briefly for it.</summary>
-    public static void RunOutsidePackage(string taskName, string commandLine)
+    /// <summary>Runs command lines (written to a small .cmd file in %TEMP%) through a one-shot scheduled task so they execute outside the package: no registry virtualization, not killed with the package. Waits briefly.</summary>
+    public static void RunOutsidePackage(string taskName, params string[] commands)
     {
-        string tr = commandLine.Replace("\"", "\\\"");
-        Run("schtasks.exe", $"/Create /TN {taskName} /TR \"{tr}\" /SC ONCE /ST 00:00 /F");
+        string script = Path.Combine(Path.GetTempPath(), taskName + ".cmd");
+        File.WriteAllText(script, "@echo off\r\n" + string.Join("\r\n", commands) + "\r\n");
+        Run("schtasks.exe", $"/Create /TN {taskName} /TR \"cmd.exe /c \\\"{script}\\\"\" /SC ONCE /ST 00:00 /F");
         Run("schtasks.exe", $"/Run /TN {taskName}");
         Thread.Sleep(3000);
         Run("schtasks.exe", $"/Delete /TN {taskName} /F");
+        try { File.Delete(script); } catch (IOException) { }
     }
 
     private static void Run(string file, string args)

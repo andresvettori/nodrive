@@ -101,9 +101,12 @@ internal static class SyncRootRegistrar
         if (PackageIdentity.IsPackaged)
         {
             // Store build: HKLM writes from inside the package go to a private copy that Explorer never reads, and reading it back looks fine. Write the real key from outside the package, every start (idempotent).
-            string cmd = $"reg.exe add \"HKLM\\{KeyPath}\" /v Flags /t REG_DWORD /d {ShellIntegrationFlags} /f";
-            try { await Task.Run(() => PackageRemoval.RunOutsidePackage("NoDriveShellFlags", cmd)); outcome += $"; shell flags {ShellIntegrationFlags} written outside the package"; }
-            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { outcome += $"; shell flags NOT applied ({ex.Message})"; }
+            // The icon path contains the package version, which changes on every Store update: keep IconResource pointing at the running copy.
+            string key = $"HKLM\\{KeyPath}";
+            string flagsCmd = $"reg.exe add \"{key}\" /v Flags /t REG_DWORD /d {ShellIntegrationFlags} /f";
+            string iconCmd = $"reg.exe add \"{key}\" /v IconResource /t REG_EXPAND_SZ /d \"{Environment.ProcessPath},0\" /f";
+            try { await Task.Run(() => PackageRemoval.RunOutsidePackage("NoDriveShellFlags", flagsCmd, iconCmd)); outcome += $"; shell flags {ShellIntegrationFlags} and icon path written outside the package"; }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException) { outcome += $"; shell flags NOT applied ({ex.Message})"; }
         }
         else if (ReadFlags() != ShellIntegrationFlags)
         {
